@@ -1,0 +1,86 @@
+.container {
+  max-width: 1200px;
+  padding: 15px;
+  margin: 0 auto;
+}
+
+.card {
+  transition: transform 0.2s ease-in-out;
+  background-color: #D9D9D9;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  overflow: hidden; /* Ensures shaded background stays inside the card */
+  position: relative;
+}
+
+.card:hover {
+  transform: scale(1.02);
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  z-index: 2; /* Ensures content stays on top of shaded background */
+}
+
+.progress-bar {
+  height: 8px;
+  border-radius: 4px;
+  background-color: #f1f1f1; /* Lighter background for progress bar */
+}
+
+.shaded-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background-color: #C1C1C1; /* Transparent blue overlay */
+  z-index: 1; /* Ensures it is behind the content */
+}
+
+.card-wrapper {
+  position: relative;
+  margin-bottom: 15px; /* Adds space between the cards */
+}
+
+.task-card {
+  position: relative;
+  overflow: hidden; /* Ensures shaded portion stays inside */
+}
+
+.card h5 {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-top: 10px;
+  color: #333;
+}
+
+.card p {
+  color: #888;
+  margin-bottom: 5px;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  border: none;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner-icon {
+  font-size: 2rem;
+  color: #007bff;
+}

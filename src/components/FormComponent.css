@@ -1,0 +1,38 @@
+@media (max-width: 768px) {
+    .ant-row {
+      flex-direction: column;
+    }
+  }
+  
+/* Increase slider handle size for better usability on mobile */
+.ant-slider-handle {
+    width: 30px;
+    height: 50px;
+    margin-top: -10px; /* Center the handle vertically */
+}
+
+/* Improve track width for a more visible slider */
+.ant-slider-track {
+    height: 20px;
+}
+
+/* Tooltip styling for slider value */
+.slider-value-box {
+    display: inline-block;
+    margin-left: 10px;
+    padding: 5px;
+    border-radius: 4px;
+    background-color: #f5f5f5;
+    font-size: 12px;
+}
+
+/* Responsive adjustments */
+/* @media (max-width: 576px) {
+    .slider-value-box {
+        font-size: 10px;
+    }
+    .ant-slider-handle {
+        width: 20px;
+        height: 20px;
+    }
+} */

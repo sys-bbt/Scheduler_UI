@@ -1,0 +1,87 @@
+/* Container styles */
+.container {
+  padding: 20px;
+}
+
+/* Card styles */
+.task-card {
+  position: relative;
+  color: #D9D9D9; /* Light background */
+  border: 1px solid #ddd; /* Light border */
+  border-radius: 8px; /* Rounded corners */
+  padding: 15px; /* Padding inside the card */
+  margin-bottom: 10px; /* Spacing between cards */
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+  transition: box-shadow 0.2s; /* Smooth transition effect */
+}
+
+.task-card:hover {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); /* Hover effect */
+}
+
+/* Task title styles */
+.task-card h5 {
+  font-size: 18px; /* Title size */
+  font-weight: bold; /* Bold title */
+  margin-bottom: 0; /* No bottom margin */
+}
+
+/* Metadata styles */
+.task-meta {
+  font-size: 14px; /* Meta text size */
+  color: #666; /* Muted color */
+}
+
+/* Status message styles */
+.task-status {
+  font-size: 14px; /* Status text size */
+  margin-top: 5px; /* Spacing above status */
+}
+
+/* Timer control styles */
+.timer-controls {
+  font-size: 20px; /* Icon size */
+  display: flex; /* Flexbox for inline icons */
+  align-items: center; /* Center items vertically */
+}
+
+/* Calendar icon styles */
+.fa-calendar-alt {
+  color: #888; /* Muted color */
+}
+
+/* Text styles */
+.text-muted {
+  font-size: 14px; /* Muted text size */
+}
+
+.text-success {
+  font-size: 14px; /* Success text size */
+  font-weight: bold; /* Bold success text */
+}
+
+/* Margin utilities */
+.mt-2 {
+  margin-top: 10px; /* Spacing utility */
+}
+
+.mb-3 {
+  margin-bottom: 15px; /* Spacing utility */
+}
+
+/* Adjustments for flex layout */
+.d-flex {
+  display: flex; /* Ensure flexbox layout */
+}
+
+.align-items-center {
+  align-items: center; /* Center items vertically */
+}
+
+.flex-grow-1 {
+  flex-grow: 1; /* Allow the element to grow and fill space */
+  align-items: center;
+}
+.text-center{
+  align-items: center;
+}
