@@ -84,7 +84,7 @@ const DeliveryDetail = () => {
                 setLoading(true); // Set loading state to true
     
                 // Fetch delivery data
-                const deliveryResponse = await fetch(`http://localhost:3001/api/data?email=${userEmail}`);
+                const deliveryResponse = await fetch(`https://server-ui-2.onrender.com/api/data?email=${userEmail}`);
                 if (!deliveryResponse.ok) {
                     throw new Error(`HTTP error! status: ${deliveryResponse.status}`);
                 }
