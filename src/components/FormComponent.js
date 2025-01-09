@@ -37,7 +37,7 @@ const FormComponent = ({ onSubmit, task }) => {
                     setPersonResponsible(task.Responsibility || '');
 
                     // Fetch data per key per day
-                    const response = await fetch(`http://localhost:3001/api/per-key-per-day`);
+                    const response = await fetch(`https://server-ui-2.onrender.com/api/per-key-per-day`);
                     const data = await response.json();
 
                     const taskData = data[task.Key];
@@ -67,7 +67,7 @@ const FormComponent = ({ onSubmit, task }) => {
                     }
 
                     // Fetch data per person per day
-                    const perPersonResponse = await fetch(`http://localhost:3001/api/per-person-per-day`);
+                    const perPersonResponse = await fetch(`https://server-ui-2.onrender.com/api/per-person-per-day`);
                     const perPersonData = await perPersonResponse.json();
 
                     const schedules = {};
@@ -196,7 +196,7 @@ const FormComponent = ({ onSubmit, task }) => {
 
                 console.log('Scheduled Data:', scheduledData);
 
-                fetch('http://localhost:3001/api/post', {
+                fetch('/api/post', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
