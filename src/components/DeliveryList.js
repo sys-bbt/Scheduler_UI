@@ -138,7 +138,7 @@ const DeliveryList = () => {
       try {
         setLoading(true);
 
-        const response = await fetch(`http://localhost:3001/api/data?email=${userEmail}&page=${currentPage}`, {
+        const response = await fetch(`https://server-ui-2.onrender.com/api/data?email=${userEmail}&page=${currentPage}`, {
           headers: {
             Authorization: `Bearer ${authToken}`,
             "Content-Type": "application/json",
