@@ -91,7 +91,7 @@ const DeliveryDetail = () => {
                 const deliveryData = await deliveryResponse.json();
     
                 // Fetch totalDuration data
-                const durationResponse = await fetch(`http://localhost:3001/api/per-key-per-day`);
+                const durationResponse = await fetch(`https://server-ui-2.onrender.com/api/per-key-per-day`);
                 if (!durationResponse.ok) {
                     throw new Error(`HTTP error! status: ${durationResponse.status}`);
                 }
