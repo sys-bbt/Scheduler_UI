@@ -1,39 +1,30 @@
 // your-project-root/api/post.js
 import { BigQuery } from '@google-cloud/bigquery';
 
-// Initialize BigQuery client
-// It automatically picks up GOOGLE_APPLICATION_CREDENTIALS_JSON from environment variables
 const bigquery = new BigQuery({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT_ID, // Should be 'stellar-acre-407408'
+  projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
 });
 
-const datasetId = process.env.BIGQUERY_DATASET_ID; // Should be 'Scheduler_UI'
-const tableId = process.env.BIGQUERY_TABLE_ID;     // Should be 'Per_Key_Per_Day'
+const datasetId = process.env.BIGQUERY_DATASET_ID;
+const tableId = process.env.BIGQUERY_TABLE_ID;
 
 export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
-      const scheduledData = req.body; // Data sent from your React form
+      const scheduledData = req.body;
 
-      // Log the incoming data for debugging in Vercel logs
       console.log('Received scheduledData (full payload):', JSON.stringify(scheduledData, null, 2));
-
-      // --- CRITICAL STEP: Map the incoming data to your BigQuery table schema ---
-      // Your BigQuery table 'Per_Key_Per_Day' has these 5 columns,
-      // with exact casing and spaces as per your screenshot:
-      // Key, Day, Duration, Duration Unit, Planned delivery slot
 
       const rowsToInsert = scheduledData.sliders.map(sliderEntry => {
         return {
-          Key: scheduledData.Key,           // STRING: Fetches the key of the Form
-          Day: sliderEntry.day,             // DATE: Date (YYYY-MM-DD) from startDate + index
-          Duration: sliderEntry.duration,   // INTEGER: The values from sliders (minutes)
-          "Duration Unit": "min",           // STRING: Static value "min" - EXACTLY MATCHES "Duration Unit"
-          "Planned delivery slot": sliderEntry.slot, // STRING: The slot (e.g., '1pm', '4pm', '7pm', 'Null') - EXACTLY MATCHES "Planned delivery slot"
+          Key: scheduledData.Key,
+          Day: sliderEntry.day,
+          Duration: sliderEntry.duration,
+          "Duration Unit": "min",
+          "Planned delivery slot": sliderEntry.slot,
         };
       });
 
-      // --- Validate if rowsToInsert is not empty ---
       if (rowsToInsert.length === 0) {
         console.warn('No slider data to insert into BigQuery (empty sliders array). Skipping insertion.');
         return res.status(200).json({
@@ -44,41 +35,41 @@ export default async function handler(req, res) {
 
       console.log('Prepared rows for BigQuery insertion:', JSON.stringify(rowsToInsert, null, 2));
 
-      // Perform the BigQuery insertion
-      await bigquery
-        .dataset(datasetId)
-        .table(tableId)
-        .insert(rowsToInsert);
+      // --- ADDED: Specific try-catch for BigQuery insertion ---
+      try {
+        await bigquery
+          .dataset(datasetId)
+          .table(tableId)
+          .insert(rowsToInsert);
 
-      console.log(`Successfully inserted ${rowsToInsert.length} rows into BigQuery table: ${datasetId}.${tableId}`);
+        console.log(`Successfully inserted ${rowsToInsert.length} rows into BigQuery table: ${datasetId}.${tableId}`);
 
-      // Send a success response back to your React frontend
-      res.status(200).json({
-        message: 'Task successfully updated and daily schedule data saved to BigQuery!',
-        dataInserted: rowsToInsert, // Echo back the data that was inserted
-      });
-
-    } catch (error) {
-      console.error('Error processing POST request or inserting into BigQuery:', error);
-
-      // Log BigQuery specific errors if available for better debugging
-      // These errors will often point to schema mismatches or data type issues
-      if (error.errors && Array.isArray(error.errors)) {
-        error.errors.forEach((errDetail, i) => {
-          console.error(`BigQuery insert error ${i + 1}:`, JSON.stringify(errDetail, null, 2));
+        res.status(200).json({
+          message: 'Task successfully updated and daily schedule data saved to BigQuery!',
+          dataInserted: rowsToInsert,
         });
-      } else if (error.response && error.response.insertErrors) {
-         console.error('BigQuery API response errors:', JSON.stringify(error.response.insertErrors, null, 2));
+
+      } catch (bigQueryError) {
+        // Log the BigQuery specific error in detail
+        console.error('ERROR: BigQuery Insertion Failed!');
+        console.error('Error Message:', bigQueryError.message);
+        console.error('Error Code:', bigQueryError.code); // BigQuery error code if available
+        console.error('Errors array:', JSON.stringify(bigQueryError.errors, null, 2)); // Detailed BigQuery error info
+        console.error('Partial success/response:', JSON.stringify(bigQueryError.response, null, 2)); // Any partial success or API response
+
+        // Re-throw or handle as necessary for the outer catch block to pick it up
+        throw bigQueryError; // This will send it to the outer catch block
       }
 
+    } catch (outerError) {
+      console.error('An unhandled error occurred during POST request processing:', outerError);
       res.status(500).json({
         message: 'Internal Server Error: Failed to save task data to BigQuery.',
-        error: error.message,
-        bigQueryDetails: error.errors || error.response?.insertErrors || 'No specific BigQuery error details available',
+        error: outerError.message,
+        bigQueryDetails: outerError.errors || outerError.response?.insertErrors || 'No specific BigQuery error details available',
       });
     }
   } else {
-    // Handle methods other than POST
     res.setHeader('Allow', ['POST']);
     res.status(405).end(`Method ${req.method} Not Allowed`);
   }
