@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // UserContext.js
 import React, { createContext, useState } from 'react';
 
@@ -14,3 +15,21 @@ export const UserProvider = ({ children }) => {
         </UserContext.Provider>
     );
 };
+=======
+// UserContext.js
+import React, { createContext, useState } from 'react';
+
+// Create the UserContext
+export const UserContext = createContext();
+
+// Define the UserProvider component
+export const UserProvider = ({ children }) => {
+    const [userEmail, setUserEmail] = useState(null);
+
+    return (
+        <UserContext.Provider value={{ userEmail, setUserEmail }}>
+            {children}
+        </UserContext.Provider>
+    );
+};
+>>>>>>> 887a083c3cfa83675dbbd621d281faaaef12030a
