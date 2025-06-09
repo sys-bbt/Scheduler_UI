@@ -20,7 +20,8 @@
     "react-lazyload": "^3.2.1",
     "react-router-dom": "^6.26.2",
     "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "@google-cloud/bigquery": "^7.0.0"  // <--- THIS IS THE MISSING LINE!
   },
   "scripts": {
     "start": "react-scripts start",
