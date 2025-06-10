@@ -7,7 +7,9 @@ import { BigQuery } from '@google-cloud/bigquery';
 // Make sure these are set up correctly on Vercel.
 // The private_key might need .replace(/\\n/g, '\n') if it's stored as a single line string.
 const bigquery = new BigQuery({
-  projectId: process.env.stellar-acre-407408,
+  // FIX: Correctly access the project ID from environment variables
+  // Make sure BIGQUERY_PROJECT_ID is set in your Vercel Environment Variables!
+  projectId: process.env.BIGQUERY_PROJECT_ID,
   credentials: {
     client_email: process.env.BIGQUERY_CLIENT_EMAIL,
     private_key: process.env.BIGQUERY_PRIVATE_KEY?.replace(/\\n/g, '\n'),
@@ -23,8 +25,8 @@ export default async function handler(req, res) {
       console.log('Received scheduledData from frontend:', JSON.stringify(scheduledData, null, 2));
 
       // --- Define your BigQuery Dataset and Table IDs ---
-      const datasetId = 'Scheduler_UI';
-      const tableId = 'Per_Key_Per_Day';
+      const datasetId = 'Scheduler_UI';      // Make sure this is your exact BigQuery Dataset ID
+      const tableId = 'Per_Key_Per_Day';     // Make sure this is your exact BigQuery Table ID
       const projectId = process.env.BIGQUERY_PROJECT_ID; // Use the same Project ID from env
 
       // --- Transform the data to match BigQuery schema ---
