@@ -1,76 +1,80 @@
-// your-project-root/api/post.js
-import { BigQuery } from '@google-cloud/bigquery';
+// api/post.js
 
-const bigquery = new BigQuery({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
-});
+/**
+ * Makes a POST request to a specified API endpoint.
+ *
+ * @param {string} endpoint The URL path for the API endpoint (e.g., '/users', '/products').
+ * @param {object} data The data payload to send in the request body.
+ * @returns {Promise<object>} A promise that resolves with the parsed JSON response from the server.
+ * @throws {Error} If the network response is not OK (status 4xx or 5xx), or if a network error occurs.
+ */
+async function postData(endpoint, data) {
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api'; // Or your actual base URL
 
-const datasetId = process.env.BIGQUERY_DATASET_ID;
-const tableId = process.env.BIGQUERY_TABLE_ID;
+    const url = `${API_BASE_URL}${endpoint}`;
 
-export default async function handler(req, res) {
-  if (req.method === 'POST') {
     try {
-      const scheduledData = req.body;
-
-      console.log('Received scheduledData (full payload):', JSON.stringify(scheduledData, null, 2));
-
-      const rowsToInsert = scheduledData.sliders.map(sliderEntry => {
-        return {
-          Key: scheduledData.Key,
-          Day: sliderEntry.day,
-          Duration: sliderEntry.duration,
-          "Duration Unit": "min",
-          "Planned delivery slot": sliderEntry.slot,
-        };
-      });
-
-      if (rowsToInsert.length === 0) {
-        console.warn('No slider data to insert into BigQuery (empty sliders array). Skipping insertion.');
-        return res.status(200).json({
-          message: 'Task updated successfully, but no daily schedule data was available for insertion.',
-          dataReceived: scheduledData,
-        });
-      }
-
-      console.log('Prepared rows for BigQuery insertion:', JSON.stringify(rowsToInsert, null, 2));
-
-      // --- ADDED: Specific try-catch for BigQuery insertion ---
-      try {
-        await bigquery
-          .dataset(datasetId)
-          .table(tableId)
-          .insert(rowsToInsert);
-
-        console.log(`Successfully inserted ${rowsToInsert.length} rows into BigQuery table: ${datasetId}.${tableId}`);
-
-        res.status(200).json({
-          message: 'Task successfully updated and daily schedule data saved to BigQuery!',
-          dataInserted: rowsToInsert,
+        const response = await fetch(url, {
+            method: 'POST', // Specify the HTTP method
+            headers: {
+                'Content-Type': 'application/json', // Indicate that the request body is JSON
+                // 'Authorization': `Bearer ${yourAuthToken}`, // Uncomment and add if authentication is needed
+            },
+            body: JSON.stringify(data), // Convert the JavaScript object to a JSON string
         });
 
-      } catch (bigQueryError) {
-        // Log the BigQuery specific error in detail
-        console.error('ERROR: BigQuery Insertion Failed!');
-        console.error('Error Message:', bigQueryError.message);
-        console.error('Error Code:', bigQueryError.code); // BigQuery error code if available
-        console.error('Errors array:', JSON.stringify(bigQueryError.errors, null, 2)); // Detailed BigQuery error info
-        console.error('Partial success/response:', JSON.stringify(bigQueryError.response, null, 2)); // Any partial success or API response
+        // Check if the response was successful (status code 200-299)
+        if (!response.ok) {
+            // If the response is not OK, try to parse the error message from the server
+            let errorData = {};
+            try {
+                errorData = await response.json(); // Attempt to parse error as JSON
+            } catch (jsonError) {
+                // If parsing JSON fails, the error might be plain text or empty
+                errorData = { message: `Server responded with status ${response.status} ${response.statusText}` };
+            }
+            const errorMessage = errorData.message || `HTTP error! Status: ${response.status} ${response.statusText}`;
+            throw new Error(errorMessage);
+        }
 
-        // Re-throw or handle as necessary for the outer catch block to pick it up
-        throw bigQueryError; // This will send it to the outer catch block
-      }
+        // If the response is OK, parse the JSON body
+        const responseData = await response.json();
+        return responseData;
 
-    } catch (outerError) {
-      console.error('An unhandled error occurred during POST request processing:', outerError);
-      res.status(500).json({
-        message: 'Internal Server Error: Failed to save task data to BigQuery.',
-        error: outerError.message,
-        bigQueryDetails: outerError.errors || outerError.response?.insertErrors || 'No specific BigQuery error details available',
-      });
+    } catch (error) {
+        // Catch network errors (e.g., no internet connection, DNS issues)
+        console.error('Network or API request failed:', error);
+        throw new Error(`Failed to POST to ${endpoint}: ${error.message}`);
     }
-  } else {
-    res.setHeader('Allow', ['POST']);
-    res.status(405).end(`Method ${req.method} Not Allowed`);
-  }
 }
+
+export default postData;
+
+// --- How to use this script in your application ---
+
+/*
+// Example of how you might use this in a component or another script:
+
+import postData from './api/post.js'; // Adjust path as needed
+
+async function createUser() {
+    const userData = {
+        name: 'John Doe',
+        email: 'john.doe@example.com',
+        password: 'securepassword123'
+    };
+
+    try {
+        const result = await postData('/users', userData);
+        console.log('User created successfully:', result);
+        // Update UI or state with the result
+    } catch (error) {
+        console.error('Error creating user:', error.message);
+        // Display an error message to the user
+        alert(`Error: ${error.message}`);
+    }
+}
+
+// Call the function when needed, e.g., on form submission
+// createUser();
+*/
