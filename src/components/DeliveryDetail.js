@@ -11,10 +11,27 @@ import './DeliveryDetail.css';
 
 const DeliveryDetail = () => {
     const location = useLocation();
-    // Corrected path extraction: gets the last segment of the URL
-    // e.g., if URL is /data/ABC, delCode will be ABC
-    // if URL is /some/path/data/ABC, delCode will still be ABC
-    const delCode = location.pathname.substring(location.pathname.lastIndexOf("/") + 1);
+    // Assuming your route is something like /delivery/:delCode or /data/:delCode
+    // We'll try both to be sure.
+    // const { delCode: paramsDelCode } = useParams(); // Option 1: if using route params
+
+    // Current location-based extraction
+    const extractedDelCodeByPath = location.pathname.substring(location.pathname.lastIndexOf("/") + 1);
+
+    // This is the problematic line from your initial code - let's see what it yields
+    const extractedDelCodeByOldLogic = location.pathname.substring(location.pathname.lastIndexOf("/data/") + 11);
+
+    console.log("------------------- DEBUGGING DELCODE -------------------");
+    console.log("location.pathname:", location.pathname);
+    console.log("Extracted delCode (from last /):", extractedDelCodeByPath);
+    console.log("Extracted delCode (from old logic /data/ + 11):", extractedDelCodeByOldLogic);
+    // if (paramsDelCode) {
+    //     console.log("Extracted delCode (from useParams):", paramsDelCode); // Option 1: if using route params
+    // }
+    console.log("---------------------------------------------------------");
+
+    // The delCode you *intend* to use. Let's start with the last segment
+    const delCode = extractedDelCodeByPath; // Or `paramsDelCode` if you are using route params properly
 
     const { userEmail } = useContext(UserContext);
     const [delivery, setDelivery] = useState(null); // State for the main delivery details (if fetched)
