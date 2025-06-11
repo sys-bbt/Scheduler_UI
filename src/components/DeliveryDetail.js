@@ -12,13 +12,16 @@ import './DeliveryDetail.css';
 const DeliveryDetail = () => {
     const location = useLocation();
 
-    // --- START: MODIFIED delCode extraction ---
+    // --- START: CRITICAL CHANGE FOR delCode EXTRACTION ---
     const pathSegments = location.pathname.split('/');
-    // The delCode is the last segment of the URL path.
-    // It might be URL-encoded if it contains characters like '/'.
-    const encodedDelCode = pathSegments[pathSegments.length - 1];
-    const delCode = decodeURIComponent(encodedDelCode); // Decode the URL component
-    // --- END: MODIFIED delCode extraction ---
+    // Based on the URL path: /delivery/PIA/SMM/POST/FEB12/5629
+    // The actual delivery code starts from the 3rd segment (index 2)
+    // For example, if pathSegments is ["", "delivery", "PIA", "SMM", "POST", "FEB12", "5629"]
+    // We want to capture everything from "PIA" onwards.
+    const encodedDelCodeParts = pathSegments.slice(2); // This will give ["PIA", "SMM", "POST", "FEB12", "5629"]
+    const encodedDelCode = encodedDelCodeParts.join('/'); // This will join them back to "PIA/SMM/POST/FEB12/5629"
+    const delCode = decodeURIComponent(encodedDelCode); // Decodes any URL-encoded characters (like %2F to /)
+    // --- END: CRITICAL CHANGE ---
 
     const { userEmail } = useContext(UserContext);
     const [delivery, setDelivery] = useState(null);
@@ -37,7 +40,7 @@ const DeliveryDetail = () => {
                 // --- DEBUGGING FETCHED DATA ---
                 console.log(`--- DEBUGGING FETCHED DATA ---`);
                 console.log(`Current URL path: ${location.pathname}`);
-                console.log(`Extracted (decoded) delCode: ${delCode}`);
+                console.log(`Extracted (decoded) delCode: ${delCode}`); // This should now be the full code!
                 console.log(`User Email: ${userEmail}`);
                 console.log(`Fetching data from: https://server-ui-2.onrender.com/api/data?email=${userEmail}`);
                 // --- END DEBUGGING ---
@@ -48,22 +51,15 @@ const DeliveryDetail = () => {
                 }
                 const deliveryData = await deliveryResponse.json();
 
-                // --- DEBUGGING `deliveryData` content ---
+                // --- DEBUGGING `deliveryData` content (THIS IS WHAT WE NEED TO SEE FROM YOU NEXT) ---
                 console.log("Fetched raw deliveryData:", deliveryData);
                 console.log(`Checking if deliveryData hasOwnProperty('${delCode}'):`, deliveryData.hasOwnProperty(delCode));
                 if (!deliveryData.hasOwnProperty(delCode)) {
+                    // Please capture and provide the output of this line next
                     console.log(`Keys available in fetched deliveryData:`, Object.keys(deliveryData));
                     console.log(`Comparing extracted delCode '${delCode}' with available keys...`);
-                    // This is a common point of failure: delCode doesn't match a key.
-                    // Check for subtle differences, e.g., spaces, encoding, or missing parts.
                 }
                 // --- END DEBUGGING ---
-
-                const durationResponse = await fetch(`https://server-ui-2.onrender.com/api/per-key-per-day`);
-                if (!durationResponse.ok) {
-                    throw new Error(`HTTP error! status: ${durationResponse.status}`);
-                }
-                const durationData = await durationResponse.json();
 
                 if (deliveryData.hasOwnProperty(delCode)) {
                     const fetchedDeliveryArray = deliveryData[delCode];
@@ -105,11 +101,11 @@ const DeliveryDetail = () => {
         } else if (!userEmail) {
             setError("User email not available. Please log in.");
             setLoading(false);
-        } else if (!delCode) {
-            setError("Delivery code not found in URL.");
+        } else if (!delCode || encodedDelCodeParts.length === 0) { // Added check for empty parts
+            setError("Delivery code not found in URL or URL path is incomplete.");
             setLoading(false);
         }
-    }, [delCode, userEmail, location.pathname]); // Added location.pathname to dependency array
+    }, [delCode, userEmail, location.pathname]);
 
     const scheduledTasks = useMemo(() => {
         return tasks.filter(task => task.scheduled);
