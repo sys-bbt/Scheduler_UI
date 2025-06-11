@@ -1,95 +1,94 @@
-import React, { useEffect, useState, useContext, useMemo } from 'react'; // Import useMemo
+import React, { useEffect, useState, useContext, useMemo } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { Container, Card, ListGroup, Row, Col, Spinner } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
 import { FaPause, FaPlay, FaStop, FaCalendarAlt } from 'react-icons/fa';
-import FormComponent from './FormComponent'; // Ensure your form component is imported
+import FormComponent from './FormComponent';
 import { UserContext } from './UserContext';
 import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
 
 const DeliveryDetail = () => {
     const location = useLocation();
-    // Adjusted delCode extraction - make sure this matches your URL structure
-    // If your URL is like /delivery/data/DELCODE, then +11 is correct.
-    // If it's just /delivery/DELCODE, it might need adjustment.
-    const delCode = location.pathname.substring(location.pathname.lastIndexOf("/") + 1);
+
+    // --- START: MODIFIED delCode extraction ---
+    const pathSegments = location.pathname.split('/');
+    // The delCode is the last segment of the URL path.
+    // It might be URL-encoded if it contains characters like '/'.
+    const encodedDelCode = pathSegments[pathSegments.length - 1];
+    const delCode = decodeURIComponent(encodedDelCode); // Decode the URL component
+    // --- END: MODIFIED delCode extraction ---
+
     const { userEmail } = useContext(UserContext);
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [activeTaskKey, setActiveTaskKey] = useState(null); // To track which task is active for scheduling/other actions
-    const [actionType, setActionType] = useState(''); // To differentiate between actions like 'schedule', 'reschedule'
-    const [tasks, setTasks] = useState([]); // State to manage all tasks
+    const [activeTaskKey, setActiveTaskKey] = useState(null);
+    const [actionType, setActionType] = useState('');
+    const [tasks, setTasks] = useState([]);
 
     useEffect(() => {
         const fetchDeliveryDetails = async () => {
             try {
-                setLoading(true); // Set loading state to true
-                setError(null); // Clear previous errors
+                setLoading(true);
+                setError(null);
 
                 // --- DEBUGGING FETCHED DATA ---
-                console.log(`Fetching data for email: ${userEmail} and delCode: ${delCode}`);
+                console.log(`--- DEBUGGING FETCHED DATA ---`);
+                console.log(`Current URL path: ${location.pathname}`);
+                console.log(`Extracted (decoded) delCode: ${delCode}`);
+                console.log(`User Email: ${userEmail}`);
+                console.log(`Fetching data from: https://server-ui-2.onrender.com/api/data?email=${userEmail}`);
                 // --- END DEBUGGING ---
 
-                // Fetch delivery data
                 const deliveryResponse = await fetch(`https://server-ui-2.onrender.com/api/data?email=${userEmail}`);
                 if (!deliveryResponse.ok) {
                     throw new Error(`HTTP error! status: ${deliveryResponse.status}`);
                 }
                 const deliveryData = await deliveryResponse.json();
-                console.log("Fetched deliveryData:", deliveryData); // Log the full delivery data
 
-                // Fetch totalDuration data
+                // --- DEBUGGING `deliveryData` content ---
+                console.log("Fetched raw deliveryData:", deliveryData);
+                console.log(`Checking if deliveryData hasOwnProperty('${delCode}'):`, deliveryData.hasOwnProperty(delCode));
+                if (!deliveryData.hasOwnProperty(delCode)) {
+                    console.log(`Keys available in fetched deliveryData:`, Object.keys(deliveryData));
+                    console.log(`Comparing extracted delCode '${delCode}' with available keys...`);
+                    // This is a common point of failure: delCode doesn't match a key.
+                    // Check for subtle differences, e.g., spaces, encoding, or missing parts.
+                }
+                // --- END DEBUGGING ---
+
                 const durationResponse = await fetch(`https://server-ui-2.onrender.com/api/per-key-per-day`);
                 if (!durationResponse.ok) {
                     throw new Error(`HTTP error! status: ${durationResponse.status}`);
                 }
                 const durationData = await durationResponse.json();
-                console.log("Fetched durationData:", durationData); // Log the duration data
 
-                // --- DEBUGGING `delCode` in `deliveryData` ---
-                console.log(`Checking if deliveryData hasOwnProperty('${delCode}'):`, deliveryData.hasOwnProperty(delCode));
-                if (deliveryData.hasOwnProperty(delCode)) {
-                    console.log(`Content of deliveryData[delCode]:`, deliveryData[delCode]);
-                } else {
-                    console.log(`Keys available in deliveryData:`, Object.keys(deliveryData));
-                }
-                // --- END DEBUGGING ---
-
-                // Check if the delivery code exists in the deliveryData response
                 if (deliveryData.hasOwnProperty(delCode)) {
                     const fetchedDeliveryArray = deliveryData[delCode];
 
-                    // Set the main delivery details from the first item (Step_ID 0)
-                    // Ensure delivery is an object and not an array, as it represents the main delivery details
                     const mainDeliveryInfo = fetchedDeliveryArray.find(task => task.Step_ID === 0) || fetchedDeliveryArray[0];
                     setDelivery(mainDeliveryInfo);
 
-
                     const filteredTasks = fetchedDeliveryArray
-                        .filter((task) => task.Step_ID !== 0) // Remove tasks with Step_ID = 0 from the tasks list
+                        .filter((task) => task.Step_ID !== 0)
                         .map((task) => {
-                            // Retrieve totalDuration for the task using its Key
                             const taskDurationInMinutes = durationData[task.Key]?.totalDuration || 0;
-
-                            // Convert totalDuration from minutes to hours and minutes
                             const hours = Math.floor(taskDurationInMinutes / 60);
                             const minutes = taskDurationInMinutes % 60;
                             const formattedDuration = `${hours}h ${minutes}m`;
 
                             return {
                                 ...task,
-                                scheduled: !!task.Planned_Delivery_Timestamp, // Use !! to convert to boolean
-                                personResponsible: task.Responsibility || 'Unassigned', // Ensure person responsible is included
-                                totalTime: taskDurationInMinutes, // Store total duration in minutes
-                                formattedDuration, // Add the formatted duration for display
-                                isPlaying: false, // Initialize isPlaying state
+                                scheduled: !!task.Planned_Delivery_Timestamp,
+                                personResponsible: task.Responsibility || 'Unassigned',
+                                totalTime: taskDurationInMinutes,
+                                formattedDuration,
+                                isPlaying: false,
                             };
                         });
-                    setTasks(filteredTasks); // Setting tasks with scheduling info
-                    console.log("Processed tasks:", filteredTasks);
+                    setTasks(filteredTasks);
                 } else {
                     setError('Delivery not found. Please check the URL or if the delivery exists for your email.');
                 }
@@ -101,12 +100,17 @@ const DeliveryDetail = () => {
             }
         };
 
-        if (userEmail && delCode) { // Only fetch if userEmail and delCode are available
+        if (userEmail && delCode) {
             fetchDeliveryDetails();
+        } else if (!userEmail) {
+            setError("User email not available. Please log in.");
+            setLoading(false);
+        } else if (!delCode) {
+            setError("Delivery code not found in URL.");
+            setLoading(false);
         }
-    }, [delCode, userEmail]);
+    }, [delCode, userEmail, location.pathname]); // Added location.pathname to dependency array
 
-    // Use useMemo to filter tasks into scheduled and unscheduled lists
     const scheduledTasks = useMemo(() => {
         return tasks.filter(task => task.scheduled);
     }, [tasks]);
@@ -115,7 +119,6 @@ const DeliveryDetail = () => {
         return tasks.filter(task => !task.scheduled);
     }, [tasks]);
 
-    // Handling task click for scheduling or editing
     const handleTaskClick = (task) => {
         if (!task.scheduled) {
             setActionType('Schedule');
@@ -123,7 +126,6 @@ const DeliveryDetail = () => {
         }
     };
 
-    // Dropdown menu for rescheduling or reassigning task
     const handleMenuClick = (task, { key }) => {
         if (key === 'reschedule') {
             setActionType('Reschedule');
@@ -133,30 +135,26 @@ const DeliveryDetail = () => {
         setActiveTaskKey(task.Key);
     };
 
-    // Handle form submission from FormComponent
     const handleFormSubmit = (formData) => {
         console.log("Form submitted with data:", formData);
-
-        // Update the tasks state based on the form submission
         const updatedTasks = tasks.map((task) =>
             task.Key === activeTaskKey
                 ? {
                     ...task,
-                    scheduled: true, // Mark the task as scheduled
+                    scheduled: true,
                     personResponsible: formData.personResponsible || task.personResponsible,
-                    totalTime: formData.totalTime || task.totalTime, // Update totalTime in minutes
-                    formattedDuration: `${Math.floor((formData.totalTime || task.totalTime) / 60)}h ${(formData.totalTime || task.totalTime) % 60}m`, // Recalculate formatted duration
-                    Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp, // Update delivery timestamp
-                    Planned_Start_Timestamp: formData.Planned_Start_Timestamp || task.Planned_Start_Timestamp, // Update start timestamp
+                    totalTime: formData.totalTime || task.totalTime,
+                    formattedDuration: `${Math.floor((formData.totalTime || task.totalTime) / 60)}h ${(formData.totalTime || task.totalTime) % 60}m`,
+                    Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp,
+                    Planned_Start_Timestamp: formData.Planned_Start_Timestamp || task.Planned_Start_Timestamp,
                 }
                 : task
         );
-        setTasks(updatedTasks); // Update tasks state
-        setActiveTaskKey(null); // Reset after form submission
-        setActionType(''); // Clear action type
+        setTasks(updatedTasks);
+        setActiveTaskKey(null);
+        setActionType('');
     };
 
-    // Timer control logic for tasks
     const toggleTimer = (taskKey) => {
         const updatedTasks = tasks.map((task) => {
             if (task.Key === taskKey) {
@@ -202,12 +200,10 @@ const DeliveryDetail = () => {
         );
     }
 
-    // Safely access properties of delivery (which is now the main delivery info object)
     const client = delivery.Client || 'Unknown Client';
     const shortDescription = delivery.Short_Description || 'No description available';
     const plannedStart = delivery.Planned_Start_Timestamp ? new Date(delivery.Planned_Start_Timestamp).toLocaleString() : 'N/A';
     const plannedDelivery = delivery.Planned_Delivery_Timestamp ? new Date(delivery.Planned_Delivery_Timestamp).toLocaleString() : 'N/A';
-
 
     return (
         <Container>
@@ -245,7 +241,6 @@ const DeliveryDetail = () => {
                                             <Card.Body>
                                                 <div className="d-flex align-items-center">
                                                     <div className="timer-controls" style={{ marginRight: '10px' }}>
-                                                        {/* Calendar icon for unscheduled tasks */}
                                                         <FaCalendarAlt
                                                             onClick={(e) => { e.stopPropagation(); handleTaskClick(task); }}
                                                             style={{ cursor: 'pointer' }}
@@ -289,7 +284,7 @@ const DeliveryDetail = () => {
                  <ListGroup.Item>No tasks available for this delivery.</ListGroup.Item>
             )}
 
-            {/* Section for Scheduled Tasks (commented out by default, uncomment to show) */}
+            {/* Section for Scheduled Tasks (commented out by default) */}
             {/*
             {scheduledTasks.length > 0 && (
                 <>
@@ -300,8 +295,8 @@ const DeliveryDetail = () => {
                                 <Dropdown trigger={['contextMenu']} overlay={taskMenu(task)}>
                                     <div
                                         className="task-card"
-                                        onClick={() => handleTaskClick(task)} // Still allow click for scheduled tasks if needed for other actions
-                                        style={{ cursor: 'default' }} // Scheduled tasks are not for initial scheduling
+                                        onClick={() => handleTaskClick(task)}
+                                        style={{ cursor: 'default' }}
                                     >
                                         <Card className="mb-3">
                                             <Card.Body>
