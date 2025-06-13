@@ -100,7 +100,7 @@ const DeliveryDetail = () => {
                 // Check if the delivery code exists in the deliveryData response
                 if (deliveryData.hasOwnProperty(delCode)) {
                     const fetchedTasks = deliveryData[delCode]
-                       .filter((task) => task.Step_ID !== 0 && (!task.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp.value === null)) // Remove tasks with Step_ID = 0
+                       .filter((task) => task.Step_ID !== 0 && (task.Planned_Delivery_Timestamp === null || (typeof task.Planned_Delivery_Timestamp === 'object' && task.Planned_Delivery_Timestamp.value === null)))
                         .map((task) => {
                             // Retrieve totalDuration for the task using its Key
                             const taskDurationInMinutes = durationData[task.Key]?.totalDuration || 0;
