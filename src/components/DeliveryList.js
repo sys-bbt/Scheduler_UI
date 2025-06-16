@@ -242,63 +242,69 @@ const DeliveryList = () => {
 
           <p>You have {filteredDeliveries.length} active deliveries</p>
 
-          <Row>
-            {filteredDeliveries.map((delivery) => {
-              const progress =
-                delivery.tasksTotal === 0 ? 0 : (delivery.tasksPlanned / delivery.tasksTotal) * 100;
+         <Row>
+  {filteredDeliveries.map((delivery) => {
+    const progress =
+      delivery.tasksTotal === 0 ? 0 : (delivery.tasksPlanned / delivery.tasksTotal) * 100;
 
-              return (
-                <Col xs={12} key={delivery.delCode} className="mb-3">
-                  <Link to={`/delivery/${delivery.delCode}`} className="card-link-wrapper">
-                    <Card className="p-3 shadow-sm task-card">
-                      <div className="shaded-bg" style={{ width: `${progress}%` }}></div>
-                      <Card.Body>
-                        <div className="d-flex justify-content-between align-items-center">
-                          <div>
-                            <div className="d-flex align-items-center mb-2">
-                              <FiCheckCircle style={{ marginRight: '8px', color: 'green' }} />
-                              <span
-                                className="font-weight-bold"
-                                style={{ fontSize: '1.5rem' }}
-                              >
-                                {delivery.tasksPlanned} of {delivery.tasksTotal} Planned
-                              </span>
-                              {/* Ensure handleDelete is correctly implemented in DeleteButton */}
-                              <DeleteButton deliveryCode={delivery.delCode} onDelete={handleDelete} />
-                            </div>
-                            <div className="mb-2">
-                              <ProgressBar
-                                now={progress}
-                                variant={progress > 50 ? 'success' : progress > 20 ? 'warning' : 'danger'}
-                              />
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="mb-1 text-muted">
-                              <FiClock style={{ marginRight: '5px' }} /> {delivery.initiated}
-                            </p>
-                            <p className="mb-0 text-danger">
-                              <FiFlag style={{ marginRight: '5px' }} /> {delivery.deadline}
-                            </p>
-                            <p
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigator.clipboard.writeText(delivery.delCode);
-                              }}
-                              style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
-                              title="Click to copy"
-                            >
-                              {delivery.delCode}
-                            </p>
-                          </div>
-                        </div>
-                      </Card.Body>
-                    </Card>
-                  </Link>
-                </Col>
-              );
-            })}
-          </Row>
+    return (
+      <Col xs={12} key={delivery.delCode} className="mb-3">
+        <Link to={`/delivery/${delivery.delCode}`} className="card-link-wrapper">
+          <Card className="p-3 shadow-sm task-card">
+            <div className="shaded-bg" style={{ width: `${progress}%` }}></div>
+            <Card.Body>
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <div className="d-flex align-items-center mb-2">
+                    <FiCheckCircle style={{ marginRight: '8px', color: 'green' }} />
+                    <span
+                      className="font-weight-bold"
+                      style={{ fontSize: '1.5rem' }}
+                    >
+                      {delivery.tasksPlanned} of {delivery.tasksTotal} Planned
+                    </span>
+                    {/* Ensure handleDelete is correctly implemented in DeleteButton */}
+                    <DeleteButton deliveryCode={delivery.delCode} onDelete={handleDelete} />
+                  </div>
+                  {/* Add the client name here */}
+                  {delivery.clientName && (
+                    <p className="mb-1 text-muted">
+                      Client: {delivery.clientName}
+                    </p>
+                  )}
+                  <div className="mb-2">
+                    <ProgressBar
+                      now={progress}
+                      variant={progress > 50 ? 'success' : progress > 20 ? 'warning' : 'danger'}
+                    />
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="mb-1 text-muted">
+                    <FiClock style={{ marginRight: '5px' }} /> {delivery.initiated}
+                  </p>
+                  <p className="mb-0 text-danger">
+                    <FiFlag style={{ marginRight: '5px' }} /> {delivery.deadline}
+                  </p>
+                  <p
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(delivery.delCode);
+                    }}
+                    style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+                    title="Click to copy"
+                  >
+                    {delivery.delCode}
+                  </p>
+                </div>
+              </div>
+            </Card.Body>
+          </Card>
+        </Link>
+      </Col>
+    );
+  })}
+</Row>
 
           <div className="delivery-list-end"></div>
 
