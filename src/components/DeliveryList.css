@@ -1,86 +1,108 @@
+/* For the Client Name */
+.client-name {
+    font-size: 1.1em; /* Make the font size slightly larger than default text */
+    font-weight: bold; /* Make it bold */
+    color: #333; /* A slightly darker color for better readability */
+    margin-top: 5px; /* Add some space above it */
+    margin-bottom: 10px; /* Add some space below it */
+}
+
+/* For the overall Bootstrap progress container */
+.progress {
+    height: 12px; /* Slightly thicker than before for better visibility */
+    border-radius: 6px; /* More rounded corners for the entire bar */
+    background-color: #e9ecef; /* Light grey background for the track */
+    overflow: hidden; /* Ensures the filled part stays within the rounded corners */
+}
+
+/* For the filled part of the progress bar */
+.progress-bar {
+    height: 100%; /* Ensures it fills the height of its container */
+    border-radius: 6px; /* Match the border-radius of the .progress container */
+    transition: width 0.6s ease-in-out; /* Smooth animation for width changes */
+    /* You are already handling variants (success, warning, danger) in your JS,
+       so no specific background-color is needed here unless you want to override them. */
+}
+
+/* Styles for the existing elements */
 .container {
-  max-width: 1200px;
-  padding: 15px;
-  margin: 0 auto;
+    max-width: 1200px;
+    padding: 15px;
+    margin: 0 auto;
 }
 
 .card {
-  transition: transform 0.2s ease-in-out;
-  background-color: #D9D9D9;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  overflow: hidden; /* Ensures shaded background stays inside the card */
-  position: relative;
+    transition: transform 0.2s ease-in-out;
+    background-color: #D9D9D9;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    overflow: hidden; /* Ensures shaded background stays inside the card */
+    position: relative;
 }
 
 .card:hover {
-  transform: scale(1.02);
+    transform: scale(1.02);
 }
 
 .card-body {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  z-index: 2; /* Ensures content stays on top of shaded background */
-}
-
-.progress-bar {
-  height: 8px;
-  border-radius: 4px;
-  background-color: #f1f1f1; /* Lighter background for progress bar */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    z-index: 2; /* Ensures content stays on top of shaded background */
 }
 
 .shaded-bg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  background-color: #C1C1C1; /* Transparent blue overlay */
-  z-index: 1; /* Ensures it is behind the content */
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    background-color: rgba(193, 193, 193, 0.5); /* Semi-transparent grey, adjusted for visibility */
+    z-index: 1; /* Ensures it is behind the content */
+    border-radius: 8px; /* Match card border-radius */
 }
 
 .card-wrapper {
-  position: relative;
-  margin-bottom: 15px; /* Adds space between the cards */
+    position: relative;
+    margin-bottom: 15px; /* Adds space between the cards */
 }
 
 .task-card {
-  position: relative;
-  overflow: hidden; /* Ensures shaded portion stays inside */
+    position: relative;
+    overflow: hidden; /* Ensures shaded portion stays inside */
 }
 
 .card h5 {
-  font-size: 1.2rem;
-  font-weight: bold;
-  margin-top: 10px;
-  color: #333;
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin-top: 10px;
+    color: #333;
 }
 
 .card p {
-  color: #888;
-  margin-bottom: 5px;
+    color: #888;
+    margin-bottom: 5px;
 }
 
 .btn-primary {
-  background-color: #007bff;
-  border: none;
-  transition: background-color 0.2s ease-in-out;
+    background-color: #007bff;
+    border: none;
+    transition: background-color 0.2s ease-in-out;
 }
 
 .btn-primary:hover {
-  background-color: #0056b3;
+    background-color: #0056b3;
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .spinner-icon {
-  font-size: 2rem;
-  color: #007bff;
+    font-size: 2rem;
+    color: #007bff;
 }
