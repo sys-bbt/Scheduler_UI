@@ -1,26 +1,24 @@
 /* General container styling */
 .container {
   max-width: 1200px;
-  padding: 20px; /* Slightly increased padding */
+  padding: 15px;
   margin: 0 auto;
 }
 
 /* Card styling for each delivery */
 .card {
-  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out; /* Smooth transitions for hover */
-  background-color: #ffffff; /* Clean white background */
-  border: 1px solid #e0e0e0; /* Subtle border */
-  border-radius: 12px; /* More rounded corners */
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08); /* Softer, more pronounced shadow */
+  transition: transform 0.2s ease-in-out;
+  background-color: #D9D9D9; /* Reverted to old background color */
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   overflow: hidden; /* Ensures shaded background stays inside the card */
   position: relative;
   display: flex; /* Flexbox for internal layout */
-  flex-direction: column;
+  flex-direction: column; /* Reverted to old flex direction */
 }
 
 .card:hover {
-  transform: translateY(-5px) scale(1.01); /* Lift and slightly scale on hover */
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15); /* Enhanced shadow on hover */
+  transform: scale(1.02);
 }
 
 /* Link wrapper to make the whole card clickable */
@@ -32,20 +30,19 @@
 /* Card body layout */
 .card-body {
   display: flex;
-  flex-direction: row; /* Layout content side-by-side */
+  flex-direction: column; /* Reverted to old flex direction */
   justify-content: space-between;
-  align-items: center; /* Vertically align content */
-  padding: 20px; /* Consistent padding */
+  /* align-items: center;  Removed as it's less relevant for column layout */
+  padding: 20px; /* Consistent padding, kept from previous iteration as it's a good default */
   z-index: 2; /* Ensures content stays on top of shaded background */
-  position: relative; /* Needed for z-index to work correctly against absolute positioned elements */
+  position: relative;
 }
 
 /* Progress bar styling */
 .progress-bar {
-  height: 10px; /* Slightly thicker progress bar */
-  border-radius: 5px; /* More rounded ends */
-  background-color: #e9ecef; /* Light grey background for the bar */
-  overflow: hidden; /* Ensure progress fills rounded corners */
+  height: 8px; /* Reverted to old height */
+  border-radius: 4px; /* Reverted to old border-radius */
+  background-color: #f1f1f1; /* Lighter background for progress bar */
 }
 
 /* Shaded background for progress indication */
@@ -54,27 +51,28 @@
   top: 0;
   left: 0;
   bottom: 0;
-  background-color: rgba(60, 179, 113, 0.1); /* Soft green overlay (Match success variant) */
+  background-color: #C1C1C1; /* Reverted to old background color */
   z-index: 1; /* Ensures it is behind the content */
-  transition: width 0.3s ease-out; /* Smooth transition for progress fill */
+  transition: width 0.3s ease-out; /* Kept transition for smoothness */
 }
 
 /* Task card specific styling */
 .task-card {
-  margin-bottom: 20px; /* Consistent space between cards */
+  margin-bottom: 15px; /* Reverted to old margin */
 }
 
 /* Heading for tasks planned/total */
+/* This rule generally applies to any h5 inside a card */
 .card h5 {
-  font-size: 1.3rem; /* Slightly larger for emphasis */
-  font-weight: 700; /* Bolder */
-  margin-top: 5px;
-  margin-bottom: 5px;
-  color: #212529; /* Darker text for better contrast */
+  font-size: 1.2rem; /* Reverted to old font size */
+  font-weight: bold; /* Reverted to old font weight */
+  margin-top: 10px; /* Reverted to old margin */
+  margin-bottom: 5px; /* Reverted to old margin */
+  color: #333; /* Reverted to old color */
 }
 
 /* Client name styling - NEW */
-/* This targets the h5 for the client name directly within the card body */
+/* This targets the h5 for the client name specifically */
 .card-body h5.mb-2 {
   font-size: 1.1rem; /* Slightly smaller than task progress */
   font-weight: 600; /* Still bold, but less than the main heading */
@@ -86,40 +84,41 @@
 
 /* General paragraph text */
 .card p {
-  color: #6c757d; /* Muted grey for supporting text */
-  margin-bottom: 3px;
-  font-size: 0.95rem; /* Slightly smaller font for detail */
+  color: #888; /* Reverted to old color */
+  margin-bottom: 5px; /* Reverted to old margin */
+  font-size: initial; /* Reverted to default browser font size */
 }
 
 /* Icons within the card */
+/* Adjusted styles for consistency with original icons */
 .card-body .d-flex.align-items-center svg {
   margin-right: 8px;
-  font-size: 1.3rem; /* Larger icons */
+  font-size: 1rem; /* Adjusted to fit better with smaller text */
 }
 
 .card-body .text-right svg {
-  font-size: 1.1rem; /* Slightly smaller icons for the right side */
+  font-size: 1rem; /* Adjusted */
 }
 
-/* Specific icon colors */
+/* Specific icon colors - reverting to basic if no !important was used before */
 .card-body .text-right .text-muted {
-  color: #6c757d !important; /* Ensure muted color for clock icon text */
+  color: #888 !important; /* Ensuring original muted color */
 }
 .card-body .text-right .text-danger {
-  color: #dc3545 !important; /* Red for deadline */
+  color: #dc3545 !important; /* Explicitly red for deadline */
 }
 
 /* DelCode copy link styling */
 .card-body p[title="Click to copy"] {
   cursor: pointer;
   color: #007bff; /* Blue for the link */
-  text-decoration: none; /* No underline by default */
-  font-size: 0.9rem;
+  text-decoration: underline; /* Underline by default for links */
+  font-size: 0.9rem; /* Kept from previous update for readability */
   margin-top: 5px;
 }
 
 .card-body p[title="Click to copy"]:hover {
-  text-decoration: underline; /* Underline on hover */
+  text-decoration: underline; /* Ensure underline on hover */
   color: #0056b3; /* Darker blue on hover */
 }
 
@@ -155,24 +154,9 @@
 }
 
 .spinner-icon {
-  font-size: 2.5rem; /* Larger spinner */
+  font-size: 2rem; /* Reverted to old size */
   color: #007bff;
-  animation: spin 1.5s linear infinite; /* Faster spin */
+  animation: spin 10s linear infinite; /* Reverted to old animation speed */
 }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
-  .card-body {
-    flex-direction: column; /* Stack content vertically on small screens */
-    align-items: flex-start; /* Align to the left */
-  }
-
-  .card-body .text-right {
-    margin-top: 15px; /* Add space between stacked sections */
-    text-align: left; /* Align right section to left on small screens */
-  }
-
-  .col.text-right span[role="img"] {
-    justify-content: flex-start; /* Align filter icon to left on small screens */
-  }
-}
+/* Removed responsive adjustments as they were part of the newer styling */
