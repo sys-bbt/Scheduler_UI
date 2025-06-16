@@ -1,149 +1,76 @@
-/* General container styling */
 .container {
   max-width: 1200px;
   padding: 15px;
   margin: 0 auto;
 }
 
-/* Card styling for each delivery */
 .card {
   transition: transform 0.2s ease-in-out;
-  background-color: #D9D9D9; /* Reverted to old background color */
+  background-color: #D9D9D9;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   overflow: hidden; /* Ensures shaded background stays inside the card */
   position: relative;
-  display: flex; /* Flexbox for internal layout */
-  flex-direction: column; /* Reverted to old flex direction */
 }
 
 .card:hover {
   transform: scale(1.02);
 }
 
-/* Link wrapper to make the whole card clickable */
-.card-link-wrapper {
-  text-decoration: none; /* Remove underline from link */
-  color: inherit; /* Inherit text color */
-}
-
-/* Card body layout */
 .card-body {
   display: flex;
-  flex-direction: column; /* Reverted to old flex direction */
+  flex-direction: column;
   justify-content: space-between;
-  /* align-items: center;  Removed as it's less relevant for column layout */
-  padding: 20px; /* Consistent padding, kept from previous iteration as it's a good default */
   z-index: 2; /* Ensures content stays on top of shaded background */
-  position: relative;
 }
 
-/* Progress bar styling */
 .progress-bar {
-  height: 8px; /* Reverted to old height */
-  border-radius: 4px; /* Reverted to old border-radius */
+  height: 8px;
+  border-radius: 4px;
   background-color: #f1f1f1; /* Lighter background for progress bar */
 }
 
-/* Shaded background for progress indication */
 .shaded-bg {
   position: absolute;
   top: 0;
   left: 0;
   bottom: 0;
-  background-color: #C1C1C1; /* Reverted to old background color */
+  background-color: #C1C1C1; /* Transparent blue overlay */
   z-index: 1; /* Ensures it is behind the content */
-  transition: width 0.3s ease-out; /* Kept transition for smoothness */
 }
 
-/* Task card specific styling */
+.card-wrapper {
+  position: relative;
+  margin-bottom: 15px; /* Adds space between the cards */
+}
+
 .task-card {
-  margin-bottom: 15px; /* Reverted to old margin */
+  position: relative;
+  overflow: hidden; /* Ensures shaded portion stays inside */
 }
 
-/* Heading for tasks planned/total */
-/* This rule generally applies to any h5 inside a card */
 .card h5 {
-  font-size: 1.2rem; /* Reverted to old font size */
-  font-weight: bold; /* Reverted to old font weight */
-  margin-top: 10px; /* Reverted to old margin */
-  margin-bottom: 5px; /* Reverted to old margin */
-  color: #333; /* Reverted to old color */
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-top: 10px;
+  color: #333;
 }
 
-/* Client name styling - NEW */
-/* This targets the h5 for the client name specifically */
-.card-body h5.mb-2 {
-  font-size: 1.1rem; /* Slightly smaller than task progress */
-  font-weight: 600; /* Still bold, but less than the main heading */
-  color: #495057; /* A distinct, slightly muted color */
-  margin-top: 0; /* Adjust margin if needed */
-  margin-bottom: 8px;
-}
-
-
-/* General paragraph text */
 .card p {
-  color: #888; /* Reverted to old color */
-  margin-bottom: 5px; /* Reverted to old margin */
-  font-size: initial; /* Reverted to default browser font size */
+  color: #888;
+  margin-bottom: 5px;
 }
 
-/* Icons within the card */
-/* Adjusted styles for consistency with original icons */
-.card-body .d-flex.align-items-center svg {
-  margin-right: 8px;
-  font-size: 1rem; /* Adjusted to fit better with smaller text */
+.btn-primary {
+  background-color: #007bff;
+  border: none;
+  transition: background-color 0.2s ease-in-out;
 }
 
-.card-body .text-right svg {
-  font-size: 1rem; /* Adjusted */
+.btn-primary:hover {
+  background-color: #0056b3;
 }
 
-/* Specific icon colors - reverting to basic if no !important was used before */
-.card-body .text-right .text-muted {
-  color: #888 !important; /* Ensuring original muted color */
-}
-.card-body .text-right .text-danger {
-  color: #dc3545 !important; /* Explicitly red for deadline */
-}
-
-/* DelCode copy link styling */
-.card-body p[title="Click to copy"] {
-  cursor: pointer;
-  color: #007bff; /* Blue for the link */
-  text-decoration: underline; /* Underline by default for links */
-  font-size: 0.9rem; /* Kept from previous update for readability */
-  margin-top: 5px;
-}
-
-.card-body p[title="Click to copy"]:hover {
-  text-decoration: underline; /* Ensure underline on hover */
-  color: #0056b3; /* Darker blue on hover */
-}
-
-/* Form control for search */
-.form-control {
-  border-radius: 8px; /* Rounded search bar */
-  border: 1px solid #ced4da;
-  padding: 10px 15px;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.075);
-}
-
-.form-control:focus {
-  border-color: #80bdff;
-  box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
-}
-
-/* Search icon alignment */
-.col.text-right span[role="img"] {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  height: 100%; /* Align with input field height */
-}
-
-/* Spinner animation */
 @keyframes spin {
   from {
     transform: rotate(0deg);
@@ -154,9 +81,6 @@
 }
 
 .spinner-icon {
-  font-size: 2rem; /* Reverted to old size */
+  font-size: 2rem;
   color: #007bff;
-  animation: spin 10s linear infinite; /* Reverted to old animation speed */
 }
-
-/* Removed responsive adjustments as they were part of the newer styling */
