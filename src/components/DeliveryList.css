@@ -1,11 +1,9 @@
-/* General container styling */
 .container {
   max-width: 1200px;
   padding: 15px;
   margin: 0 auto;
 }
 
-/* Card styling for each delivery */
 .card {
   transition: transform 0.2s ease-in-out;
   background-color: #D9D9D9;
@@ -13,55 +11,44 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   overflow: hidden; /* Ensures shaded background stays inside the card */
   position: relative;
-  /* Removed display: flex and flex-direction from here as card-body handles it */
 }
 
 .card:hover {
   transform: scale(1.02);
 }
 
-/* Link wrapper to make the whole card clickable */
-.card-link-wrapper {
-  text-decoration: none;
-  color: inherit;
-}
-
-/* Card body layout - This now acts as a padding container for its inner content */
 .card-body {
-  padding: 20px; /* Consistent padding */
-  position: relative; /* Needed for z-index to work correctly against absolute positioned elements */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   z-index: 2; /* Ensures content stays on top of shaded background */
-  /* Removed display: flex, flex-direction, justify-content, align-items from here.
-     The inner div with className="d-flex justify-content-between align-items-center"
-     will now correctly handle the main row layout. */
 }
 
-/* Progress bar styling */
 .progress-bar {
   height: 8px;
   border-radius: 4px;
-  background-color: #f1f1f1;
-  /* Ensure the bar itself is full width of its container, no explicit width needed here */
-  width: 100%; /* Explicitly set to 100% to ensure it takes available space */
+  background-color: #f1f1f1; /* Lighter background for progress bar */
 }
 
-/* Shaded background for progress indication */
 .shaded-bg {
   position: absolute;
   top: 0;
   left: 0;
   bottom: 0;
-  background-color: #C1C1C1;
-  z-index: 1;
-  transition: width 0.3s ease-out;
+  background-color: #C1C1C1; /* Transparent blue overlay */
+  z-index: 1; /* Ensures it is behind the content */
 }
 
-/* Task card specific styling */
+.card-wrapper {
+  position: relative;
+  margin-bottom: 15px; /* Adds space between the cards */
+}
+
 .task-card {
-  margin-bottom: 15px;
+  position: relative;
+  overflow: hidden; /* Ensures shaded portion stays inside */
 }
 
-/* Heading for tasks planned/total */
 .card h5 {
   font-size: 1.2rem;
   font-weight: bold;
@@ -69,77 +56,21 @@
   color: #333;
 }
 
-/* Client name styling - NEW */
-/* This targets the h5 for the client name specifically */
-.card-body h5.mb-2 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #495057;
-  margin-top: 0;
-  margin-bottom: 8px;
-}
-
-/* General paragraph text */
 .card p {
   color: #888;
   margin-bottom: 5px;
-  font-size: initial;
 }
 
-/* Icons within the card */
-.card-body .d-flex.align-items-center svg {
-  margin-right: 8px;
-  font-size: 1rem;
+.btn-primary {
+  background-color: #007bff;
+  border: none;
+  transition: background-color 0.2s ease-in-out;
 }
 
-.card-body .text-right svg {
-  font-size: 1rem;
+.btn-primary:hover {
+  background-color: #0056b3;
 }
 
-/* Specific icon colors */
-.card-body .text-right .text-muted {
-  color: #888 !important;
-}
-.card-body .text-right .text-danger {
-  color: #dc3545 !important;
-}
-
-/* DelCode copy link styling */
-.card-body p[title="Click to copy"] {
-  cursor: pointer;
-  color: #007bff;
-  text-decoration: underline;
-  font-size: 0.9rem;
-  margin-top: 5px;
-}
-
-.card-body p[title="Click to copy"]:hover {
-  text-decoration: underline;
-  color: #0056b3;
-}
-
-/* Form control for search */
-.form-control {
-  border-radius: 8px;
-  border: 1px solid #ced4da;
-  padding: 10px 15px;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.075);
-}
-
-.form-control:focus {
-  border-color: #80bdff;
-  box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
-}
-
-/* Search icon alignment */
-.col.text-right span[role="img"] {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  height: 100%;
-}
-
-/* Spinner animation */
 @keyframes spin {
   from {
     transform: rotate(0deg);
@@ -152,28 +83,4 @@
 .spinner-icon {
   font-size: 2rem;
   color: #007bff;
-  animation: spin 10s linear infinite;
-}
-
-/* IMPORTANT: Ensure the direct children of the flex container within Card.Body manage their internal layout */
-/* This targets the first div which contains the progress, client name, and delete button */
-.card-body > .d-flex > div:first-child {
-  display: flex;
-  flex-direction: column; /* Stack its children vertically */
-  align-items: flex-start; /* Align content to the left */
-  /* flex: 1; Optional: allow it to grow if needed, but not strictly necessary for stacking */
-}
-
-/* This targets the div with .text-right class which contains initiated, deadline, and delCode */
-.card-body > .d-flex > div.text-right {
-  display: flex;
-  flex-direction: column; /* Stack its children vertically */
-  align-items: flex-end; /* Align content to the right */
-  text-align: right; /* Ensure text alignment for paragraph elements */
-}
-
-/* Additional adjustment for the inner d-flex div to ensure spacing */
-.d-flex.align-items-center.mb-2 {
-    width: 100%; /* Ensure this div takes full width inside its parent column */
-    justify-content: space-between; /* Distribute items within this row (e.g., progress, delete) */
 }
