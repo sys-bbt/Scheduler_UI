@@ -267,9 +267,9 @@ const DeliveryList = () => {
                     <DeleteButton deliveryCode={delivery.delCode} onDelete={handleDelete} />
                   </div>
                   {/* Add the client name here */}
-                  {delivery.clientName && (
+                  {delivery.client && (
                     <p className="mb-1 text-muted">
-                      Client: {delivery.clientName}
+                      Client: {delivery.client}
                     </p>
                   )}
                   <div className="mb-2">
