@@ -294,6 +294,7 @@ const DeliveryList = () => {
                         </div>
                       </Card.Body>
                     </Card>
+                  </Link>
                 </Col>
               );
             })}
