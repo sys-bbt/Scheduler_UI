@@ -24,7 +24,11 @@ const FormComponent = ({ onSubmit, task }) => {
     const [personResponsible, setPersonResponsible] = useState('');
     const [numberOfDays, setNumberOfDays] = useState(0);
     const [existingSchedules, setExistingSchedules] = useState({});
-    const [availablePersons, setAvailablePersons] = useState([]); // State for available persons
+
+    // Hardcoded list of available persons
+    // You can customize this list with the names you need
+    const hardcodedPersons = ["Meghna Jalali", "John Doe", "Jane Smith", "Alice Brown", "Bob Johnson"];
+
 
     useEffect(() => {
         const fetchTaskData = async () => {
@@ -35,6 +39,7 @@ const FormComponent = ({ onSubmit, task }) => {
                     });
                     
                     // Set initial person responsible from task prop
+                    // Ensure that task.Responsibility (if it exists) is also present in hardcodedPersons
                     setPersonResponsible(task.Responsibility || '');
 
                     // Fetch data per key per day
@@ -46,23 +51,16 @@ const FormComponent = ({ onSubmit, task }) => {
                         const taskEntries = taskData.entries;
 
                         const totalMinutes = taskData.totalDuration || 0;
-                        // Initialize hours state with the total minutes, if applicable for first slider
-                        // Or, better, iterate through taskEntries and set hours for each day if available
                         const initialHours = {};
                         if (taskEntries && taskEntries.length > 0) {
                             taskEntries.forEach((entry, index) => {
-                                // Assuming Day.value can be used to map to slider index if sorted or consistent
-                                // For simplicity, let's just take the first entry's duration if multiple days are not clearly mapped to sliders
-                                // A more robust solution would map entry.Day to the correct slider index.
-                                // For now, if the task has a duration, ensure the first slider gets it.
                                 if (index === 0 && entry.Duration_In_Minutes) {
                                     initialHours[0] = entry.Duration_In_Minutes;
                                 }
                             });
                         }
-                        // Fallback if no specific entry duration is found but totalDuration exists
                         if (Object.keys(initialHours).length === 0 && totalMinutes > 0) {
-                             initialHours[0] = totalMinutes; // Assign to the first day for simplicity
+                             initialHours[0] = totalMinutes;
                         }
                         setHours(initialHours);
 
@@ -79,16 +77,16 @@ const FormComponent = ({ onSubmit, task }) => {
 
                             const daysDiff = end.diff(start, 'days') + 1;
                             setNumberOfDays(daysDiff);
-                            setSliderCount(daysDiff); // Set slider count based on loaded task data
+                            setSliderCount(daysDiff);
                         }
                     }
 
-                    // Fetch data per person per day
+                    // Fetch data per person per day (still needed for existingSchedules validation)
                     const perPersonResponse = await fetch(`https://server-ui-2.onrender.com/api/per-person-per-day`);
                     const perPersonData = await perPersonResponse.json();
 
                     const schedules = {};
-                    const personsSet = new Set();
+                    // We are NOT using `personsSet` from this fetch anymore to populate `availablePersons`
                     perPersonData.forEach((entry) => {
                         const { Responsibility, Day, Duration_In_Minutes } = entry;
                         const date = Day.value;
@@ -96,21 +94,18 @@ const FormComponent = ({ onSubmit, task }) => {
                             schedules[Responsibility] = {};
                         }
                         schedules[Responsibility][date] = Duration_In_Minutes;
-                        personsSet.add(Responsibility);
                     });
 
                     setExistingSchedules(schedules);
-                    // Ensure the currently assigned person is in the list of available persons
-                    if (task.Responsibility && !personsSet.has(task.Responsibility)) {
-                        personsSet.add(task.Responsibility);
-                    }
-                    setAvailablePersons(Array.from(personsSet).sort()); // Sort for better UX
+                    // The `availablePersons` state and its setter are no longer used for the dropdown,
+                    // as we're directly using `hardcodedPersons`.
+                    // The `setAvailablePersons` line is removed.
                 }
             } catch (error) {
                 console.error("Error fetching task data:", error);
                 notification.error({
                     message: 'Error',
-                    description: 'Failed to load task data or available persons.',
+                    description: 'Failed to load task data or existing schedules.',
                 });
             }
         };
@@ -119,13 +114,13 @@ const FormComponent = ({ onSubmit, task }) => {
     }, [task, form]);
 
 
-    const handleStartDateChange = (date) => { // DatePicker onChange provides moment object directly
+    const handleStartDateChange = (date) => {
         setStartDate(date);
         if (numberOfDays && date) {
             calculateEndDate(date, numberOfDays);
         } else {
             setEndDate(null);
-            setSliderCount(0); // Reset sliders if start date or days is cleared
+            setSliderCount(0);
         }
     };
 
@@ -134,7 +129,7 @@ const FormComponent = ({ onSubmit, task }) => {
         const days = e.target.value;
         const numericDays = parseInt(days, 10) || 0;
         setNumberOfDays(numericDays);
-        if (startDate && numericDays > 0) { // Only calculate end date and sliders if days > 0
+        if (startDate && numericDays > 0) {
             calculateEndDate(startDate, numericDays);
         } else {
             setEndDate(null);
@@ -143,7 +138,7 @@ const FormComponent = ({ onSubmit, task }) => {
     };
 
     const calculateEndDate = (start, days) => {
-        if (start && days > 0) { // Ensure days is positive for calculation
+        if (start && days > 0) {
             const calculatedEndDate = moment(start).add(days - 1, 'days');
             setEndDate(calculatedEndDate);
             setSliderCount(days);
@@ -154,9 +149,7 @@ const FormComponent = ({ onSubmit, task }) => {
     };
 
     const calculateTotalTime = () => {
-        // Summing up all minutes from the hours state
         return Object.values(hours).reduce((acc, curr) => {
-            // Ensure curr is a number before adding
             return acc + (typeof curr === 'number' ? curr : 0);
         }, 0);
     };
@@ -180,7 +173,7 @@ const FormComponent = ({ onSubmit, task }) => {
                     const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
                     return {
                         day: formattedDay,
-                        duration: hours[index] || 0, // Ensure duration is a number (minutes)
+                        duration: hours[index] || 0,
                         slot: "Null",
                     };
                 });
@@ -255,12 +248,12 @@ const FormComponent = ({ onSubmit, task }) => {
 
     const handleSliderChange = (index, value) => {
         const currentDay = moment(startDate).add(index, 'days').format('YYYY-MM-DD');
-        const maxAllowedMinutes = 480; // 8 hours in minutes
+        const maxAllowedMinutes = 480;
         let effectiveValue = value;
 
         if (existingSchedules[personResponsible]?.[currentDay]) {
             const alreadyScheduledMinutes = existingSchedules[personResponsible][currentDay];
-            const remainingMinutes = maxAllowedMinutes - (alreadyScheduledMinutes || 0); // Handle undefined
+            const remainingMinutes = maxAllowedMinutes - (alreadyScheduledMinutes || 0);
             effectiveValue = Math.min(value, remainingMinutes);
             if (value > remainingMinutes) {
                 notification.warning({
@@ -280,12 +273,12 @@ const FormComponent = ({ onSubmit, task }) => {
         }
 
         const currentDay = moment(startDate).add(index, 'days').format('YYYY-MM-DD');
-        const maxAllowedMinutes = 480; // 8 hours in minutes
+        const maxAllowedMinutes = 480;
         let effectiveValue = numericValue;
 
         if (existingSchedules[personResponsible]?.[currentDay]) {
             const alreadyScheduledMinutes = existingSchedules[personResponsible][currentDay];
-            const remainingMinutes = maxAllowedMinutes - (alreadyScheduledMinutes || 0); // Handle undefined
+            const remainingMinutes = maxAllowedMinutes - (alreadyScheduledMinutes || 0);
             effectiveValue = Math.min(numericValue, remainingMinutes);
             if (numericValue > remainingMinutes) {
                 notification.warning({
@@ -297,7 +290,7 @@ const FormComponent = ({ onSubmit, task }) => {
 
         setHours((prev) => ({
             ...prev,
-            [index]: effectiveValue < 0 ? 0 : effectiveValue, // Ensure non-negative value for input
+            [index]: effectiveValue < 0 ? 0 : effectiveValue,
         }));
     };
 
@@ -364,7 +357,7 @@ const FormComponent = ({ onSubmit, task }) => {
                         <Col xs={20}>
                             <Slider
                                 marks={customMarks}
-                                min={0} // Min can be 0 if no time is allocated for a day
+                                min={0}
                                 max={480}
                                 step={1}
                                 onChange={(value) => handleSliderChange(index, value)}
@@ -375,7 +368,7 @@ const FormComponent = ({ onSubmit, task }) => {
                         <Col xs={4}>
                             <Input
                                 type="number"
-                                min={0} // Min can be 0 for input as well
+                                min={0}
                                 max={480}
                                 value={hours[index] || 0}
                                 onChange={(e) => handleInputChange(index, e.target.value)}
@@ -394,14 +387,15 @@ const FormComponent = ({ onSubmit, task }) => {
                 <Select
                     placeholder="Select a person"
                     onChange={setPersonResponsible}
-                    value={personResponsible || undefined} // Use undefined if empty to show placeholder
+                    value={personResponsible || undefined}
                     showSearch
                     optionFilterProp="children"
                     filterOption={(input, option) =>
                         (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                     }
                 >
-                    {availablePersons.map((person) => (
+                    {/* Hardcoded list of persons for the dropdown */}
+                    {hardcodedPersons.map((person) => (
                         <Option key={person} value={person}>
                             {person}
                         </Option>
