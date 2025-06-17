@@ -27,7 +27,7 @@ const FormComponent = ({ onSubmit, task }) => {
 
     // Hardcoded list of available persons
     // You can customize this list with the names you need
-    const hardcodedPersons = ["Meghna Jalali", "John Doe", "Jane Smith", "Alice Brown", "Bob Johnson"];
+    const hardcodedPersons = ["Neelam Purohit" , "Meghna Jalali" , "Zoya Ansari" , "Shweta Gaikwad" , "Hitesh Rattesar" , "System"];
 
 
     useEffect(() => {
