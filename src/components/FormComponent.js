@@ -21,11 +21,11 @@ const FormComponent = ({ onSubmit, task }) => {
             : null
     );
 
-    const [deliverySlot, setDeliverySlot] = useState(null);
+    // Removed deliverySlot state
     const [personResponsible, setPersonResponsible] = useState('');
     const [numberOfDays, setNumberOfDays] = useState(0);
     const [existingSchedules, setExistingSchedules] = useState({});
-
+    const [availablePersons, setAvailablePersons] = useState([]); // New state for available persons
 
     useEffect(() => {
         const fetchTaskData = async () => {
@@ -48,7 +48,10 @@ const FormComponent = ({ onSubmit, task }) => {
                         const totalMinutes = taskData.totalDuration || 0;
                         const hours = Math.floor(totalMinutes / 60);
                         const minutes = totalMinutes % 60;
-                        setHours({ 0: `${hours}h ${minutes}m` });
+                        setHours({ 0: `${hours}h ${minutes}m` }); // This seems to be setting a display string, but the slider expects a number.
+                                                                // It's better to store minutes directly and format for display.
+                        setHours({0: totalMinutes}); // Store total minutes for the initial load if it's meant for the first slider
+
 
                         const validDays = taskEntries
                             .map((entry) => entry.Day?.value)
@@ -63,6 +66,7 @@ const FormComponent = ({ onSubmit, task }) => {
 
                             const daysDiff = end.diff(start, 'days') + 1;
                             setNumberOfDays(daysDiff);
+                            setSliderCount(daysDiff); // Set slider count based on loaded task data
                         }
                     }
 
@@ -71,6 +75,7 @@ const FormComponent = ({ onSubmit, task }) => {
                     const perPersonData = await perPersonResponse.json();
 
                     const schedules = {};
+                    const personsSet = new Set(); // To get unique person names
                     perPersonData.forEach((entry) => {
                         const { Responsibility, Day, Duration_In_Minutes } = entry;
                         const date = Day.value;
@@ -78,37 +83,43 @@ const FormComponent = ({ onSubmit, task }) => {
                             schedules[Responsibility] = {};
                         }
                         schedules[Responsibility][date] = Duration_In_Minutes;
+                        personsSet.add(Responsibility); // Add person to the set
                     });
 
                     setExistingSchedules(schedules);
+                    setAvailablePersons(Array.from(personsSet)); // Convert set to array for dropdown options
                 }
             } catch (error) {
                 console.error("Error fetching task data:", error);
+                notification.error({
+                    message: 'Error',
+                    description: 'Failed to load task data or available persons.',
+                });
             }
         };
 
         fetchTaskData();
     }, [task, form]);
 
-    const handleStartDateChange = (e) => {
-        const inputDate = e.target.value;
-        const parsedDate = moment(inputDate, 'YYYY-MM-DD', true);
 
-        if (parsedDate.isValid()) {
-            setStartDate(parsedDate);
-            if (numberOfDays) {
-                calculateEndDate(parsedDate, numberOfDays);
-            }
-        } else {
-            console.error("Invalid date format. Please use 'YYYY-MM-DD'");
+    // Corrected `handleStartDateChange` to use DatePicker's moment object directly
+    const handleStartDateChange = (date, dateString) => {
+        setStartDate(date);
+        if (numberOfDays && date) {
+            calculateEndDate(date, numberOfDays);
         }
     };
 
-    const handleNumberOfDaysChange = (days) => {
+
+    const handleNumberOfDaysChange = (e) => {
+        const days = e.target.value;
         const numericDays = parseInt(days, 10) || 0;
         setNumberOfDays(numericDays);
         if (startDate && numericDays) {
             calculateEndDate(startDate, numericDays);
+        } else {
+            setEndDate(null);
+            setSliderCount(0);
         }
     };
 
@@ -132,41 +143,25 @@ const FormComponent = ({ onSubmit, task }) => {
         form
             .validateFields()
             .then((values) => {
-                const slotTimes = {
-                    "1pm": { hour: 13, minute: 0 },
-                    "4pm": { hour: 16, minute: 0 },
-                    "7pm": { hour: 19, minute: 0 },
-                };
+                // No delivery slot, so timestamps will be at start/end of the day
+                const plannedStartTimestamp = startDate
+                    ? moment(startDate).startOf('day').utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
+                    : null;
 
-                const selectedSlot = deliverySlot ? slotTimes[deliverySlot] : null;
-
-                const plannedStartTimestamp = startDate && selectedSlot
-                ? moment(startDate)
-                      .hour(selectedSlot.hour) // Set the hour based on the slot
-                      .minute(selectedSlot.minute) // Set the minute based on the slot
-                      .utc() // Ensure UTC
-                      .format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
-                : null;
-            
-            const plannedDeliveryTimestamp = endDate && selectedSlot
-                ? moment(endDate)
-                      .hour(selectedSlot.hour) // Set the hour based on the slot
-                      .minute(selectedSlot.minute) // Set the minute based on the slot
-                      .utc() // Ensure UTC
-                      .format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
-                : null;
-            
-
+                const plannedDeliveryTimestamp = endDate
+                    ? moment(endDate).endOf('day').utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
+                    : null;
 
                 const totalTime = calculateTotalTime();
                 const slidersData = Array.from({ length: sliderCount }).map((_, index) => {
                     const calculatedDay = moment(startDate).add(index, 'days');
                     const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
-                    const slotForThisSlider = deliverySlot || "Null";
+                    // Delivery slot is removed, so it can be null or a default value
                     return {
                         day: formattedDay,
                         duration: hours[index] || 0,
-                        slot: slotForThisSlider,                    };
+                        slot: "Null", // Defaulting slot to "Null" as it's no longer selected
+                    };
                 });
 
                 const scheduledData = {
@@ -239,14 +234,21 @@ const FormComponent = ({ onSubmit, task }) => {
     const handleSliderChange = (index, value) => {
         const currentDay = moment(startDate).add(index, 'days').format('YYYY-MM-DD');
         const maxAllowedMinutes = 480; // 8 hours in minutes
+        let effectiveValue = value;
 
         if (existingSchedules[personResponsible]?.[currentDay]) {
             const alreadyScheduledMinutes = existingSchedules[personResponsible][currentDay];
             const remainingMinutes = maxAllowedMinutes - alreadyScheduledMinutes;
-            value = Math.min(value, remainingMinutes);
+            effectiveValue = Math.min(value, remainingMinutes);
+            if (value > remainingMinutes) {
+                notification.warning({
+                    message: 'Time Limit Reached',
+                    description: `Cannot schedule more than ${remainingMinutes} minutes for ${personResponsible} on ${currentDay} due to existing tasks.`,
+                });
+            }
         }
 
-        setHours((prev) => ({ ...prev, [index]: value }));
+        setHours((prev) => ({ ...prev, [index]: effectiveValue }));
     };
 
     const handleInputChange = (index, value) => {
@@ -256,17 +258,24 @@ const FormComponent = ({ onSubmit, task }) => {
         }
 
         const currentDay = moment(startDate).add(index, 'days').format('YYYY-MM-DD');
-        const maxAllowedMinutes = 480;
+        const maxAllowedMinutes = 480; // 8 hours in minutes
+        let effectiveValue = numericValue;
 
         if (existingSchedules[personResponsible]?.[currentDay]) {
             const alreadyScheduledMinutes = existingSchedules[personResponsible][currentDay];
             const remainingMinutes = maxAllowedMinutes - alreadyScheduledMinutes;
-            numericValue = Math.min(numericValue, remainingMinutes);
+            effectiveValue = Math.min(numericValue, remainingMinutes);
+            if (numericValue > remainingMinutes) {
+                notification.warning({
+                    message: 'Time Limit Reached',
+                    description: `Cannot schedule more than ${remainingMinutes} minutes for ${personResponsible} on ${currentDay} due to existing tasks.`,
+                });
+            }
         }
 
         setHours((prev) => ({
             ...prev,
-            [index]: numericValue < 1 ? 1 : numericValue,
+            [index]: effectiveValue < 1 ? 1 : effectiveValue, // Ensure minimum of 1 minute
         }));
     };
 
@@ -295,11 +304,11 @@ const FormComponent = ({ onSubmit, task }) => {
             <Row gutter={[8, 16]}>
                 <Col xs={24} sm={8}>
                     <Form.Item label="Start Date">
-                        <Input
-                            type="date"
+                        <DatePicker
+                            format="YYYY-MM-DD"
                             onChange={handleStartDateChange}
-                            value={startDate ? startDate.format('YYYY-MM-DD') : ''} // Show formatted date if available
-                            placeholder="Enter start date (YYYY-MM-DD)"
+                            value={startDate}
+                            placeholder="Select start date"
                             style={{ width: '100%' }}
                         />
                     </Form.Item>
@@ -309,8 +318,8 @@ const FormComponent = ({ onSubmit, task }) => {
                         <Input
                             type="number"
                             value={numberOfDays}
-                            onChange={(e) => handleNumberOfDaysChange(e.target.value)}
-                            min={1}
+                            onChange={handleNumberOfDaysChange}
+                            min={0} // Changed to 0, so if there are no days, slider doesn't show
                             style={{ width: '100%' }}
                         />
                     </Form.Item>
@@ -318,8 +327,8 @@ const FormComponent = ({ onSubmit, task }) => {
                 <Col xs={24} sm={8}>
                     <Form.Item label="End Date">
                         <DatePicker
-                            type='date'
-                            value={endDate ? moment(endDate) : null}
+                            format="YYYY-MM-DD"
+                            value={endDate}
                             disabled
                             style={{ width: '100%' }}
                         />
@@ -328,7 +337,7 @@ const FormComponent = ({ onSubmit, task }) => {
             </Row>
 
             {Array.from({ length: sliderCount }).map((_, index) => (
-                <Form.Item key={index} label={`Hours for Day ${index + 1}`}>
+                <Form.Item key={index} label={`Hours for Day ${index + 1} (${moment(startDate).add(index, 'days').format('YYYY-MM-DD')})`}>
                     <Row gutter={20}>
                         <Col xs={20}>
                             <Slider
@@ -355,30 +364,31 @@ const FormComponent = ({ onSubmit, task }) => {
                 </Form.Item>
             ))}
 
-            <Form.Item
-                name="deliverySlot"
-                label="Delivery Slot"
-                rules={[{ required: true, message: 'Please select a delivery slot!' }]}
-            >
-                <Select
-                    placeholder="Select a delivery slot"
-                    onChange={setDeliverySlot}
-                    value={deliverySlot}
-                >
-                    <Option value="1pm">1pm</Option>
-                    <Option value="4pm">4pm</Option>
-                    <Option value="7pm">7pm</Option>
-                </Select>
-            </Form.Item>
+            {/* Delivery Slot Form.Item has been removed */}
+
             <Form.Item
                 label="Person Responsible"
-                rules={[{ required: true, message: 'Please input the person responsible!' }]}
+                name="personResponsible" // Added name prop for Form.Item validation
+                rules={[{ required: true, message: 'Please select the person responsible!' }]}
             >
-                <Input
+                <Select
+                    placeholder="Select a person"
+                    onChange={setPersonResponsible}
                     value={personResponsible}
-                    onChange={(e) => setPersonResponsible(e.target.value)}
-                />
+                    showSearch // Enable searching in dropdown
+                    optionFilterProp="children" // Filter based on children prop (person name)
+                    filterOption={(input, option) =>
+                        (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                    }
+                >
+                    {availablePersons.map((person) => (
+                        <Option key={person} value={person}>
+                            {person}
+                        </Option>
+                    ))}
+                </Select>
             </Form.Item>
+
             <Form.Item>
                 <Button type="primary" htmlType="submit" onClick={handleSubmit}>
                     Submit
