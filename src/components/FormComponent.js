@@ -1,11 +1,34 @@
-import React, { useState, useEffect, memo } from 'react';
-import { Form, Input, Button, Slider, DatePicker, Select, notification, Row, Col } from 'antd';
+import React, { useState, useEffect, memo, useCallback } from 'react';
+import { Form, Input, Button, Slider, DatePicker, Select, notification, Row, Col, Spin } from 'antd';
 import moment from 'moment';
 import './FormComponent.css';
 
 const { Option } = Select;
 
-const FormComponent = ({ onSubmit, task }) => {
+// Define the emails of users who can see the full list
+const ADMIN_EMAILS = [
+    "systems@brightbraintech.com",
+    "neelam.p@brightbraintech.com",
+    "meghna.j@brightbraintech.com",
+    "zoya.a@brightbraintech.com",
+    "shweta.g@brightbraintech.com",
+    "hitesh.r@brightbraintech.com"
+];
+
+// Define a mapping from email to person name for non-admin users.
+// This is crucial if the email doesn't directly map to the "Responsibility" name
+// as fetched from BigQuery. Ensure these mappings align with your data.
+const EMAIL_TO_PERSON_MAP = {
+    "neelam.p@brightbraintech.com": "Neelam Purohit",
+    "meghna.j@brightbraintech.com": "Meghna Jalali",
+    "zoya.a@brightbraintech.com": "Zoya Ansari",
+    "shweta.g@brightbraintech.com": "Shweta Gaikwad",
+    "hitesh.r@brightbraintech.com": "Hitesh Rattesar",
+    // Add other mappings as needed, e.g., if "System" corresponds to a specific email
+    "system@brightbraintech.com": "System", // Example: if "System" also has an email
+};
+
+const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [form] = Form.useForm();
     const [sliderCount, setSliderCount] = useState(0);
     const [hours, setHours] = useState({});
@@ -24,12 +47,47 @@ const FormComponent = ({ onSubmit, task }) => {
     const [personResponsible, setPersonResponsible] = useState('');
     const [numberOfDays, setNumberOfDays] = useState(0);
     const [existingSchedules, setExistingSchedules] = useState({});
+    const [availablePersons, setAvailablePersons] = useState([]); // State to store fetched persons
+    const [loadingPersons, setLoadingPersons] = useState(true); // Loading state for persons data
 
-    // Hardcoded list of available persons
-    // You can customize this list with the names you need
-    const hardcodedPersons = ["Neelam Purohit" , "Meghna Jalali" , "Zoya Ansari" , "Shweta Gaikwad" , "Hitesh Rattesar" , "System"];
+    // Memoize the mapping logic to prevent unnecessary re-renders
+    const getPersonNameFromEmail = useCallback((email) => {
+        return EMAIL_TO_PERSON_MAP[email] || null;
+    }, []);
 
+    // --- EFFECT HOOK TO FETCH AVAILABLE PERSONS FROM BIGQUERY API ---
+    useEffect(() => {
+        const fetchAvailablePersons = async () => {
+            setLoadingPersons(true);
+            try {
+                // Fetch distinct persons from the new backend API endpoint
+                const response = await fetch('/api/persons');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                setAvailablePersons(data);
+            } catch (error) {
+                console.error("Error fetching available persons:", error);
+                notification.error({
+                    message: 'Error',
+                    description: 'Failed to load available persons list.',
+                });
+                setAvailablePersons([]); // Fallback to empty array on error
+            } finally {
+                setLoadingPersons(false);
+            }
+        };
 
+        fetchAvailablePersons();
+    }, []); // Empty dependency array means this runs once on component mount
+
+    // Determine the list of persons to display in the dropdown based on user's email
+    const personsToDisplay = ADMIN_EMAILS.includes(currentUserEmail)
+        ? availablePersons // Admins see the full fetched list
+        : availablePersons.filter(person => person === getPersonNameFromEmail(currentUserEmail)); // Non-admins see only their mapped name
+
+    // Effect to initialize form fields and fetch task/schedule data
     useEffect(() => {
         const fetchTaskData = async () => {
             try {
@@ -37,10 +95,28 @@ const FormComponent = ({ onSubmit, task }) => {
                     form.setFieldsValue({
                         name: task.Task_Details || '',
                     });
-                    
-                    // Set initial person responsible from task prop
-                    // Ensure that task.Responsibility (if it exists) is also present in hardcodedPersons
-                    setPersonResponsible(task.Responsibility || '');
+
+                    // Set initial person responsible from task prop, considering user permissions
+                    const initialResponsibilityFromTask = task.Responsibility || '';
+
+                    if (ADMIN_EMAILS.includes(currentUserEmail)) {
+                        // Admin: set to task responsibility
+                        setPersonResponsible(initialResponsibilityFromTask);
+                        form.setFieldsValue({ personResponsible: initialResponsibilityFromTask });
+                    } else {
+                        // Non-admin: set to their mapped name if it exists
+                        const userPersonName = getPersonNameFromEmail(currentUserEmail);
+                        if (userPersonName) {
+                            setPersonResponsible(userPersonName);
+                            form.setFieldsValue({ personResponsible: userPersonName });
+                        } else {
+                            // If user's name not mapped or initial task responsibility doesn't match,
+                            // consider clearing or setting a default if valid.
+                            // For now, it will remain empty if no match, as the Select is disabled.
+                             setPersonResponsible(''); // Clear if no specific mapping for non-admin
+                             form.setFieldsValue({ personResponsible: undefined }); // Use undefined for Ant Design Select to show placeholder
+                        }
+                    }
 
                     // Fetch data per key per day
                     const response = await fetch(`https://server-ui-2.onrender.com/api/per-key-per-day`);
@@ -60,7 +136,7 @@ const FormComponent = ({ onSubmit, task }) => {
                             });
                         }
                         if (Object.keys(initialHours).length === 0 && totalMinutes > 0) {
-                             initialHours[0] = totalMinutes;
+                            initialHours[0] = totalMinutes;
                         }
                         setHours(initialHours);
 
@@ -86,7 +162,6 @@ const FormComponent = ({ onSubmit, task }) => {
                     const perPersonData = await perPersonResponse.json();
 
                     const schedules = {};
-                    // We are NOT using `personsSet` from this fetch anymore to populate `availablePersons`
                     perPersonData.forEach((entry) => {
                         const { Responsibility, Day, Duration_In_Minutes } = entry;
                         const date = Day.value;
@@ -97,9 +172,6 @@ const FormComponent = ({ onSubmit, task }) => {
                     });
 
                     setExistingSchedules(schedules);
-                    // The `availablePersons` state and its setter are no longer used for the dropdown,
-                    // as we're directly using `hardcodedPersons`.
-                    // The `setAvailablePersons` line is removed.
                 }
             } catch (error) {
                 console.error("Error fetching task data:", error);
@@ -110,8 +182,16 @@ const FormComponent = ({ onSubmit, task }) => {
             }
         };
 
-        fetchTaskData();
-    }, [task, form]);
+        // Only fetch task data if availablePersons has been loaded,
+        // to ensure person responsible logic can correctly apply.
+        if (!loadingPersons && availablePersons.length > 0) {
+            fetchTaskData();
+        } else if (!loadingPersons && availablePersons.length === 0 && ADMIN_EMAILS.includes(currentUserEmail)) {
+            // Allow admin to proceed even if no persons fetched (e.g., empty table)
+             fetchTaskData();
+        }
+
+    }, [task, form, currentUserEmail, getPersonNameFromEmail, loadingPersons, availablePersons]); // Added dependencies
 
 
     const handleStartDateChange = (date) => {
@@ -174,7 +254,7 @@ const FormComponent = ({ onSubmit, task }) => {
                     return {
                         day: formattedDay,
                         duration: hours[index] || 0,
-                        slot: "Null",
+                        slot: "Null", // Assuming 'Null' is the default slot
                     };
                 });
 
@@ -186,12 +266,13 @@ const FormComponent = ({ onSubmit, task }) => {
                     Task_Details: values.name,
                     Frequency___Timeline: task.Frequency___Timeline,
                     Client: task.Client,
-                    Short_description: task.Short_Description,
+                    Short_Description: task.Short_Description,
                     Planned_Start_Timestamp: plannedStartTimestamp,
                     Planned_Delivery_Timestamp: plannedDeliveryTimestamp,
                     Responsibility: personResponsible,
                     Current_Status: task.Current_Status,
-                    Email: task.Email,
+                    Email: task.Email, // Assuming task.Email is the correct email field for the task itself
+                    Emails: task.Emails, // Use the existing Emails field from task if available
                     Total_Tasks: task.Total_Tasks,
                     Completed_Tasks: task.Completed_Tasks,
                     Planned_Tasks: task.Planned_Tasks,
@@ -203,7 +284,7 @@ const FormComponent = ({ onSubmit, task }) => {
                     sliders: slidersData,
                 };
 
-                console.log('Scheduled Data:', scheduledData);
+                console.log('Scheduled Data for submission:', scheduledData);
 
                 fetch('/api/post', {
                     method: 'POST',
@@ -387,19 +468,26 @@ const FormComponent = ({ onSubmit, task }) => {
                 <Select
                     placeholder="Select a person"
                     onChange={setPersonResponsible}
-                    value={personResponsible || undefined}
+                    value={personResponsible || undefined} // Use undefined to show placeholder when no value
                     showSearch
                     optionFilterProp="children"
                     filterOption={(input, option) =>
                         (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                     }
+                    // Disable the select if the user is not an admin or if persons are still loading
+                    disabled={!ADMIN_EMAILS.includes(currentUserEmail) || loadingPersons}
+                    loading={loadingPersons} // Show loading spinner within the Select
                 >
-                    {/* Hardcoded list of persons for the dropdown */}
-                    {hardcodedPersons.map((person) => (
-                        <Option key={person} value={person}>
-                            {person}
-                        </Option>
-                    ))}
+                    {/* Show a loading message or the options */}
+                    {loadingPersons ? (
+                        <Option disabled value="loading"><Spin size="small" /> Loading persons...</Option>
+                    ) : (
+                        personsToDisplay.map((person) => (
+                            <Option key={person} value={person}>
+                                {person}
+                            </Option>
+                        ))
+                    )}
                 </Select>
             </Form.Item>
 
