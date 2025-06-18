@@ -55,7 +55,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         return EMAIL_TO_PERSON_MAP[email] || null;
     }, []);
 
-    // --- EFFECT HOOK TO FETCH AVAILABLE PERSONS FROM BIGQUERY API ---
+    // --- EFFECT HOOK 1: FETCH AVAILABLE PERSONS FROM BIGQUERY API ---
     useEffect(() => {
         const fetchAvailablePersons = async () => {
             setLoadingPersons(true);
@@ -82,41 +82,14 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         fetchAvailablePersons();
     }, []); // Empty dependency array means this runs once on component mount
 
-    // Determine the list of persons to display in the dropdown based on user's email
-    const personsToDisplay = ADMIN_EMAILS.includes(currentUserEmail)
-        ? availablePersons // Admins see the full fetched list
-        : availablePersons.filter(person => person === getPersonNameFromEmail(currentUserEmail)); // Non-admins see only their mapped name
-
-    // Effect to initialize form fields and fetch task/schedule data
+    // --- EFFECT HOOK 2: FETCH TASK DATA AND EXISTING SCHEDULES ---
     useEffect(() => {
-        const fetchTaskData = async () => {
+        const fetchTaskAndScheduleData = async () => {
             try {
                 if (task) {
                     form.setFieldsValue({
                         name: task.Task_Details || '',
                     });
-
-                    // Set initial person responsible from task prop, considering user permissions
-                    const initialResponsibilityFromTask = task.Responsibility || '';
-
-                    if (ADMIN_EMAILS.includes(currentUserEmail)) {
-                        // Admin: set to task responsibility
-                        setPersonResponsible(initialResponsibilityFromTask);
-                        form.setFieldsValue({ personResponsible: initialResponsibilityFromTask });
-                    } else {
-                        // Non-admin: set to their mapped name if it exists
-                        const userPersonName = getPersonNameFromEmail(currentUserEmail);
-                        if (userPersonName) {
-                            setPersonResponsible(userPersonName);
-                            form.setFieldsValue({ personResponsible: userPersonName });
-                        } else {
-                            // If user's name not mapped or initial task responsibility doesn't match,
-                            // consider clearing or setting a default if valid.
-                            // For now, it will remain empty if no match, as the Select is disabled.
-                             setPersonResponsible(''); // Clear if no specific mapping for non-admin
-                             form.setFieldsValue({ personResponsible: undefined }); // Use undefined for Ant Design Select to show placeholder
-                        }
-                    }
 
                     // Fetch data per key per day
                     const response = await fetch(`https://server-ui-2.onrender.com/api/per-key-per-day`);
@@ -174,7 +147,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     setExistingSchedules(schedules);
                 }
             } catch (error) {
-                console.error("Error fetching task data:", error);
+                console.error("Error fetching task data or schedules:", error);
                 notification.error({
                     message: 'Error',
                     description: 'Failed to load task data or existing schedules.',
@@ -182,16 +155,48 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             }
         };
 
-        // Only fetch task data if availablePersons has been loaded,
-        // to ensure person responsible logic can correctly apply.
-        if (!loadingPersons && availablePersons.length > 0) {
-            fetchTaskData();
-        } else if (!loadingPersons && availablePersons.length === 0 && ADMIN_EMAILS.includes(currentUserEmail)) {
-            // Allow admin to proceed even if no persons fetched (e.g., empty table)
-             fetchTaskData();
+        // Only fetch task data if persons data has loaded/attempted to load
+        if (!loadingPersons) {
+            fetchTaskAndScheduleData();
         }
+    }, [task, form, loadingPersons]); // Depend on loadingPersons
 
-    }, [task, form, currentUserEmail, getPersonNameFromEmail, loadingPersons, availablePersons]); // Added dependencies
+    // --- EFFECT HOOK 3: SET INITIAL PERSON RESPONSIBLE ---
+    useEffect(() => {
+        if (!loadingPersons) { // Ensure persons data has finished loading (successfully or with error)
+            const initialResponsibilityFromTask = task?.Responsibility || '';
+
+            if (ADMIN_EMAILS.includes(currentUserEmail)) {
+                // Admin user: Can see full list, try to pre-fill from task.
+                if (initialResponsibilityFromTask && (availablePersons.length === 0 || availablePersons.includes(initialResponsibilityFromTask))) {
+                    // Pre-fill if task has responsibility AND (no persons loaded OR task responsibility is in loaded persons)
+                    setPersonResponsible(initialResponsibilityFromTask);
+                    form.setFieldsValue({ personResponsible: initialResponsibilityFromTask });
+                } else if (availablePersons.length > 0 && !availablePersons.includes(initialResponsibilityFromTask)) {
+                    // Task responsibility exists but is not in the (non-empty) fetched list.
+                    // This might mean the person is no longer available or data is stale. Clear selection.
+                    setPersonResponsible('');
+                    form.setFieldsValue({ personResponsible: undefined });
+                } else {
+                    // Default for admin if no task responsibility or other edge cases
+                    setPersonResponsible(''); // Or set a default admin choice if applicable
+                    form.setFieldsValue({ personResponsible: undefined });
+                }
+            } else {
+                // Non-admin user: Only allowed to select/see their mapped name.
+                const userPersonName = getPersonNameFromEmail(currentUserEmail);
+                if (userPersonName && availablePersons.includes(userPersonName)) {
+                    // Pre-fill with user's mapped name if valid and in available persons
+                    setPersonResponsible(userPersonName);
+                    form.setFieldsValue({ personResponsible: userPersonName });
+                } else {
+                    // User's name not mapped or not in fetched list, clear it.
+                    setPersonResponsible('');
+                    form.setFieldsValue({ personResponsible: undefined });
+                }
+            }
+        }
+    }, [task, currentUserEmail, form, getPersonNameFromEmail, availablePersons, loadingPersons]);
 
 
     const handleStartDateChange = (date) => {
@@ -394,7 +399,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 label="Task Name"
                 rules={[{ required: true, message: 'Please input the task name!' }]}
             >
-                <Input />
+                {/* Made the Task Name input read-only */}
+                <Input readOnly={true} />
             </Form.Item>
 
             <Row gutter={[8, 16]}>
