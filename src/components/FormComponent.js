@@ -391,6 +391,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         480: '8 h',
     };
 
+    // Define personsToDisplay based on user role
+    const personsToDisplay = ADMIN_EMAILS.includes(currentUserEmail)
+        ? availablePersons
+        : (getPersonNameFromEmail(currentUserEmail) && availablePersons.includes(getPersonNameFromEmail(currentUserEmail)))
+            ? [getPersonNameFromEmail(currentUserEmail)]
+            : [];
+
     return (
         <Form form={form} layout="vertical">
             <Form.Item
@@ -480,7 +487,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                     }
                     // Disable the select if the user is not an admin or if persons are still loading
-                    disabled={!ADMIN_EMAILS.includes(currentUserEmail) || loadingPersons}
+                    disabled={(!ADMIN_EMAILS.includes(currentUserEmail) && personsToDisplay.length === 0) || loadingPersons}
                     loading={loadingPersons} // Show loading spinner within the Select
                 >
                     {/* Show a loading message or the options */}
