@@ -24,8 +24,7 @@ const EMAIL_TO_PERSON_MAP = {
     "zoya.a@brightbraintech.com": "Zoya Ansari",
     "shweta.g@brightbraintech.com": "Shweta Gaikwad",
     "hitesh.r@brightbraintech.com": "Hitesh Rattesar",
-    // Add other mappings as needed, e.g., if "System" corresponds to a specific email
-    "system@brightbraintech.com": "System", // Example: if "System" also has an email
+    "systems@brightbraintech.com": "System",
 };
 
 const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
