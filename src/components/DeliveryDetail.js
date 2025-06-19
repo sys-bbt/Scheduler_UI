@@ -21,8 +21,9 @@ const DeliveryDetail = () => {
     const delCodeMatch = location.pathname.match(/\/delivery\/data\/(\d+)/);
     const delCode = delCodeMatch ? delCodeMatch[1] : null;
 
-    // Corrected context usage to get currentUserEmail as defined in UserContext
-    const { currentUserEmail } = useContext(UserContext);
+    // Corrected context usage to get userEmail as defined in UserContext
+    const { userEmail } = useContext(UserContext);
+    console.log('DeliveryDetail: userEmail from Context:', userEmail); // Debugging
 
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -35,10 +36,10 @@ const DeliveryDetail = () => {
     useEffect(() => {
         const fetchDeliveryDetails = async () => {
             // Ensure delCode and userEmail are available before fetching
-            if (!delCode || !currentUserEmail) {
+            if (!delCode || !userEmail) { // Changed to userEmail
                 setLoading(false);
                 if (!delCode) setError('Delivery Code not found in URL.');
-                if (!currentUserEmail) setError('User email not available. Please log in.');
+                if (!userEmail) setError('User email not available. Please log in.'); // Changed to userEmail
                 return;
             }
 
@@ -46,7 +47,7 @@ const DeliveryDetail = () => {
                 setLoading(true);
 
                 // --- UPDATED: Use full backend URL for API calls ---
-                const deliveryResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${currentUserEmail}`);
+                const deliveryResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}`); // Changed to userEmail
                 if (!deliveryResponse.ok) {
                     const errorText = await deliveryResponse.text();
                     throw new Error(`HTTP error! status: ${deliveryResponse.status}, message: ${errorText}`);
@@ -96,7 +97,7 @@ const DeliveryDetail = () => {
         };
 
         fetchDeliveryDetails();
-    }, [delCode, currentUserEmail]); // Add currentUserEmail to dependencies to re-fetch when it changes
+    }, [delCode, userEmail]); // Add userEmail to dependencies to re-fetch when it changes
 
 
     // Handling task click for scheduling or editing
@@ -209,78 +210,82 @@ const DeliveryDetail = () => {
             <h3>Tasks</h3>
             <Row>
                 {tasks.length > 0 ? (
-                    tasks.map((task, index) => (
-                        <Col xs={12} key={task.Key || index}>
-                            <Dropdown trigger={['contextMenu']} overlay={taskMenu(task)}>
-                                <div
-                                    className="task-card"
-                                    onClick={() => handleTaskClick(task)}
-                                    style={{ cursor: task.scheduled ? 'default' : 'pointer' }}
-                                >
-                                    <Card className="mb-3">
-                                        <Card.Body>
-                                            <div className="d-flex align-items-center">
-                                                <div className="timer-controls" style={{ marginRight: '10px' }}>
-                                                    {!task.scheduled ? (
-                                                        <FaCalendarAlt
-                                                            onClick={() => handleTaskClick(task)}
-                                                            style={{ cursor: 'pointer' }}
-                                                        />
-                                                    ) : (
-                                                        <>
-                                                            {task.isPlaying ? (
-                                                                <FaPause
-                                                                    onClick={() => toggleTimer(task.Key)}
-                                                                    style={{ cursor: 'pointer' }}
-                                                                />
-                                                            ) : (
-                                                                <FaPlay
-                                                                    onClick={() => toggleTimer(task.Key)}
-                                                                    style={{ cursor: 'pointer' }}
-                                                                />
-                                                            )}
-                                                            <FaStop
-                                                                onClick={() => toggleTimer(task.Key)}
-                                                                style={{ cursor: 'pointer', marginLeft: '5px' }}
+                    tasks.map((task, index) => {
+                        // Consolidate the display logic for duration here to avoid potential syntax issues
+                        const displayDuration = task.totalTime || task.formattedDuration || '0m';
+
+                        return (
+                            <Col xs={12} key={task.Key || index}>
+                                <Dropdown trigger={['contextMenu']} overlay={taskMenu(task)}>
+                                    <div
+                                        className="task-card"
+                                        onClick={() => handleTaskClick(task)}
+                                        style={{ cursor: task.scheduled ? 'default' : 'pointer' }}
+                                    >
+                                        <Card className="mb-3">
+                                            <Card.Body>
+                                                <div className="d-flex align-items-center">
+                                                    <div className="timer-controls" style={{ marginRight: '10px' }}>
+                                                        {!task.scheduled ? (
+                                                            <FaCalendarAlt
+                                                                onClick={() => handleTaskClick(task)}
+                                                                style={{ cursor: 'pointer' }}
                                                             />
-                                                        </>
+                                                        ) : (
+                                                            <>
+                                                                {task.isPlaying ? (
+                                                                    <FaPause
+                                                                        onClick={() => toggleTimer(task.Key)}
+                                                                        style={{ cursor: 'pointer' }}
+                                                                    />
+                                                                ) : (
+                                                                    <FaPlay
+                                                                        onClick={() => toggleTimer(task.Key)}
+                                                                        style={{ cursor: 'pointer' }}
+                                                                    />
+                                                                )}
+                                                                <FaStop
+                                                                    onClick={() => toggleTimer(task.Key)}
+                                                                    style={{ cursor: 'pointer', marginLeft: '5px' }}
+                                                                />
+                                                            </>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="flex-grow-1 text-center">
+                                                        <h5 className="mb-1">{task.Task_Details}</h5>
+                                                        <span className="text-muted">{task.personResponsible}</span> {/* Show the person responsible */}
+                                                    </div>
+
+                                                    {/* Changed this line for safer syntax */}
+                                                    <span>{displayDuration}</span>
+                                                </div>
+
+                                                <div className="task-status mt-2">
+                                                    {task.isPlaying ? (
+                                                        <p className="text-success">On time for going live</p>
+                                                    ) : (
+                                                        <p className="text-muted">Paused</p>
                                                     )}
                                                 </div>
 
-                                                <div className="flex-grow-1 text-center">
-                                                    <h5 className="mb-1">{task.Task_Details}</h5>
-                                                    <span className="text-muted">{task.personResponsible}</span> {/* Show the person responsible */}
-                                                </div>
-
-                                                <span>
-                                                    {task.totalTime ||task.formattedDuration||'0m'}
-                                                </span>
-                                            </div>
-
-                                            <div className="task-status mt-2">
-                                                {task.isPlaying ? (
-                                                    <p className="text-success">On time for going live</p>
-                                                ) : (
-                                                    <p className="text-muted">Paused</p>
+                                                {activeTaskKey === task.Key && actionType && (
+                                                    <div className="mt-3">
+                                                        <h6>{actionType} Task: {task.Task_Details}</h6>
+                                                        <FormComponent
+                                                            onSubmit={handleFormSubmit}
+                                                            task={task}
+                                                            currentUserEmail={userEmail}
+                                                        />
+                                                    </div>
                                                 )}
-                                            </div>
-
-                                            {activeTaskKey === task.Key && actionType && (
-                                                <div className="mt-3">
-                                                    <h6>{actionType} Task: {task.Task_Details}</h6>
-                                                    <FormComponent
-                                                        onSubmit={handleFormSubmit}
-                                                        task={task}
-                                                        currentUserEmail={currentUserEmail} {/* <-- PASSED THE EMAIL HERE! */}
-                                                    />
-                                                </div>
-                                            )}
-                                        </Card.Body>
-                                    </Card>
-                                </div>
-                            </Dropdown>
-                        </Col>
-                    ))
+                                            </Card.Body>
+                                        </Card>
+                                    </div>
+                                </Dropdown>
+                            </Col>
+                        );
+                    })
                 ) : (
                     <ListGroup.Item>No tasks available for this delivery.</ListGroup.Item>
                 )}
