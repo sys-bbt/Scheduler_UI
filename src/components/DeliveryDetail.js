@@ -4,26 +4,36 @@ import { Container, Card, ListGroup, Row, Col, Spinner } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
 import { FaPause, FaPlay, FaStop, FaCalendarAlt } from 'react-icons/fa';
-import FormComponent from './FormComponent'; // Ensure your form component is imported
-import { UserContext } from './UserContext'; // Import UserContext
+import FormComponent from './FormComponent';
+import { UserContext } from './UserContext';
 import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
 
-// --- NEW: Define the base URL for your backend API, consistent with FormComponent ---
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
-console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
+
+// Define admin emails on the frontend, matching the backend
+const ADMIN_EMAILS_FRONTEND = [
+    "systems@brightbraintech.com",
+    "neelam.p@brightbraintech.com",
+    "meghna.j@brightbraintech.com",
+    "zoya.a@brightbraintech.com",
+    "shweta.g@brightbraintech.com",
+    "hitesh.r@brightbraintech.com"
+];
 
 const DeliveryDetail = () => {
     const location = useLocation();
-    // --- FIXED: Corrected delCode extraction logic ---
-    // This regex will capture everything after '/delivery/data/'
     const delCodeMatch = location.pathname.match(/\/delivery\/data\/(.*)/);
     const delCode = delCodeMatch ? delCodeMatch[1] : null;
 
-    // Corrected context usage to get userEmail as defined in UserContext
     const { userEmail } = useContext(UserContext);
-    console.log('DeliveryDetail: userEmail from Context:', userEmail); // Debugging
-    console.log('DeliveryDetail: Extracted delCode from URL:', delCode); // Debugging
+    console.log('DeliveryDetail: userEmail from Context:', userEmail);
+    console.log('DeliveryDetail: Extracted delCode from URL:', delCode);
+
+    // Determine isAdmin status for the current user
+    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
+    console.log(`DeliveryDetail: Current User Email: ${userEmail}, Is Admin: ${isAdmin}`);
+
 
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -32,30 +42,26 @@ const DeliveryDetail = () => {
     const [actionType, setActionType] = useState('');
     const [tasks, setTasks] = useState([]);
 
-    // Fetching delivery details from the server
     useEffect(() => {
         const fetchDeliveryDetails = async () => {
-            // Ensure delCode and userEmail are available before fetching
-            if (!delCode || !userEmail) { // Changed to userEmail
+            if (!delCode || !userEmail) {
                 setLoading(false);
                 if (!delCode) setError('Delivery Code not found in URL.');
-                if (!userEmail) setError('User email not available. Please log in.'); // Changed to userEmail
+                if (!userEmail) setError('User email not available. Please log in.');
                 return;
             }
 
             try {
                 setLoading(true);
 
-                // --- UPDATED: Use full backend URL for API calls ---
-                // The backend /api/data endpoint likely filters by 'DelCode_w_o__' in its query
-                const deliveryResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&delCode=${delCode}`); // Added delCode to query
+                // --- UPDATED: Pass isAdmin flag to backend ---
+                const deliveryResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&delCode=${delCode}&isAdmin=${isAdmin}`);
                 if (!deliveryResponse.ok) {
                     const errorText = await deliveryResponse.text();
                     throw new Error(`HTTP error! status: ${deliveryResponse.status}, message: ${errorText}`);
                 }
                 const deliveryData = await deliveryResponse.json();
 
-                // --- UPDATED: Use full backend URL for API calls ---
                 const durationResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
                 if (!durationResponse.ok) {
                     const errorText = await durationResponse.text();
@@ -64,7 +70,10 @@ const DeliveryDetail = () => {
                 const durationData = await durationResponse.json();
 
                 if (deliveryData.hasOwnProperty(delCode)) {
-                    // Filtering tasks with Step_ID !== 0 and Planned_Delivery_Timestamp being null
+                    // This filter remains the same:
+                    // It ensures only tasks (Step_ID !== 0) are shown in the list,
+                    // as the backend now sends ALL tasks for admins for a given delCode,
+                    // or only assigned tasks for non-admins.
                     const fetchedTasks = deliveryData[delCode]
                        .filter((task) => task.Step_ID !== 0 && (task.Planned_Delivery_Timestamp === null || (typeof task.Planned_Delivery_Timestamp === 'object' && task.Planned_Delivery_Timestamp.value === null)))
                         .map((task) => {
@@ -75,10 +84,9 @@ const DeliveryDetail = () => {
 
                             return {
                                 ...task,
-                                // Check if Planned_Delivery_Timestamp has a valid value (not null/undefined)
                                 scheduled: !!task.Planned_Delivery_Timestamp && (typeof task.Planned_Delivery_Timestamp === 'string' ? task.Planned_Delivery_Timestamp !== "NULL" : task.Planned_Delivery_Timestamp.value !== null),
                                 personResponsible: task.Responsibility || 'Unassigned',
-                                totalTime: taskDurationInMinutes, // Keep total duration in minutes
+                                totalTime: taskDurationInMinutes,
                                 formattedDuration,
                                 isPlaying: false,
                             };
@@ -87,7 +95,7 @@ const DeliveryDetail = () => {
                     setTasks(fetchedTasks);
                     console.log('Fetched tasks for delivery:', fetchedTasks);
                 } else {
-                    setError(`Delivery with code "${delCode}" not found in fetched data.`); // More specific error
+                    setError(`Delivery with code "${delCode}" not found in fetched data.`);
                 }
             } catch (err) {
                 console.error('Error fetching delivery details:', err);
@@ -98,10 +106,9 @@ const DeliveryDetail = () => {
         };
 
         fetchDeliveryDetails();
-    }, [delCode, userEmail]); // Add userEmail to dependencies to re-fetch when it changes
+    }, [delCode, userEmail, isAdmin]); // Added isAdmin to dependencies
 
 
-    // Handling task click for scheduling or editing
     const handleTaskClick = (task) => {
         if (!task.scheduled) {
             setActionType('Schedule');
@@ -109,7 +116,6 @@ const DeliveryDetail = () => {
         }
     };
 
-    // Dropdown menu for rescheduling or reassigning task
     const handleMenuClick = (task, { key }) => {
         if (key === 'reschedule') {
             setActionType('Reschedule');
@@ -119,26 +125,24 @@ const DeliveryDetail = () => {
         setActiveTaskKey(task.Key);
     };
 
-    // Handle form submission from FormComponent
     const handleFormSubmit = (formData) => {
         console.log("Form submitted data:", formData);
         const updatedTasks = tasks.map((task) =>
             task.Key === activeTaskKey
                 ? {
                       ...task,
-                      scheduled: true, // Mark the task as scheduled
-                      personResponsible: formData.personResponsible || task.personResponsible, // Updated person responsible
-                      totalTime: formData.totalTime || task.totalTime, // Update totalTime with minutes from form
-                      formattedDuration: `${Math.floor((formData.totalTime || 0) / 60)}h ${ (formData.totalTime || 0) % 60}m`, // Recalculate formattedDuration
-                      Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp, // Update delivery timestamp
+                      scheduled: true,
+                      personResponsible: formData.personResponsible || task.personResponsible,
+                      totalTime: formData.totalTime || task.totalTime,
+                      formattedDuration: `${Math.floor((formData.totalTime || 0) / 60)}h ${ (formData.totalTime || 0) % 60}m`,
+                      Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp,
                   }
                 : task
         );
         setTasks(updatedTasks);
-        setActiveTaskKey(null); // Reset after form submission
+        setActiveTaskKey(null);
     };
 
-    // Timer control logic for tasks
     const toggleTimer = (taskKey) => {
         const updatedTasks = tasks.map((task) => {
             if (task.Key === taskKey) {
@@ -153,8 +157,6 @@ const DeliveryDetail = () => {
         <Menu onClick={(info) => handleMenuClick(task, info)}>
             <MenuItem key="reschedule">Reschedule Task</MenuItem>
             <MenuItem key="reassign">Reassign Task</MenuItem>
-            {/* Conditional "Delete" option (example, if needed) */}
-            {/* <MenuItem key="delete">Delete Task</MenuItem> */}
         </Menu>
     );
 
@@ -177,11 +179,10 @@ const DeliveryDetail = () => {
         );
     }
 
-    // Ensure delivery array is not empty before accessing its first element
     if (!delivery || delivery.length === 0) {
         return (
             <Container className="text-center my-5">
-                <p>No delivery data found for code: {delCode}</p> {/* Updated message */}
+                <p>No delivery data found for code: {delCode}</p>
                 <Link to="/">Back to Deliveries</Link>
             </Container>
         );
@@ -254,7 +255,7 @@ const DeliveryDetail = () => {
 
                                                     <div className="flex-grow-1 text-center">
                                                         <h5 className="mb-1">{task.Task_Details}</h5>
-                                                        <span className="text-muted">{task.personResponsible}</span> {/* Show the person responsible */}
+                                                        <span className="text-muted">{task.personResponsible}</span>
                                                     </div>
 
                                                     <span>{displayDuration}</span>
