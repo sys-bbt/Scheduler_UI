@@ -5,143 +5,105 @@ import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
 import { FaPause, FaPlay, FaStop, FaCalendarAlt } from 'react-icons/fa';
 import FormComponent from './FormComponent'; // Ensure your form component is imported
-import { UserContext } from './UserContext';
+import { UserContext } from './UserContext'; // Import UserContext
 import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
 
+// --- NEW: Define the base URL for your backend API, consistent with FormComponent ---
+const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
+
 const DeliveryDetail = () => {
     const location = useLocation();
-    const delCode = location.pathname.substring(location.pathname.lastIndexOf("/data/") + 11); // Adjust to your actual path
-    const { userEmail } = useContext(UserContext);
+    // Adjusted delCode extraction logic based on the likely URL structure,
+    // assuming it comes after /delivery/data/ and then a numerical ID.
+    // If your URL is like /delivery/<DEL_CODE>, you might need to adjust this.
+    const delCodeMatch = location.pathname.match(/\/delivery\/data\/(\d+)/);
+    const delCode = delCodeMatch ? delCodeMatch[1] : null;
+
+    // Corrected context usage to get currentUserEmail as defined in UserContext
+    const { currentUserEmail } = useContext(UserContext);
+
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [activeTaskKey, setActiveTaskKey] = useState(null); // To track which task is active for scheduling/other actions
-    const [actionType, setActionType] = useState(''); // To differentiate between actions like 'schedule', 'reschedule'
-    const [tasks, setTasks] = useState([]); // State to manage tasks
+    const [activeTaskKey, setActiveTaskKey] = useState(null);
+    const [actionType, setActionType] = useState('');
+    const [tasks, setTasks] = useState([]);
 
-    // // Fetching delivery details from the server
-    // useEffect(() => {
-    //     const fetchDeliveryDetails = async () => {
-    //         try {
-    //             setLoading(true); // Set loading state to true
-
-    //             // Fetch delivery data
-    //             const deliveryResponse = await fetch(`http://localhost:3001/api/data?email=${userEmail}`);
-    //             if (!deliveryResponse.ok) {
-    //                 throw new Error(`HTTP error! status: ${deliveryResponse.status}`);
-    //             }
-    //             const deliveryData = await deliveryResponse.json();
-
-    //             // Fetch totalDuration data
-    //             const durationResponse = await fetch(`http://localhost:3001/api/per-key-per-day`);
-    //             if (!durationResponse.ok) {
-    //                 throw new Error(`HTTP error! status: ${durationResponse.status}`);
-    //             }
-    //             const durationData = await durationResponse.json();
-
-    //             // Check if the delivery code exists in the deliveryData response
-    //             if (deliveryData.hasOwnProperty(delCode)) {
-    //                 const fetchedTasks = deliveryData[delCode].map((task) => {
-    //                     // Retrieve totalDuration for the task using its Key
-    //                     const taskDurationInMinutes = durationData[task.Key]?.totalDuration || 0;
-
-    //                     // Convert totalDuration from minutes to hours and minutes
-    //                     const hours = Math.floor(taskDurationInMinutes / 60);
-    //                     const minutes = taskDurationInMinutes % 60;
-    //                     const formattedDuration = `${hours}h ${minutes}m`;
-
-    //                     return {
-    //                         ...task,
-    //                         scheduled: task.Planned_Delivery_Timestamp, // Mark as scheduled if delivery is planned
-    //                         personResponsible: task.Responsibility || 'Unassigned', // Ensure person responsible is included
-    //                         totalTime: task.totalTime || 0, // Store total duration in minutes for potential future use
-    //                         formattedDuration, // Add the formatted duration for display
-    //                         isPlaying: false, // Initialize isPlaying state
-    //                     };
-    //                 });
-    //                 setDelivery(deliveryData[delCode]);
-    //                 setTasks(fetchedTasks); // Setting tasks with scheduling info
-    //                 console.log(fetchedTasks)
-    //             } else {
-    //                 setError('Delivery not found.');
-    //             }
-    //         } catch (err) {
-    //             console.error('Error fetching delivery details:', err);
-    //             setError('Failed to fetch delivery details.');
-    //         } finally {
-    //             setLoading(false);
-    //         }
-    //     };
-
-    //     fetchDeliveryDetails();
-    // }, [delCode,userEmail]);
-
-
+    // Fetching delivery details from the server
     useEffect(() => {
         const fetchDeliveryDetails = async () => {
+            // Ensure delCode and userEmail are available before fetching
+            if (!delCode || !currentUserEmail) {
+                setLoading(false);
+                if (!delCode) setError('Delivery Code not found in URL.');
+                if (!currentUserEmail) setError('User email not available. Please log in.');
+                return;
+            }
+
             try {
-                setLoading(true); // Set loading state to true
-    
-                // Fetch delivery data
-                const deliveryResponse = await fetch(`https://server-ui-2.onrender.com/api/data?email=${userEmail}`);
+                setLoading(true);
+
+                // --- UPDATED: Use full backend URL for API calls ---
+                const deliveryResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${currentUserEmail}`);
                 if (!deliveryResponse.ok) {
-                    throw new Error(`HTTP error! status: ${deliveryResponse.status}`);
+                    const errorText = await deliveryResponse.text();
+                    throw new Error(`HTTP error! status: ${deliveryResponse.status}, message: ${errorText}`);
                 }
                 const deliveryData = await deliveryResponse.json();
-    
-                // Fetch totalDuration data
-                const durationResponse = await fetch(`https://server-ui-2.onrender.com/api/per-key-per-day`);
+
+                // --- UPDATED: Use full backend URL for API calls ---
+                const durationResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
                 if (!durationResponse.ok) {
-                    throw new Error(`HTTP error! status: ${durationResponse.status}`);
+                    const errorText = await durationResponse.text();
+                    throw new Error(`HTTP error! status: ${durationResponse.status}, message: ${errorText}`);
                 }
                 const durationData = await durationResponse.json();
-    
-                // Check if the delivery code exists in the deliveryData response
+
                 if (deliveryData.hasOwnProperty(delCode)) {
+                    // Filtering tasks with Step_ID !== 0 and Planned_Delivery_Timestamp being null
                     const fetchedTasks = deliveryData[delCode]
                        .filter((task) => task.Step_ID !== 0 && (task.Planned_Delivery_Timestamp === null || (typeof task.Planned_Delivery_Timestamp === 'object' && task.Planned_Delivery_Timestamp.value === null)))
                         .map((task) => {
-                            // Retrieve totalDuration for the task using its Key
                             const taskDurationInMinutes = durationData[task.Key]?.totalDuration || 0;
-    
-                            // Convert totalDuration from minutes to hours and minutes
                             const hours = Math.floor(taskDurationInMinutes / 60);
                             const minutes = taskDurationInMinutes % 60;
                             const formattedDuration = `${hours}h ${minutes}m`;
-    
+
                             return {
                                 ...task,
-                                scheduled: task.Planned_Delivery_Timestamp, // Mark as scheduled if delivery is planned
-                                personResponsible: task.Responsibility || 'Unassigned', // Ensure person responsible is included
-                                totalTime: task.totalTime || 0, // Store total duration in minutes for potential future use
-                                formattedDuration, // Add the formatted duration for display
-                                isPlaying: false, // Initialize isPlaying state
+                                // Check if Planned_Delivery_Timestamp has a valid value (not null/undefined)
+                                scheduled: !!task.Planned_Delivery_Timestamp && (typeof task.Planned_Delivery_Timestamp === 'string' ? task.Planned_Delivery_Timestamp !== "NULL" : task.Planned_Delivery_Timestamp.value !== null),
+                                personResponsible: task.Responsibility || 'Unassigned',
+                                totalTime: taskDurationInMinutes, // Keep total duration in minutes
+                                formattedDuration,
+                                isPlaying: false,
                             };
                         });
                     setDelivery(deliveryData[delCode]);
-                    setTasks(fetchedTasks); // Setting tasks with scheduling info
-                    console.log(fetchedTasks);
+                    setTasks(fetchedTasks);
+                    console.log('Fetched tasks for delivery:', fetchedTasks);
                 } else {
                     setError('Delivery not found.');
                 }
             } catch (err) {
                 console.error('Error fetching delivery details:', err);
-                setError('Failed to fetch delivery details.');
+                setError(`Failed to fetch delivery details: ${err.message}`);
             } finally {
                 setLoading(false);
             }
         };
-    
+
         fetchDeliveryDetails();
-    }, [delCode, userEmail]);
-    
+    }, [delCode, currentUserEmail]); // Add currentUserEmail to dependencies to re-fetch when it changes
+
 
     // Handling task click for scheduling or editing
     const handleTaskClick = (task) => {
         if (!task.scheduled) {
             setActionType('Schedule');
-            setActiveTaskKey(task.Key); // Using task.Key instead of task.id
+            setActiveTaskKey(task.Key);
         }
     };
 
@@ -152,26 +114,26 @@ const DeliveryDetail = () => {
         } else if (key === 'reassign') {
             setActionType('Reassign');
         }
-        setActiveTaskKey(task.Key); // Using task.Key instead of task.id
+        setActiveTaskKey(task.Key);
     };
 
     // Handle form submission from FormComponent
     const handleFormSubmit = (formData) => {
-        console.log(formData)
+        console.log("Form submitted data:", formData);
         const updatedTasks = tasks.map((task) =>
             task.Key === activeTaskKey
                 ? {
                       ...task,
                       scheduled: true, // Mark the task as scheduled
                       personResponsible: formData.personResponsible || task.personResponsible, // Updated person responsible
-                      totalTime:formData.totalTime||task.formattedDuration,
+                      totalTime: formData.totalTime || task.totalTime, // Update totalTime with minutes from form
+                      formattedDuration: `${Math.floor((formData.totalTime || 0) / 60)}h ${ (formData.totalTime || 0) % 60}m`, // Recalculate formattedDuration
                       Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp, // Update delivery timestamp
                   }
                 : task
         );
-        setTasks(updatedTasks); // Update tasks state
+        setTasks(updatedTasks);
         setActiveTaskKey(null); // Reset after form submission
-        
     };
 
     // Timer control logic for tasks
@@ -189,6 +151,8 @@ const DeliveryDetail = () => {
         <Menu onClick={(info) => handleMenuClick(task, info)}>
             <MenuItem key="reschedule">Reschedule Task</MenuItem>
             <MenuItem key="reassign">Reassign Task</MenuItem>
+            {/* Conditional "Delete" option (example, if needed) */}
+            {/* <MenuItem key="delete">Delete Task</MenuItem> */}
         </Menu>
     );
 
@@ -211,10 +175,11 @@ const DeliveryDetail = () => {
         );
     }
 
-    if (!delivery) {
+    // Ensure delivery array is not empty before accessing its first element
+    if (!delivery || delivery.length === 0) {
         return (
             <Container className="text-center my-5">
-                <p>No delivery found</p>
+                <p>No delivery found for code: {delCode}</p>
                 <Link to="/">Back to Deliveries</Link>
             </Container>
         );
@@ -265,17 +230,17 @@ const DeliveryDetail = () => {
                                                         <>
                                                             {task.isPlaying ? (
                                                                 <FaPause
-                                                                    onClick={() => toggleTimer(task.Key)} // Using task.Key instead of task.id
+                                                                    onClick={() => toggleTimer(task.Key)}
                                                                     style={{ cursor: 'pointer' }}
                                                                 />
                                                             ) : (
                                                                 <FaPlay
-                                                                    onClick={() => toggleTimer(task.Key)} // Using task.Key instead of task.id
+                                                                    onClick={() => toggleTimer(task.Key)}
                                                                     style={{ cursor: 'pointer' }}
                                                                 />
                                                             )}
                                                             <FaStop
-                                                                onClick={() => toggleTimer(task.Key)} // Using task.Key instead of task.id
+                                                                onClick={() => toggleTimer(task.Key)}
                                                                 style={{ cursor: 'pointer', marginLeft: '5px' }}
                                                             />
                                                         </>
@@ -306,6 +271,7 @@ const DeliveryDetail = () => {
                                                     <FormComponent
                                                         onSubmit={handleFormSubmit}
                                                         task={task}
+                                                        currentUserEmail={currentUserEmail} {/* <-- PASSED THE EMAIL HERE! */}
                                                     />
                                                 </div>
                                             )}
