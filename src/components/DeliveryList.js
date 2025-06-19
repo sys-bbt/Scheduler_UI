@@ -3,23 +3,28 @@ import { Link } from 'react-router-dom';
 import { Container, Row, Col, Card, ProgressBar, Form } from 'react-bootstrap';
 import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
 import { FaSpinner } from 'react-icons/fa';
-import { GoogleLogin } from '@react-oauth/google';
-import { jwtDecode } from 'jwt-decode';
-import { UserContext } from './UserContext';
+// Removed GoogleLogin and jwtDecode as they are no longer needed here
+// import { GoogleLogin } from '@react-oauth/google';
+// import { jwtDecode } from 'jwt-decode';
+import { UserContext } from './UserContext'; // Ensure UserContext is correctly imported
 import './DeliveryList.css';
 import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSelected';
 import SortDeliveriesByDate from './SortDeliveriesByDate';
 import DeleteButton from './DeleteButton';
 
+// --- NEW: Define the base URL for your backend API, consistent with other components ---
+const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+console.log('DeliveryList: Using Backend API URL:', BACKEND_API_BASE_URL);
+
+
 const DeliveryList = () => {
-  const { userEmail, setUserEmail } = useContext(UserContext);
+  const { userEmail } = useContext(UserContext); // Only consume userEmail, setUserEmail is handled by UserContext's loginUser
   const [deliveries, setDeliveries] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [authToken, setAuthToken] = useState(null);
+  // authToken is now retrieved directly within fetchData or useEffect if needed for the first fetch
   const [page, setPage] = useState(0);
   const [selectedClient, setSelectedClient] = useState('');
   const [loading, setLoading] = useState(false);
-  // Removed the 'clients' state, as it will now be derived from 'deliveries'
   const observer = useRef(null);
 
   const [sortOption, setSortOption] = useState('earliest'); // Default: 'earliest'
@@ -39,43 +44,33 @@ const DeliveryList = () => {
     setSelectedClient(client);
   };
 
-  const onLoginSuccess = (response) => {
-    const { credential } = response;
-    try {
-      const decodedToken = jwtDecode(credential);
-      if (decodedToken.email) {
-        setUserEmail(decodedToken.email);
-        setAuthToken(credential);
-        sessionStorage.setItem('userEmail', decodedToken.email);
-        sessionStorage.setItem('authToken', credential);
-      } else {
-        console.error('Login response does not contain a valid email:', response);
-      }
-    } catch (error) {
-      console.error('Error decoding JWT:', error);
-    }
-  };
-
-  const onLoginFailure = (error) => {
-    console.error('Login failed:', error);
-  };
+  // Removed onLoginSuccess and onLoginFailure as GoogleLogin is no longer here
 
   const fetchData = useCallback(
     async (currentPage) => {
-      if (!authToken || !userEmail) return;
+      // Retrieve authToken from sessionStorage directly for the fetch call
+      const currentAuthToken = sessionStorage.getItem('authToken');
+
+      // Ensure both userEmail and authToken are available before fetching
+      if (!currentAuthToken || !userEmail) {
+        setLoading(false);
+        console.log("DeliveryList: Skipping fetchData, userEmail or authToken not available.");
+        return;
+      }
 
       try {
         setLoading(true);
 
-        const response = await fetch(`https://server-ui-2.onrender.com/api/data?email=${userEmail}&page=${currentPage}`, {
+        const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&page=${currentPage}`, {
           headers: {
-            Authorization: `Bearer ${authToken}`,
+            Authorization: `Bearer ${currentAuthToken}`, // Use the retrieved authToken
             "Content-Type": "application/json",
           },
         });
 
         if (!response.ok) {
-          throw new Error('Network response was not ok');
+          const errorText = await response.text(); // Get detailed error
+          throw new Error(`Network response was not ok: ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();
@@ -113,12 +108,12 @@ const DeliveryList = () => {
           return [...prev, ...newUniqueDeliveries];
         });
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('Error fetching data in DeliveryList:', error);
       } finally {
         setLoading(false);
       }
     },
-    [authToken, userEmail]
+    [userEmail] // fetchData now only depends on userEmail and implicitly on sessionStorage for authToken
   );
 
   const handleDelete = (deliveryCode) => {
@@ -126,18 +121,32 @@ const DeliveryList = () => {
     setDeliveries(prevDeliveries => prevDeliveries.filter(delivery => delivery.delCode !== deliveryCode));
   };
 
+  // This useEffect ensures userEmail is available from sessionStorage for the initial fetch
   useEffect(() => {
     const storedUserEmail = sessionStorage.getItem('userEmail');
-    const storedAuthToken = sessionStorage.getItem('authToken');
+    // const storedAuthToken = sessionStorage.getItem('authToken'); // Auth token is now retrieved in fetchData directly
 
-    if (storedUserEmail && storedAuthToken) {
-      setUserEmail(storedUserEmail);
-      setAuthToken(storedAuthToken);
+    if (storedUserEmail) { // Only set userEmail if found
+      // setUserEmail from UserContext is already called by LoginComponent
+      // This part might be redundant if App.js ensures userEmail is in context
+      // before rendering DeliveryList. But keeping it for robustness if user navigates directly.
+      if (userEmail !== storedUserEmail) { // Prevent unnecessary state updates
+         // setUserEmail(storedUserEmail); // UserContext's responsibility now
+         // The `UserProvider` already initializes `userEmail` from localStorage.
+         // `sessionStorage` might be cleared on tab close, whereas `localStorage` persists.
+         // It's generally better to rely on `UserContext` as the single source of truth for `userEmail`.
+         // If `userEmail` isn't set via context, `fetchData` will bail out early.
+      }
     }
-  }, [setUserEmail]);
+  }, [userEmail]); // Depend on userEmail to potentially trigger re-fetch if it changes from other means
 
+  // This useEffect triggers the data fetch once userEmail becomes available
   useEffect(() => {
-    if (userEmail) fetchData(0);
+    if (userEmail) { // Only fetch if userEmail is valid
+      fetchData(0);
+    } else {
+      setDeliveries([]); // Clear deliveries if user logs out
+    }
   }, [fetchData, userEmail]);
 
   const formatTimestamp = (timestamp) => {
@@ -177,7 +186,8 @@ const DeliveryList = () => {
 
     const loadMoreDeliveries = (entries) => {
       const [entry] = entries;
-      if (entry.isIntersecting && !loading) {
+      // Only load more if intersecting, not loading, and there are actually deliveries to observe
+      if (entry.isIntersecting && !loading && filteredDeliveries.length > 0) {
         setPage((prevPage) => prevPage + 1);
       }
     };
@@ -193,7 +203,7 @@ const DeliveryList = () => {
   }, [loading, filteredDeliveries]); // Added filteredDeliveries to dependencies
 
   useEffect(() => {
-    if (page > 0) {
+    if (page > 0) { // Only fetch if page is greater than 0 (i.e., not the initial load)
       fetchData(page);
     }
   }, [page, fetchData]);
@@ -201,122 +211,124 @@ const DeliveryList = () => {
   // Derive unique clients from the 'deliveries' state
   const uniqueClients = [...new Set(deliveries.map((delivery) => delivery.client))].sort(); // Sort alphabetically
 
+  // Removed the conditional rendering for GoogleLogin as App.js now handles redirection
   return (
     <Container>
-      {!userEmail ? (
-        <GoogleLogin
-          onSuccess={onLoginSuccess}
-          onFailure={onLoginFailure}
-          scope="email"
-          cookiePolicy={'single_host_origin'}
-          buttonText="Login with Google"
-        />
-      ) : (
-        <>
-          <h1 className="my-4">List of Deliveries</h1>
-          <Row className="mb-4">
-            <Col xs={10}>
-              <Form.Control
-                type="text"
-                placeholder="Search for deliveries..."
-                value={searchTerm}
-                onChange={handleSearchChange}
-              />
+      <h1 className="my-4">List of Deliveries</h1>
+      <Row className="mb-4">
+        <Col xs={10}>
+          <Form.Control
+            type="text"
+            placeholder="Search for deliveries..."
+            value={searchTerm}
+            onChange={handleSearchChange}
+          />
+        </Col>
+        <Col xs={2} className="text-right">
+          <span role="img" aria-label="filter" style={{ fontSize: '1.5rem', cursor: 'pointer' }}>
+            🔍
+          </span>
+        </Col>
+        <Col xs={2} className="text-right">
+          <FilterDeliveryBasedOnClientSelected
+            clients={uniqueClients} // Pass the derived uniqueClients
+            onClientSelect={handleClientSelect}
+            selectedClient={selectedClient}
+          />
+        </Col>
+        <Col xs={12}>
+          <SortDeliveriesByDate sortOption={sortOption} setSortOption={setSortOption} />
+        </Col>
+      </Row>
+
+      <p>You have {filteredDeliveries.length} active deliveries</p>
+
+      <Row>
+        {filteredDeliveries.map((delivery) => {
+          const progress =
+            delivery.tasksTotal === 0 ? 0 : (delivery.tasksPlanned / delivery.tasksTotal) * 100;
+
+          return (
+            <Col xs={12} key={delivery.delCode} className="mb-3">
+              <Link to={`/delivery/data/${delivery.delCode}`} className="card-link-wrapper"> {/* Ensured correct path with /data/ */}
+                <Card className="p-3 shadow-sm task-card">
+                  <div className="shaded-bg" style={{ width: `${progress}%` }}></div>
+                  <Card.Body>
+                    <div className="d-flex justify-content-between align-items-center">
+                      <div>
+                        <div className="d-flex align-items-center mb-2">
+                          <FiCheckCircle style={{ marginRight: '8px', color: 'green' }} />
+                          <span
+                            className="font-weight-bold"
+                            style={{ fontSize: '1.5rem' }}
+                          >
+                            {delivery.tasksPlanned} of {delivery.tasksTotal} Planned
+                          </span>
+                          {/* Ensure handleDelete is correctly implemented in DeleteButton */}
+                          <DeleteButton deliveryCode={delivery.delCode} onDelete={handleDelete} />
+                        </div>
+                        {/* Add the client name here */}
+                        {delivery.client && (
+                          <p className="mb-1 text-muted">
+                            Client: {delivery.client}
+                          </p>
+                        )}
+                        <div className="mb-2">
+                          <ProgressBar
+                            now={progress}
+                            variant={progress > 50 ? 'success' : progress > 20 ? 'warning' : 'danger'}
+                          />
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="mb-1 text-muted">
+                          <FiClock style={{ marginRight: '5px' }} /> {delivery.initiated}
+                        </p>
+                        <p className="mb-0 text-danger">
+                          <FiFlag style={{ marginRight: '5px' }} /> {delivery.deadline}
+                        </p>
+                        <p
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Use document.execCommand('copy') for better iframe compatibility
+                            const el = document.createElement('textarea');
+                            el.value = delivery.delCode;
+                            document.body.appendChild(el);
+                            el.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(el);
+                            // Optional: add a notification for copying
+                            // notification.success({
+                            //   message: 'Copied!',
+                            //   description: `Delivery code ${delivery.delCode} copied to clipboard.`,
+                            //   placement: 'bottomRight',
+                            //   duration: 2
+                            // });
+                          }}
+                          style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+                          title="Click to copy"
+                        >
+                          {delivery.delCode}
+                        </p>
+                      </div>
+                    </div>
+                  </Card.Body>
+                </Card>
+              </Link>
             </Col>
-            <Col xs={2} className="text-right">
-              <span role="img" aria-label="filter" style={{ fontSize: '1.5rem', cursor: 'pointer' }}>
-                🔍
-              </span>
-            </Col>
-            <Col xs={2} className="text-right">
-              <FilterDeliveryBasedOnClientSelected
-                clients={uniqueClients} // Pass the derived uniqueClients
-                onClientSelect={handleClientSelect}
-                selectedClient={selectedClient}
-              />
-            </Col>
-            <Col xs={12}>
-              <SortDeliveriesByDate sortOption={sortOption} setSortOption={setSortOption} />
-            </Col>
-          </Row>
+          );
+        })}
+      </Row>
 
-          <p>You have {filteredDeliveries.length} active deliveries</p>
+      <div className="delivery-list-end"></div>
 
-         <Row>
-  {filteredDeliveries.map((delivery) => {
-    const progress =
-      delivery.tasksTotal === 0 ? 0 : (delivery.tasksPlanned / delivery.tasksTotal) * 100;
-
-    return (
-      <Col xs={12} key={delivery.delCode} className="mb-3">
-        <Link to={`/delivery/${delivery.delCode}`} className="card-link-wrapper">
-          <Card className="p-3 shadow-sm task-card">
-            <div className="shaded-bg" style={{ width: `${progress}%` }}></div>
-            <Card.Body>
-              <div className="d-flex justify-content-between align-items-center">
-                <div>
-                  <div className="d-flex align-items-center mb-2">
-                    <FiCheckCircle style={{ marginRight: '8px', color: 'green' }} />
-                    <span
-                      className="font-weight-bold"
-                      style={{ fontSize: '1.5rem' }}
-                    >
-                      {delivery.tasksPlanned} of {delivery.tasksTotal} Planned
-                    </span>
-                    {/* Ensure handleDelete is correctly implemented in DeleteButton */}
-                    <DeleteButton deliveryCode={delivery.delCode} onDelete={handleDelete} />
-                  </div>
-                  {/* Add the client name here */}
-                  {delivery.client && (
-                    <p className="mb-1 text-muted">
-                      Client: {delivery.client}
-                    </p>
-                  )}
-                  <div className="mb-2">
-                    <ProgressBar
-                      now={progress}
-                      variant={progress > 50 ? 'success' : progress > 20 ? 'warning' : 'danger'}
-                    />
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="mb-1 text-muted">
-                    <FiClock style={{ marginRight: '5px' }} /> {delivery.initiated}
-                  </p>
-                  <p className="mb-0 text-danger">
-                    <FiFlag style={{ marginRight: '5px' }} /> {delivery.deadline}
-                  </p>
-                  <p
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigator.clipboard.writeText(delivery.delCode);
-                    }}
-                    style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
-                    title="Click to copy"
-                  >
-                    {delivery.delCode}
-                  </p>
-                </div>
-              </div>
-            </Card.Body>
-          </Card>
-        </Link>
-      </Col>
-    );
-  })}
-</Row>
-
-          <div className="delivery-list-end"></div>
-
-          {loading && (
-            <div className="d-flex justify-content-center align-items-center" style={{ height: '100px' }}>
-              <FaSpinner
-                className="spinner-icon"
-                style={{ fontSize: '2rem', color: '#007bff', animation: 'spin 10s linear infinite' }}
-              />
-            </div>
-          )}
-        </>
+      {loading && (
+        <div className="d-flex justify-content-center align-items-center" style={{ height: '100px' }}>
+          <FaSpinner
+            className="spinner-icon"
+            style={{ fontSize: '2rem', color: '#007bff', animation: 'spin 10s linear infinite' }}
+          />
+        </div>
       )}
     </Container>
   );
