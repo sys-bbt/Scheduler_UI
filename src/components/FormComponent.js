@@ -1,5 +1,5 @@
 import React, { useState, useEffect, memo, useCallback } from 'react';
-import { Form, Input, Button, Slider, DatePicker, Select, notification, Row, Col } from 'antd'; // Removed Spin as it's no longer needed for person loading
+import { Form, Input, Button, Slider, DatePicker, Select, notification, Row, Col } from 'antd';
 import moment from 'moment';
 import './FormComponent.css';
 
@@ -57,6 +57,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [personResponsible, setPersonResponsible] = useState('');
     const [numberOfDays, setNumberOfDays] = useState(0);
     const [existingSchedules, setExistingSchedules] = useState({});
+
+    // --- DEBUGGING LOGS START ---
+    console.log('FormComponent: currentUserEmail received:', currentUserEmail);
+    const isAdmin = ADMIN_EMAILS.includes(currentUserEmail);
+    console.log('FormComponent: isAdmin calculated as:', isAdmin);
+    // --- DEBUGGING LOGS END ---
+
 
     // Memoize the mapping logic to prevent unnecessary re-renders
     const getPersonNameFromEmail = useCallback((email) => {
@@ -167,7 +174,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         const initialResponsibilityFromTask = task?.Responsibility || '';
         const userPersonName = getPersonNameFromEmail(currentUserEmail);
 
-        if (ADMIN_EMAILS.includes(currentUserEmail)) {
+        if (isAdmin) { // Use the isAdmin variable here directly
             // Admin user: Can see full list, try to pre-fill from task.
             if (initialResponsibilityFromTask && ALL_AVAILABLE_PERSONS_HARDCODED.includes(initialResponsibilityFromTask)) {
                 setPersonResponsible(initialResponsibilityFromTask);
@@ -188,7 +195,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 form.setFieldsValue({ personResponsible: undefined });
             }
         }
-    }, [task, currentUserEmail, form, getPersonNameFromEmail]);
+    }, [task, currentUserEmail, form, getPersonNameFromEmail, isAdmin]); // Added isAdmin to dependencies
 
 
     const handleStartDateChange = (date) => {
@@ -383,9 +390,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         420: '7 h',
         480: '8 h',
     };
-
-    // Determine if the current user is an admin
-    const isAdmin = ADMIN_EMAILS.includes(currentUserEmail);
 
     // Define personsToDisplay based on user role
     const personsToDisplay = isAdmin
