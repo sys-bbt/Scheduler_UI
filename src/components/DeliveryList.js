@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
-import { Link } from 'react-router-dom';
-import { Container, Row, Col, Card, ProgressBar, Form } from 'react-bootstrap';
+import { Link, useNavigate } from 'react-router-dom'; // Import useNavigate for redirection
+import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap'; // Import Button
 import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
 import { FaSpinner } from 'react-icons/fa';
 import { UserContext } from './UserContext';
@@ -12,11 +12,13 @@ import DeleteButton from './DeleteButton';
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 console.log('DeliveryList: Using Backend API URL:', BACKEND_API_BASE_URL);
 
+
 const DeliveryList = () => {
-  const { userEmail } = useContext(UserContext);
+  const { userEmail, logoutUser } = useContext(UserContext); // Consume logoutUser from context
+  const navigate = useNavigate(); // Initialize navigate hook
   const [deliveries, setDeliveries] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [authToken, setAuthToken] = useState(null); // NEW: State to hold authToken
+  const [authToken, setAuthToken] = useState(null); // State to hold authToken
   const [page, setPage] = useState(0);
   const [selectedClient, setSelectedClient] = useState('');
   const [loading, setLoading] = useState(true); // Set to true initially as data fetch starts on mount
@@ -57,7 +59,7 @@ const DeliveryList = () => {
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
+          const errorText = await response.text(); // Get detailed error
           throw new Error(`Network response was not ok: ${response.status} - ${errorText}`);
         }
 
@@ -117,8 +119,6 @@ const DeliveryList = () => {
       console.log("DeliveryList: authToken loaded from localStorage.");
     } else {
       console.log("DeliveryList: authToken not found in localStorage.");
-      // Optional: If no token, maybe redirect to login immediately if userEmail is also null
-      // This path is usually handled by AuthenticatedRoutes, but good for local debugging.
     }
   }, []); // Runs only once on mount
 
@@ -193,6 +193,11 @@ const DeliveryList = () => {
 
   const uniqueClients = [...new Set(deliveries.map((delivery) => delivery.client))].sort();
 
+  const handleLogout = () => {
+    logoutUser(); // Call the logout function from UserContext
+    navigate('/login'); // Redirect to login page after logout
+  };
+
   // Conditional rendering for loading state (improved)
   if (loading && deliveries.length === 0) {
     return (
@@ -211,14 +216,28 @@ const DeliveryList = () => {
     return (
       <Container className="text-center my-5">
         <p>No active deliveries found.</p>
-        {/* You might add a button to retry or go back to a dashboard */}
+        <Button variant="outline-primary" onClick={handleLogout}>
+          Logout
+        </Button>
       </Container>
     );
   }
 
   return (
     <Container>
-      <h1 className="my-4">List of Deliveries</h1>
+      <Row className="justify-content-between align-items-center my-4">
+        <Col>
+          <h1 className="mb-0">List of Deliveries</h1>
+        </Col>
+        <Col xs="auto">
+          {userEmail && (
+            <span className="text-muted mr-2">Logged in as: {userEmail}</span>
+          )}
+          <Button variant="outline-danger" onClick={handleLogout}>
+            Logout
+          </Button>
+        </Col>
+      </Row>
       <Row className="mb-4">
         <Col xs={10}>
           <Form.Control
@@ -316,7 +335,7 @@ const DeliveryList = () => {
 
       <div className="delivery-list-end"></div>
 
-      {loading && ( // Show spinner only when loading and there are already some deliveries (for infinite scroll)
+      {loading && (
         <div className="d-flex justify-content-center align-items-center" style={{ height: '100px' }}>
           <FaSpinner
             className="spinner-icon"
