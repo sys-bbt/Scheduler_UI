@@ -1,11 +1,11 @@
 import React, { useState, useEffect, memo, useCallback } from 'react';
-import { Form, Input, Button, Slider, DatePicker, Select, notification, Row, Col, Spin } from 'antd';
+import { Form, Input, Button, Slider, DatePicker, Select, notification, Row, Col } from 'antd'; // Removed Spin as it's no longer needed for person loading
 import moment from 'moment';
 import './FormComponent.css';
 
 const { Option } = Select;
 
-// Define the emails of users who can see the full list
+// Define the emails of users who can see and edit the full list
 const ADMIN_EMAILS = [
     "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
@@ -57,20 +57,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [personResponsible, setPersonResponsible] = useState('');
     const [numberOfDays, setNumberOfDays] = useState(0);
     const [existingSchedules, setExistingSchedules] = useState({});
-    // Removed availablePersons state and loadingPersons state as they are no longer needed for this hardcoded approach.
-    // const [availablePersons, setAvailablePersons] = useState([]);
-    // const [loadingPersons, setLoadingPersons] = useState(true);
 
     // Memoize the mapping logic to prevent unnecessary re-renders
     const getPersonNameFromEmail = useCallback((email) => {
         return EMAIL_TO_PERSON_MAP[email] || null;
     }, []);
 
-    // --- REMOVED EFFECT HOOK 1: NO LONGER FETCHING AVAILABLE PERSONS ---
-    // The previous useEffect for fetching /api/persons is removed.
-
-    // --- EFFECT HOOK 1 (was 2): FETCH TASK DATA AND EXISTING SCHEDULES ---
-    // Renamed to 1 because the previous one is removed.
+    // --- EFFECT HOOK 1: FETCH TASK DATA AND EXISTING SCHEDULES ---
     useEffect(() => {
         const fetchTaskAndScheduleData = async () => {
             try {
@@ -80,7 +73,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     });
 
                     // Fetch data per key per day - Still uses an API call
-                    const response = await fetch(`/api/per-key-per-day`); // Changed to relative path for Vercel
+                    const response = await fetch(`/api/per-key-per-day`);
                     const data = await response.json();
 
                     const taskData = data[task.Key];
@@ -90,10 +83,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         const totalMinutes = taskData.totalDuration || 0;
                         const initialHours = {};
                         if (taskEntries && taskEntries.length > 0) {
-                            taskEntries.forEach((entry, index) => {
-                                // Changed Duration_In_Minutes to Duration as per your server.js for per-key-per-day
+                            taskEntries.forEach((entry) => {
                                 if (entry.Duration !== undefined && entry.Day !== undefined) {
-                                    // Ensure we're using the correct day for the slider, if available
                                     const dayMoment = moment(entry.Day.value);
                                     if (dayMoment.isValid() && startDate && dayMoment.isSameOrAfter(startDate, 'day')) {
                                         const dayIndex = dayMoment.diff(startDate, 'days');
@@ -104,7 +95,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         }
                         // Fallback if taskEntries didn't set initial hours but total duration exists
                         if (Object.keys(initialHours).length === 0 && totalMinutes > 0 && startDate) {
-                             // This is tricky if you have multiple days. For a single total, assign to day 0.
                             initialHours[0] = totalMinutes;
                         }
                         setHours(initialHours);
@@ -125,7 +115,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             setNumberOfDays(daysDiff);
                             setSliderCount(daysDiff);
                         } else if (task?.Planned_Start_Timestamp && task?.Planned_Delivery_Timestamp) {
-                            // If no entries, but task has planned timestamps, use those
                             const start = moment(task.Planned_Start_Timestamp);
                             const end = moment(task.Planned_Delivery_Timestamp);
                             const daysDiff = end.diff(start, 'days') + 1;
@@ -135,7 +124,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             setSliderCount(daysDiff);
                         }
                     } else if (task?.Planned_Start_Timestamp && task?.Planned_Delivery_Timestamp) {
-                        // If no taskData, but task has planned timestamps, use those
                         const start = moment(task.Planned_Start_Timestamp);
                         const end = moment(task.Planned_Delivery_Timestamp);
                         const daysDiff = end.diff(start, 'days') + 1;
@@ -147,13 +135,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
 
                     // Fetch data per person per day (still needed for existingSchedules validation)
-                    const perPersonResponse = await fetch(`/api/per-person-per-day`); // Changed to relative path
+                    const perPersonResponse = await fetch(`/api/per-person-per-day`);
                     const perPersonData = await perPersonResponse.json();
 
                     const schedules = {};
                     perPersonData.forEach((entry) => {
                         const { Responsibility, Day, Duration_In_Minutes } = entry;
-                        const date = Day.value; // Assuming Day.value is the string date like 'YYYY-MM-DD'
+                        const date = Day.value;
                         if (!schedules[Responsibility]) {
                             schedules[Responsibility] = {};
                         }
@@ -171,22 +159,17 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             }
         };
 
-        // This effect runs when task changes, or when startDate/endDate might change (though they are set by task initially)
         fetchTaskAndScheduleData();
-    }, [task, form, startDate]); // Added startDate to dependencies to re-calculate day mapping if it changes
+    }, [task, form, startDate]);
 
-    // --- EFFECT HOOK 2 (was 3): SET INITIAL PERSON RESPONSIBLE ---
-    // Renamed to 2.
+    // --- EFFECT HOOK 2: SET INITIAL PERSON RESPONSIBLE AND CONTROL EDITABILITY ---
     useEffect(() => {
-        // Since we are hardcoding, there's no `loadingPersons` state related to fetching persons.
         const initialResponsibilityFromTask = task?.Responsibility || '';
-
-        // Determine the actual list of persons to filter against
-        const personsFilterList = ALL_AVAILABLE_PERSONS_HARDCODED;
+        const userPersonName = getPersonNameFromEmail(currentUserEmail);
 
         if (ADMIN_EMAILS.includes(currentUserEmail)) {
             // Admin user: Can see full list, try to pre-fill from task.
-            if (initialResponsibilityFromTask && personsFilterList.includes(initialResponsibilityFromTask)) {
+            if (initialResponsibilityFromTask && ALL_AVAILABLE_PERSONS_HARDCODED.includes(initialResponsibilityFromTask)) {
                 setPersonResponsible(initialResponsibilityFromTask);
                 form.setFieldsValue({ personResponsible: initialResponsibilityFromTask });
             } else {
@@ -194,12 +177,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 form.setFieldsValue({ personResponsible: undefined });
             }
         } else {
-            // Non-admin user: Only allowed to select/see their mapped name.
-            const userPersonName = getPersonNameFromEmail(currentUserEmail);
-            if (userPersonName && personsFilterList.includes(userPersonName)) {
+            // Non-admin user: Only allowed to see their mapped name.
+            if (userPersonName && ALL_AVAILABLE_PERSONS_HARDCODED.includes(userPersonName)) {
                 setPersonResponsible(userPersonName);
                 form.setFieldsValue({ personResponsible: userPersonName });
             } else {
+                // If current user's email doesn't map to a known person, or that person
+                // isn't in the hardcoded list, set to empty/undefined and disable.
                 setPersonResponsible('');
                 form.setFieldsValue({ personResponsible: undefined });
             }
@@ -274,7 +258,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 const scheduledData = {
                     Key: task.Key,
                     Delivery_code: task.Delivery_code,
-                    DelCode_w_o__: task.DelCode_w_o__, // Use DelCode_w_o__ from task directly
+                    DelCode_w_o__: task.DelCode_w_o__,
                     Step_ID: task.Step_ID,
                     Task_Details: values.name,
                     Frequency___Timeline: task.Frequency___Timeline,
@@ -299,7 +283,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
                 console.log('Scheduled Data for submission:', scheduledData);
 
-                // Ensure /api/post is relative
                 fetch('/api/post', {
                     method: 'POST',
                     headers: {
@@ -401,8 +384,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         480: '8 h',
     };
 
-    // Define personsToDisplay based on user role using the hardcoded list
-    const personsToDisplay = ADMIN_EMAILS.includes(currentUserEmail)
+    // Determine if the current user is an admin
+    const isAdmin = ADMIN_EMAILS.includes(currentUserEmail);
+
+    // Define personsToDisplay based on user role
+    const personsToDisplay = isAdmin
         ? ALL_AVAILABLE_PERSONS_HARDCODED
         : (getPersonNameFromEmail(currentUserEmail) && ALL_AVAILABLE_PERSONS_HARDCODED.includes(getPersonNameFromEmail(currentUserEmail)))
             ? [getPersonNameFromEmail(currentUserEmail)]
@@ -489,15 +475,14 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 <Select
                     placeholder="Select a person"
                     onChange={setPersonResponsible}
-                    value={personResponsible || undefined} // Use undefined to show placeholder when no value
+                    value={personResponsible || undefined}
                     showSearch
                     optionFilterProp="children"
                     filterOption={(input, option) =>
                         (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                     }
-                    // Select is now only disabled if the user is not an admin AND their specific name is not available
-                    disabled={!ADMIN_EMAILS.includes(currentUserEmail) && (personsToDisplay.length === 0 || !personsToDisplay.includes(personResponsible))}
-                    // Removed `loading` prop as we are not fetching
+                    // Disable if the user is not an admin
+                    disabled={!isAdmin}
                 >
                     {personsToDisplay.map((person) => (
                         <Option key={person} value={person}>
