@@ -15,15 +15,15 @@ console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 
 const DeliveryDetail = () => {
     const location = useLocation();
-    // Adjusted delCode extraction logic based on the likely URL structure,
-    // assuming it comes after /delivery/data/ and then a numerical ID.
-    // If your URL is like /delivery/<DEL_CODE>, you might need to adjust this.
-    const delCodeMatch = location.pathname.match(/\/delivery\/data\/(\d+)/);
+    // --- FIXED: Corrected delCode extraction logic ---
+    // This regex will capture everything after '/delivery/data/'
+    const delCodeMatch = location.pathname.match(/\/delivery\/data\/(.*)/);
     const delCode = delCodeMatch ? delCodeMatch[1] : null;
 
     // Corrected context usage to get userEmail as defined in UserContext
     const { userEmail } = useContext(UserContext);
     console.log('DeliveryDetail: userEmail from Context:', userEmail); // Debugging
+    console.log('DeliveryDetail: Extracted delCode from URL:', delCode); // Debugging
 
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -47,7 +47,8 @@ const DeliveryDetail = () => {
                 setLoading(true);
 
                 // --- UPDATED: Use full backend URL for API calls ---
-                const deliveryResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}`); // Changed to userEmail
+                // The backend /api/data endpoint likely filters by 'DelCode_w_o__' in its query
+                const deliveryResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&delCode=${delCode}`); // Added delCode to query
                 if (!deliveryResponse.ok) {
                     const errorText = await deliveryResponse.text();
                     throw new Error(`HTTP error! status: ${deliveryResponse.status}, message: ${errorText}`);
@@ -86,7 +87,7 @@ const DeliveryDetail = () => {
                     setTasks(fetchedTasks);
                     console.log('Fetched tasks for delivery:', fetchedTasks);
                 } else {
-                    setError('Delivery not found.');
+                    setError(`Delivery with code "${delCode}" not found in fetched data.`); // More specific error
                 }
             } catch (err) {
                 console.error('Error fetching delivery details:', err);
@@ -180,7 +181,7 @@ const DeliveryDetail = () => {
     if (!delivery || delivery.length === 0) {
         return (
             <Container className="text-center my-5">
-                <p>No delivery found for code: {delCode}</p>
+                <p>No delivery data found for code: {delCode}</p> {/* Updated message */}
                 <Link to="/">Back to Deliveries</Link>
             </Container>
         );
@@ -211,7 +212,6 @@ const DeliveryDetail = () => {
             <Row>
                 {tasks.length > 0 ? (
                     tasks.map((task, index) => {
-                        // Consolidate the display logic for duration here to avoid potential syntax issues
                         const displayDuration = task.totalTime || task.formattedDuration || '0m';
 
                         return (
@@ -257,7 +257,6 @@ const DeliveryDetail = () => {
                                                         <span className="text-muted">{task.personResponsible}</span> {/* Show the person responsible */}
                                                     </div>
 
-                                                    {/* Changed this line for safer syntax */}
                                                     <span>{displayDuration}</span>
                                                 </div>
 
