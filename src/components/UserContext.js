@@ -59,6 +59,9 @@ export const LoginComponent = () => {
 
             if (email) {
                 loginUser(email, name); // This calls the context function to update state and localStorage
+                
+                // --- NEW DEBUGGING LOG: Check authToken value before saving ---
+                console.log("LoginComponent: Storing authToken in localStorage:", authToken);
                 localStorage.setItem('authToken', authToken); // NEW: Persist authToken in localStorage
                 
                 // --- NEW: Force a page reload after successful login ---
