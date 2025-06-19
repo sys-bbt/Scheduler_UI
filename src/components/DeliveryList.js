@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
-import { Link, useNavigate } from 'react-router-dom'; // Import useNavigate for redirection
-import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap'; // Import Button
+import { Link, useNavigate } from 'react-router-dom';
+import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
 import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
 import { FaSpinner } from 'react-icons/fa';
 import { UserContext } from './UserContext';
@@ -10,20 +10,33 @@ import SortDeliveriesByDate from './SortDeliveriesByDate';
 import DeleteButton from './DeleteButton';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
-console.log('DeliveryList: Using Backend API URL:', BACKEND_API_BASE_URL);
 
+// Define admin emails on the frontend, matching the backend
+const ADMIN_EMAILS_FRONTEND = [
+    "systems@brightbraintech.com",
+    "neelam.p@brightbraintech.com",
+    "meghna.j@brightbraintech.com",
+    "zoya.a@brightbraintech.com",
+    "shweta.g@brightbraintech.com",
+    "hitesh.r@brightbraintech.com"
+];
 
 const DeliveryList = () => {
-  const { userEmail, logoutUser } = useContext(UserContext); // Consume logoutUser from context
-  const navigate = useNavigate(); // Initialize navigate hook
+  const { userEmail, logoutUser } = useContext(UserContext);
+  const navigate = useNavigate();
   const [deliveries, setDeliveries] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [authToken, setAuthToken] = useState(null); // State to hold authToken
+  const [authToken, setAuthToken] = useState(null);
   const [page, setPage] = useState(0);
   const [selectedClient, setSelectedClient] = useState('');
-  const [loading, setLoading] = useState(true); // Set to true initially as data fetch starts on mount
+  const [loading, setLoading] = useState(true);
   const observer = useRef(null);
   const [sortOption, setSortOption] = useState('earliest');
+
+  // Determine isAdmin status for the current user
+  const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
+  console.log(`DeliveryList: Current User Email: ${userEmail}, Is Admin: ${isAdmin}`);
+
 
   const handleSort = (deliveriesToSort) => {
     return deliveriesToSort.sort((a, b) => {
@@ -42,38 +55,45 @@ const DeliveryList = () => {
     async (currentPage) => {
       // Use the authToken state here, which will be populated by the useEffect below
       if (!authToken || !userEmail) {
-        setLoading(false); // Make sure to set loading to false even if we skip
+        setLoading(false);
         console.log("DeliveryList: Skipping fetchData because userEmail or authToken is not available yet.");
         return;
       }
 
       try {
         setLoading(true);
-        console.log(`DeliveryList: Fetching data for page ${currentPage} with email: ${userEmail} and authToken available.`);
+        console.log(`DeliveryList: Fetching data for page ${currentPage} with email: ${userEmail}, isAdmin: ${isAdmin}`);
 
-        const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&page=${currentPage}`, {
+        // --- UPDATED: Pass isAdmin flag to backend ---
+        const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&page=${currentPage}&isAdmin=${isAdmin}`, {
           headers: {
-            Authorization: `Bearer ${authToken}`, // Use the authToken from state
+            Authorization: `Bearer ${authToken}`,
             "Content-Type": "application/json",
           },
         });
 
         if (!response.ok) {
-          const errorText = await response.text(); // Get detailed error
+          const errorText = await response.text();
           throw new Error(`Network response was not ok: ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();
+        
+        // The backend now sends only the relevant Step_ID=0 entries (for non-admins)
+        // or ALL Step_ID=0 entries (for admins), so no additional filtering here for Step_ID=0
         const tasksArray = Object.values(data).flat();
 
-        const filteredDeliveries = tasksArray.filter((delivery) => delivery.Step_ID === 0);
+        // This filter below is still correct for ensuring only the main delivery entries are shown in the list
+        // as the backend handles the initial filtering based on user role.
+        const deliveriesForList = tasksArray.filter((delivery) => delivery.Step_ID === 0);
 
-        if (filteredDeliveries.length === 0 && currentPage !== 0) {
+
+        if (deliveriesForList.length === 0 && currentPage !== 0) {
           console.log("No new deliveries to load, stopping further fetch.");
           return;
         }
 
-        const newDeliveries = filteredDeliveries.map((delivery) => ({
+        const newDeliveries = deliveriesForList.map((delivery) => ({
           delCode: delivery.DelCode_w_o__,
           client: `${delivery.Client}`,
           initiated: formatTimestamp(delivery.Planned_Start_Timestamp),
@@ -102,15 +122,13 @@ const DeliveryList = () => {
         setLoading(false);
       }
     },
-    [userEmail, authToken] // fetchData now explicitly depends on authToken state
+    [userEmail, authToken, isAdmin] // Added isAdmin to dependencies
   );
 
   const handleDelete = (deliveryCode) => {
     setDeliveries(prevDeliveries => prevDeliveries.filter(delivery => delivery.delCode !== deliveryCode));
   };
 
-  // NEW useEffect: Load authToken from localStorage on component mount
-  // This ensures authToken state is populated before fetchData runs
   useEffect(() => {
     console.log("DeliveryList: useEffect - attempting to load authToken from localStorage.");
     const storedAuthToken = localStorage.getItem('authToken');
@@ -120,19 +138,18 @@ const DeliveryList = () => {
     } else {
       console.log("DeliveryList: authToken not found in localStorage.");
     }
-  }, []); // Runs only once on mount
+  }, []);
 
-  // This useEffect triggers the data fetch once userEmail and authToken become available
   useEffect(() => {
-    if (userEmail && authToken) { // Fetch data only if both userEmail and authToken are valid
+    if (userEmail && authToken) {
       console.log("DeliveryList: userEmail and authToken are available, triggering fetchData(0).");
       fetchData(0);
     } else {
       console.log("DeliveryList: userEmail or authToken not yet available for initial fetch.");
-      setDeliveries([]); // Clear deliveries if user logs out or not authenticated
-      setLoading(false); // Stop loading if authentication is not complete
+      setDeliveries([]);
+      setLoading(false);
     }
-  }, [fetchData, userEmail, authToken]); // Depend on userEmail and authToken to trigger initial fetch
+  }, [fetchData, userEmail, authToken]);
 
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'No start time';
@@ -167,19 +184,15 @@ const DeliveryList = () => {
 
   useEffect(() => {
     if (observer.current) observer.current.disconnect();
-
     const loadMoreDeliveries = (entries) => {
       const [entry] = entries;
       if (entry.isIntersecting && !loading && filteredDeliveries.length > 0) {
         setPage((prevPage) => prevPage + 1);
       }
     };
-
     observer.current = new IntersectionObserver(loadMoreDeliveries, { threshold: 1.0 });
-
     const lastDeliveryElement = document.querySelector('.delivery-list-end');
     if (lastDeliveryElement) observer.current.observe(lastDeliveryElement);
-
     return () => {
       if (observer.current) observer.current.disconnect();
     };
@@ -194,11 +207,10 @@ const DeliveryList = () => {
   const uniqueClients = [...new Set(deliveries.map((delivery) => delivery.client))].sort();
 
   const handleLogout = () => {
-    logoutUser(); // Call the logout function from UserContext
-    navigate('/login'); // Redirect to login page after logout
+    logoutUser();
+    navigate('/login');
   };
 
-  // Conditional rendering for loading state (improved)
   if (loading && deliveries.length === 0) {
     return (
       <Container className="text-center my-5">
@@ -211,7 +223,6 @@ const DeliveryList = () => {
     );
   }
 
-  // If not loading, and no deliveries found, display a message
   if (!loading && filteredDeliveries.length === 0) {
     return (
       <Container className="text-center my-5">
