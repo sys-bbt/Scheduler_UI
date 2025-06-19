@@ -33,9 +33,16 @@ const ALL_AVAILABLE_PERSONS_HARDCODED = [
     "Shweta Gaikwad",
     "Hitesh Rattesar",
     "System",
-    // Add all other 'Responsibility' names that you expect from BigQuery here
-    // Make sure this list is comprehensive and kept up-to-date manually.
+    // IMPORTANT: Add any other 'Responsibility' names that you expect from BigQuery here
+    // This list needs to be comprehensive and kept up-to-date manually for now.
+    // Ideally, you'd fetch this from the backend if it changes frequently.
 ];
+
+// --- UPDATED: Define the base URL for your backend API ---
+// This will now correctly pick up from process.env.REACT_APP_BACKEND_URL
+// The fallback is provided for local development outside of a Vercel context.
+const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+console.log('Using Backend API URL:', BACKEND_API_BASE_URL);
 
 
 const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
@@ -79,8 +86,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         name: task.Task_Details || '',
                     });
 
-                    // Fetch data per key per day - Still uses an API call
-                    const response = await fetch(`/api/per-key-per-day`);
+                    // --- Using full backend URL for API call ---
+                    const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                    }
                     const data = await response.json();
 
                     const taskData = data[task.Key];
@@ -141,8 +152,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     }
 
 
-                    // Fetch data per person per day (still needed for existingSchedules validation)
-                    const perPersonResponse = await fetch(`/api/per-person-per-day`);
+                    // --- Using full backend URL for API call ---
+                    const perPersonResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-person-per-day`);
+                    if (!perPersonResponse.ok) {
+                        const errorText = await perPersonResponse.text();
+                        throw new Error(`HTTP error! status: ${perPersonResponse.status}, message: ${errorText}`);
+                    }
                     const perPersonData = await perPersonResponse.json();
 
                     const schedules = {};
@@ -161,7 +176,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 console.error("Error fetching task data or schedules:", error);
                 notification.error({
                     message: 'Error',
-                    description: 'Failed to load task data or existing schedules. Please check network and server logs.',
+                    description: `Failed to load task data or existing schedules: ${error.message}. Please check network and server logs.`,
                 });
             }
         };
@@ -174,7 +189,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         const initialResponsibilityFromTask = task?.Responsibility || '';
         const userPersonName = getPersonNameFromEmail(currentUserEmail);
 
-        if (isAdmin) { // Use the isAdmin variable here directly
+        if (isAdmin) {
             // Admin user: Can see full list, try to pre-fill from task.
             if (initialResponsibilityFromTask && ALL_AVAILABLE_PERSONS_HARDCODED.includes(initialResponsibilityFromTask)) {
                 setPersonResponsible(initialResponsibilityFromTask);
@@ -195,7 +210,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 form.setFieldsValue({ personResponsible: undefined });
             }
         }
-    }, [task, currentUserEmail, form, getPersonNameFromEmail, isAdmin]); // Added isAdmin to dependencies
+    }, [task, currentUserEmail, form, getPersonNameFromEmail, isAdmin]);
 
 
     const handleStartDateChange = (date) => {
@@ -290,7 +305,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
                 console.log('Scheduled Data for submission:', scheduledData);
 
-                fetch('/api/post', {
+                // --- Using full backend URL for API call ---
+                fetch(`${BACKEND_API_BASE_URL}/api/post`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -299,7 +315,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 })
                     .then((response) => {
                         if (!response.ok) {
-                            throw new Error('Network response was not ok');
+                            // Attempt to parse error message from response body
+                            return response.text().then(text => { throw new Error(text); });
                         }
                         return response.json();
                     })
