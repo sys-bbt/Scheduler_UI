@@ -7,7 +7,6 @@ const { Option } = Select;
 
 // Define the emails of users who can see and edit the full list
 const ADMIN_EMAILS = [
-    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
