@@ -3,40 +3,32 @@ import { Link } from 'react-router-dom';
 import { Container, Row, Col, Card, ProgressBar, Form } from 'react-bootstrap';
 import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
 import { FaSpinner } from 'react-icons/fa';
-// Removed GoogleLogin and jwtDecode as they are no longer needed here
-// import { GoogleLogin } from '@react-oauth/google';
-// import { jwtDecode } from 'jwt-decode';
-import { UserContext } from './UserContext'; // Ensure UserContext is correctly imported
+import { UserContext } from './UserContext';
 import './DeliveryList.css';
 import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSelected';
 import SortDeliveriesByDate from './SortDeliveriesByDate';
 import DeleteButton from './DeleteButton';
 
-// --- NEW: Define the base URL for your backend API, consistent with other components ---
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 console.log('DeliveryList: Using Backend API URL:', BACKEND_API_BASE_URL);
 
-
 const DeliveryList = () => {
-  const { userEmail } = useContext(UserContext); // Only consume userEmail, setUserEmail is handled by UserContext's loginUser
+  const { userEmail } = useContext(UserContext);
   const [deliveries, setDeliveries] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  // authToken is now retrieved directly within fetchData or useEffect if needed for the first fetch
+  const [authToken, setAuthToken] = useState(null); // NEW: State to hold authToken
   const [page, setPage] = useState(0);
   const [selectedClient, setSelectedClient] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Set to true initially as data fetch starts on mount
   const observer = useRef(null);
+  const [sortOption, setSortOption] = useState('earliest');
 
-  const [sortOption, setSortOption] = useState('earliest'); // Default: 'earliest'
-
-  const handleSort = (deliveriesToSort) => { // Renamed parameter to avoid confusion with component's 'deliveries' state
+  const handleSort = (deliveriesToSort) => {
     return deliveriesToSort.sort((a, b) => {
       const dateA = new Date(a.createdAt || a.Created_at);
       const dateB = new Date(b.createdAt || b.Created_at);
-
       if (isNaN(dateA) || isNaN(dateB)) return 0;
-
-      return sortOption === 'earliest' ? dateA - dateB : dateB - dateA;
+      return sortOption === 'earliest' ? dateA - dateB : dateB - a;
     });
   };
 
@@ -44,32 +36,28 @@ const DeliveryList = () => {
     setSelectedClient(client);
   };
 
-  // Removed onLoginSuccess and onLoginFailure as GoogleLogin is no longer here
-
   const fetchData = useCallback(
     async (currentPage) => {
-      // Retrieve authToken from sessionStorage directly for the fetch call
-      const currentAuthToken = sessionStorage.getItem('authToken');
-
-      // Ensure both userEmail and authToken are available before fetching
-      if (!currentAuthToken || !userEmail) {
-        setLoading(false);
-        console.log("DeliveryList: Skipping fetchData, userEmail or authToken not available.");
+      // Use the authToken state here, which will be populated by the useEffect below
+      if (!authToken || !userEmail) {
+        setLoading(false); // Make sure to set loading to false even if we skip
+        console.log("DeliveryList: Skipping fetchData because userEmail or authToken is not available yet.");
         return;
       }
 
       try {
         setLoading(true);
+        console.log(`DeliveryList: Fetching data for page ${currentPage} with email: ${userEmail} and authToken available.`);
 
         const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&page=${currentPage}`, {
           headers: {
-            Authorization: `Bearer ${currentAuthToken}`, // Use the retrieved authToken
+            Authorization: `Bearer ${authToken}`, // Use the authToken from state
             "Content-Type": "application/json",
           },
         });
 
         if (!response.ok) {
-          const errorText = await response.text(); // Get detailed error
+          const errorText = await response.text();
           throw new Error(`Network response was not ok: ${response.status} - ${errorText}`);
         }
 
@@ -93,7 +81,6 @@ const DeliveryList = () => {
           ),
           tasksPlanned: delivery.Planned_Tasks || 0,
           tasksTotal: delivery.Total_Tasks || 0,
-          // Assuming createdAt or Created_at is available for sorting
           createdAt: delivery.createdAt || delivery.Created_at,
         }));
 
@@ -113,41 +100,39 @@ const DeliveryList = () => {
         setLoading(false);
       }
     },
-    [userEmail] // fetchData now only depends on userEmail and implicitly on sessionStorage for authToken
+    [userEmail, authToken] // fetchData now explicitly depends on authToken state
   );
 
   const handleDelete = (deliveryCode) => {
-    // Update the state to remove the deleted delivery
     setDeliveries(prevDeliveries => prevDeliveries.filter(delivery => delivery.delCode !== deliveryCode));
   };
 
-  // This useEffect ensures userEmail is available from sessionStorage for the initial fetch
+  // NEW useEffect: Load authToken from localStorage on component mount
+  // This ensures authToken state is populated before fetchData runs
   useEffect(() => {
-    const storedUserEmail = sessionStorage.getItem('userEmail');
-    // const storedAuthToken = sessionStorage.getItem('authToken'); // Auth token is now retrieved in fetchData directly
-
-    if (storedUserEmail) { // Only set userEmail if found
-      // setUserEmail from UserContext is already called by LoginComponent
-      // This part might be redundant if App.js ensures userEmail is in context
-      // before rendering DeliveryList. But keeping it for robustness if user navigates directly.
-      if (userEmail !== storedUserEmail) { // Prevent unnecessary state updates
-         // setUserEmail(storedUserEmail); // UserContext's responsibility now
-         // The `UserProvider` already initializes `userEmail` from localStorage.
-         // `sessionStorage` might be cleared on tab close, whereas `localStorage` persists.
-         // It's generally better to rely on `UserContext` as the single source of truth for `userEmail`.
-         // If `userEmail` isn't set via context, `fetchData` will bail out early.
-      }
+    console.log("DeliveryList: useEffect - attempting to load authToken from localStorage.");
+    const storedAuthToken = localStorage.getItem('authToken');
+    if (storedAuthToken) {
+      setAuthToken(storedAuthToken);
+      console.log("DeliveryList: authToken loaded from localStorage.");
+    } else {
+      console.log("DeliveryList: authToken not found in localStorage.");
+      // Optional: If no token, maybe redirect to login immediately if userEmail is also null
+      // This path is usually handled by AuthenticatedRoutes, but good for local debugging.
     }
-  }, [userEmail]); // Depend on userEmail to potentially trigger re-fetch if it changes from other means
+  }, []); // Runs only once on mount
 
-  // This useEffect triggers the data fetch once userEmail becomes available
+  // This useEffect triggers the data fetch once userEmail and authToken become available
   useEffect(() => {
-    if (userEmail) { // Only fetch if userEmail is valid
+    if (userEmail && authToken) { // Fetch data only if both userEmail and authToken are valid
+      console.log("DeliveryList: userEmail and authToken are available, triggering fetchData(0).");
       fetchData(0);
     } else {
-      setDeliveries([]); // Clear deliveries if user logs out
+      console.log("DeliveryList: userEmail or authToken not yet available for initial fetch.");
+      setDeliveries([]); // Clear deliveries if user logs out or not authenticated
+      setLoading(false); // Stop loading if authentication is not complete
     }
-  }, [fetchData, userEmail]);
+  }, [fetchData, userEmail, authToken]); // Depend on userEmail and authToken to trigger initial fetch
 
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'No start time';
@@ -160,7 +145,6 @@ const DeliveryList = () => {
       const deliveryTime = new Date(deliveryTimestamp?.value || deliveryTimestamp);
       const startTime = new Date(startTimestamp?.value || startTimestamp);
       if (isNaN(deliveryTime.getTime()) || isNaN(startTime.getTime())) return 'Invalid deadline';
-
       const timeDiff = deliveryTime - startTime;
       const daysLeft = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
       const hoursLeft = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -186,7 +170,6 @@ const DeliveryList = () => {
 
     const loadMoreDeliveries = (entries) => {
       const [entry] = entries;
-      // Only load more if intersecting, not loading, and there are actually deliveries to observe
       if (entry.isIntersecting && !loading && filteredDeliveries.length > 0) {
         setPage((prevPage) => prevPage + 1);
       }
@@ -200,18 +183,39 @@ const DeliveryList = () => {
     return () => {
       if (observer.current) observer.current.disconnect();
     };
-  }, [loading, filteredDeliveries]); // Added filteredDeliveries to dependencies
+  }, [loading, filteredDeliveries]);
 
   useEffect(() => {
-    if (page > 0) { // Only fetch if page is greater than 0 (i.e., not the initial load)
+    if (page > 0) {
       fetchData(page);
     }
   }, [page, fetchData]);
 
-  // Derive unique clients from the 'deliveries' state
-  const uniqueClients = [...new Set(deliveries.map((delivery) => delivery.client))].sort(); // Sort alphabetically
+  const uniqueClients = [...new Set(deliveries.map((delivery) => delivery.client))].sort();
 
-  // Removed the conditional rendering for GoogleLogin as App.js now handles redirection
+  // Conditional rendering for loading state (improved)
+  if (loading && deliveries.length === 0) {
+    return (
+      <Container className="text-center my-5">
+        <FaSpinner
+          className="spinner-icon"
+          style={{ fontSize: '3rem', color: '#007bff', animation: 'spin 1s linear infinite' }}
+        />
+        <p className="mt-3">Loading deliveries...</p>
+      </Container>
+    );
+  }
+
+  // If not loading, and no deliveries found, display a message
+  if (!loading && filteredDeliveries.length === 0) {
+    return (
+      <Container className="text-center my-5">
+        <p>No active deliveries found.</p>
+        {/* You might add a button to retry or go back to a dashboard */}
+      </Container>
+    );
+  }
+
   return (
     <Container>
       <h1 className="my-4">List of Deliveries</h1>
@@ -231,7 +235,7 @@ const DeliveryList = () => {
         </Col>
         <Col xs={2} className="text-right">
           <FilterDeliveryBasedOnClientSelected
-            clients={uniqueClients} // Pass the derived uniqueClients
+            clients={uniqueClients}
             onClientSelect={handleClientSelect}
             selectedClient={selectedClient}
           />
@@ -250,7 +254,7 @@ const DeliveryList = () => {
 
           return (
             <Col xs={12} key={delivery.delCode} className="mb-3">
-              <Link to={`/delivery/data/${delivery.delCode}`} className="card-link-wrapper"> {/* Ensured correct path with /data/ */}
+              <Link to={`/delivery/data/${delivery.delCode}`} className="card-link-wrapper">
                 <Card className="p-3 shadow-sm task-card">
                   <div className="shaded-bg" style={{ width: `${progress}%` }}></div>
                   <Card.Body>
@@ -264,10 +268,8 @@ const DeliveryList = () => {
                           >
                             {delivery.tasksPlanned} of {delivery.tasksTotal} Planned
                           </span>
-                          {/* Ensure handleDelete is correctly implemented in DeleteButton */}
                           <DeleteButton deliveryCode={delivery.delCode} onDelete={handleDelete} />
                         </div>
-                        {/* Add the client name here */}
                         {delivery.client && (
                           <p className="mb-1 text-muted">
                             Client: {delivery.client}
@@ -290,20 +292,12 @@ const DeliveryList = () => {
                         <p
                           onClick={(e) => {
                             e.stopPropagation();
-                            // Use document.execCommand('copy') for better iframe compatibility
                             const el = document.createElement('textarea');
                             el.value = delivery.delCode;
                             document.body.appendChild(el);
                             el.select();
                             document.execCommand('copy');
                             document.body.removeChild(el);
-                            // Optional: add a notification for copying
-                            // notification.success({
-                            //   message: 'Copied!',
-                            //   description: `Delivery code ${delivery.delCode} copied to clipboard.`,
-                            //   placement: 'bottomRight',
-                            //   duration: 2
-                            // });
                           }}
                           style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
                           title="Click to copy"
@@ -322,7 +316,7 @@ const DeliveryList = () => {
 
       <div className="delivery-list-end"></div>
 
-      {loading && (
+      {loading && ( // Show spinner only when loading and there are already some deliveries (for infinite scroll)
         <div className="d-flex justify-content-center align-items-center" style={{ height: '100px' }}>
           <FaSpinner
             className="spinner-icon"
