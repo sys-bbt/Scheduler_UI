@@ -3,34 +3,28 @@ import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode'; // Make sure you have installed 'jwt-decode' (npm install jwt-decode)
 
 // Create the UserContext
-// It now provides 'userEmail', 'userName', and functions 'loginUser' and 'logoutUser'
 export const UserContext = createContext(null);
 
 // Define the UserProvider component
 export const UserProvider = ({ children }) => {
-    // Initialize userEmail and userName states from localStorage
-    // This helps persist login state across browser sessions
     const [userEmail, setUserEmail] = useState(localStorage.getItem('userEmail') || null);
     const [userName, setUserName] = useState(localStorage.getItem('userName') || null);
 
-    // Function to handle successful Google login and update context/localStorage
     const loginUser = (email, name) => {
         setUserEmail(email);
         setUserName(name);
-        localStorage.setItem('userEmail', email); // Persist email
-        localStorage.setItem('userName', name);   // Persist name
+        localStorage.setItem('userEmail', email);
+        localStorage.setItem('userName', name);
     };
 
-    // Function to handle logout and clear context/localStorage
     const logoutUser = () => {
         setUserEmail(null);
         setUserName(null);
         localStorage.removeItem('userEmail');
         localStorage.removeItem('userName');
-        localStorage.removeItem('authToken'); // NEW: Also remove authToken on logout
+        localStorage.removeItem('authToken');
     };
 
-    // The value provided to consumers of this context
     const contextValue = {
         userEmail,
         userName,
@@ -50,23 +44,30 @@ export const LoginComponent = () => {
     const { loginUser } = React.useContext(UserContext);
 
     const handleGoogleSuccess = (credentialResponse) => {
+        // --- NEW DEBUGGING LOGS START ---
+        console.log("LoginComponent: Raw credentialResponse:", credentialResponse);
+        console.log("LoginComponent: credentialResponse.credential:", credentialResponse.credential);
+        // --- NEW DEBUGGING LOGS END ---
+
         try {
             const decoded = jwtDecode(credentialResponse.credential);
-            console.log("Google Login Success! Decoded JWT:", decoded); // This log is showing up!
+            console.log("Google Login Success! Decoded JWT:", decoded);
             const email = decoded.email;
-            const name = decoded.name || decoded.given_name; // Use full name or given name
+            const name = decoded.name || decoded.given_name;
             const authToken = credentialResponse.credential; // Get the raw credential as authToken
 
             if (email) {
-                loginUser(email, name); // This calls the context function to update state and localStorage
+                loginUser(email, name);
                 
-                // --- NEW DEBUGGING LOG: Check authToken value before saving ---
-                console.log("LoginComponent: Storing authToken in localStorage:", authToken);
-                localStorage.setItem('authToken', authToken); // NEW: Persist authToken in localStorage
+                // Ensure authToken is a string before storing
+                if (typeof authToken === 'string' && authToken.length > 0) {
+                    console.log("LoginComponent: Storing authToken in localStorage:", authToken.substring(0, 50) + "..."); // Log first 50 chars
+                    localStorage.setItem('authToken', authToken);
+                } else {
+                    console.warn("LoginComponent: authToken is not a valid string. Not storing.");
+                }
                 
-                // --- NEW: Force a page reload after successful login ---
-                // This ensures the App component re-evaluates the UserContext value
-                window.location.href = '/';
+                window.location.href = '/'; // Force a page reload
             } else {
                 console.error("Email not found in Google credential response.");
             }
@@ -75,8 +76,8 @@ export const LoginComponent = () => {
         }
     };
 
-    const handleGoogleError = () => {
-        console.error('Google Login Failed');
+    const handleGoogleError = (errorResponse) => {
+        console.error('Google Login Failed:', errorResponse);
     };
 
     return (
@@ -86,11 +87,7 @@ export const LoginComponent = () => {
             <GoogleLogin
                 onSuccess={handleGoogleSuccess}
                 onError={handleGoogleError}
-                // You can add 'useOneTap' prop if you want to try one-tap sign-in
-                // useOneTap
             />
-            {/* Display logged-in user for debugging (optional) */}
-            {/* {userEmail && <p>Logged in as: {userEmail}</p>} */}
         </div>
     );
 };
