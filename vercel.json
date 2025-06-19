@@ -5,34 +5,6 @@
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": { "outputDirectory": "build" }
-    },
-    {
-      "src": "api/index.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/post.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    // This rule routes POST requests specifically to /api/post to your api/post.js serverless function.
-    // This should be first if you want post.js to handle /api/post exclusively.
-    {
-      "src": "/api/post",
-      "dest": "/api/post.js",
-      "methods": ["POST"]
-    },
-    // This rule routes ALL other requests starting with /api/ to your main Express app (via api/index.js).
-    // This ensures /api/per-key-per-day, /api/per-person-per-day, etc., are handled by your Express app.
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/index.js"
-    },
-    // This rule serves your React frontend for all other paths.
-    {
-      "src": "/(.*)",
-      "dest": "/build/$1"
     }
   ]
 }
