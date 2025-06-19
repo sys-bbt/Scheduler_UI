@@ -27,6 +27,7 @@ export const UserProvider = ({ children }) => {
         setUserName(null);
         localStorage.removeItem('userEmail');
         localStorage.removeItem('userName');
+        localStorage.removeItem('authToken'); // NEW: Also remove authToken on logout
     };
 
     // The value provided to consumers of this context
@@ -54,9 +55,12 @@ export const LoginComponent = () => {
             console.log("Google Login Success! Decoded JWT:", decoded); // This log is showing up!
             const email = decoded.email;
             const name = decoded.name || decoded.given_name; // Use full name or given name
+            const authToken = credentialResponse.credential; // Get the raw credential as authToken
 
             if (email) {
                 loginUser(email, name); // This calls the context function to update state and localStorage
+                localStorage.setItem('authToken', authToken); // NEW: Persist authToken in localStorage
+                
                 // --- NEW: Force a page reload after successful login ---
                 // This ensures the App component re-evaluates the UserContext value
                 window.location.href = '/';
