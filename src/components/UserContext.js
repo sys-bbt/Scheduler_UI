@@ -51,14 +51,15 @@ export const LoginComponent = () => {
     const handleGoogleSuccess = (credentialResponse) => {
         try {
             const decoded = jwtDecode(credentialResponse.credential);
-            console.log("Google Login Success! Decoded JWT:", decoded);
+            console.log("Google Login Success! Decoded JWT:", decoded); // This log is showing up!
             const email = decoded.email;
             const name = decoded.name || decoded.given_name; // Use full name or given name
 
             if (email) {
-                loginUser(email, name);
-                // Optional: Redirect to home page or dashboard after successful login
-                // window.location.href = '/';
+                loginUser(email, name); // This calls the context function to update state and localStorage
+                // --- NEW: Force a page reload after successful login ---
+                // This ensures the App component re-evaluates the UserContext value
+                window.location.href = '/';
             } else {
                 console.error("Email not found in Google credential response.");
             }
