@@ -13,6 +13,7 @@ const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localh
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
+    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -52,7 +53,6 @@ const DeliveryList = () => {
 
   const fetchData = useCallback(
     async (currentPage) => {
-      // Use the authToken state here, which will be populated by the useEffect below
       if (!authToken || !userEmail) {
         setLoading(false);
         console.log("DeliveryList: Skipping fetchData because userEmail or authToken is not available yet.");
@@ -63,7 +63,6 @@ const DeliveryList = () => {
         setLoading(true);
         console.log(`DeliveryList: Fetching data for page ${currentPage} with email: ${userEmail}, isAdmin: ${isAdmin}`);
 
-        // --- UPDATED: Pass isAdmin flag to backend ---
         const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&page=${currentPage}&isAdmin=${isAdmin}`, {
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -78,12 +77,8 @@ const DeliveryList = () => {
 
         const data = await response.json();
         
-        // The backend now sends only the relevant Step_ID=0 entries (for non-admins)
-        // or ALL Step_ID=0 entries (for admins), so no additional filtering here for Step_ID=0
         const tasksArray = Object.values(data).flat();
 
-        // This filter below is still correct for ensuring only the main delivery entries are shown in the list
-        // as the backend handles the initial filtering based on user role.
         const deliveriesForList = tasksArray.filter((delivery) => delivery.Step_ID === 0);
 
 
@@ -121,7 +116,7 @@ const DeliveryList = () => {
         setLoading(false);
       }
     },
-    [userEmail, authToken, isAdmin] // Added isAdmin to dependencies
+    [userEmail, authToken, isAdmin]
   );
 
   const handleDelete = (deliveryCode) => {
@@ -173,13 +168,24 @@ const DeliveryList = () => {
     setSearchTerm(event.target.value);
   };
 
+  // --- UPDATED FILTERING LOGIC ---
   const filteredDeliveries = handleSort(
     deliveries.filter((delivery) => {
-      const matchesSearch = delivery.client.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesClient = selectedClient ? delivery.client === selectedClient : true;
+      const lowerCaseSearchTerm = searchTerm.toLowerCase();
+      const lowerCaseSelectedClient = selectedClient.toLowerCase(); // Convert selected client to lowercase
+      
+      // Check if search term matches delCode or client (case-insensitive)
+      const matchesSearch = 
+        delivery.delCode.toLowerCase().includes(lowerCaseSearchTerm) ||
+        delivery.client.toLowerCase().includes(lowerCaseSearchTerm);
+      
+      // Check if client filter matches (case-insensitive)
+      const matchesClient = lowerCaseSelectedClient ? delivery.client.toLowerCase() === lowerCaseSelectedClient : true;
+      
       return matchesSearch && matchesClient;
     })
   );
+  // --- END UPDATED FILTERING LOGIC ---
 
   useEffect(() => {
     if (observer.current) observer.current.disconnect();
@@ -203,7 +209,13 @@ const DeliveryList = () => {
     }
   }, [page, fetchData]);
 
-  const uniqueClients = [...new Set(deliveries.map((delivery) => delivery.client))].sort();
+  // Ensure uniqueClients are derived from fetched deliveries and sorted (case-insensitive)
+  const uniqueClients = [...new Set(deliveries.map((delivery) => delivery.client))]
+    .map(client => client.toLowerCase()) // Convert to lowercase for uniqueness
+    .filter((value, index, self) => self.indexOf(value) === index) // Filter out duplicates after lowercasing
+    .sort() // Sort alphabetically
+    .map(client => client.charAt(0).toUpperCase() + client.slice(1)); // Convert back to Title Case for display (optional, but good for UI)
+
 
   const handleLogout = () => {
     logoutUser();
@@ -252,7 +264,7 @@ const DeliveryList = () => {
         <Col xs={10}>
           <Form.Control
             type="text"
-            placeholder="Search for deliveries..."
+            placeholder="Search for delivery code or client..." // Updated placeholder
             value={searchTerm}
             onChange={handleSearchChange}
           />
