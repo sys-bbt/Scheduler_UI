@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useContext } from 'rea
 import { Link, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
 import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
-import { FaSpinner } = from 'react-icons/fa';
+import { FaSpinner } from 'react-icons/fa';
 import { UserContext } from './UserContext';
 import './DeliveryList.css';
 import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSelected';
@@ -160,14 +160,7 @@ const DeliveryList = () => {
 
   // NEW useEffect to reset page when search/filter terms change
   useEffect(() => {
-    // This effect runs whenever searchTerm or selectedClient changes.
-    // It resets the page to 0, which will trigger a fresh fetchData(0) via the other useEffect.
-    // This ensures that new search/filter results start from the beginning of the data set.
     setPage(0);
-    // When a search or filter changes, we might also want to clear existing deliveries
-    // if we want the new search/filter to apply to a fresh dataset, rather than a cumulative one.
-    // However, fetchData(0) already handles clearing `prev` deliveries when `currentPage` is 0.
-    // So, this is primarily to force a new fetch from page 0.
   }, [searchTerm, selectedClient]);
 
 
@@ -336,7 +329,8 @@ const DeliveryList = () => {
       <p>You have {filteredDeliveries.length} active deliveries</p>
 
       <Row>
-        {filteredDeliveries.map((delivery) => {
+        {/* CORRECTED LINE: Changed deliveries.map to filteredDeliveries.map */}
+        {filteredDeliveries.map((delivery) => { 
           const progress =
             delivery.tasksTotal === 0 ? 0 : (delivery.tasksPlanned / delivery.tasksTotal) * 100;
 
