@@ -275,7 +275,7 @@ const DeliveryList = () => {
       <Container className="text-center my-5">
         <p>No deliveries match your current search/filter criteria.</p>
         <Button variant="outline-secondary" onClick={() => { setSearchTerm(''); setSelectedClient(''); }}>
-          Go Back
+          Clear Search/Filters
         </Button>
         <Button variant="outline-danger" onClick={handleLogout} className="ml-2">
             Logout
@@ -329,8 +329,8 @@ const DeliveryList = () => {
       <p>You have {filteredDeliveries.length} active deliveries</p>
 
       <Row>
-        {/* CORRECTED LINE: Changed deliveries.map to filteredDeliveries.map */}
-        {filteredDeliveries.map((delivery) => { 
+        {/* THIS IS THE CRITICAL LINE THAT NEEDS TO USE filteredDeliveries */}
+        {filteredDeliveries.map((delivery) => {
           const progress =
             delivery.tasksTotal === 0 ? 0 : (delivery.tasksPlanned / delivery.tasksTotal) * 100;
 
