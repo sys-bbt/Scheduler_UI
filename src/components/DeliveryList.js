@@ -275,7 +275,7 @@ const DeliveryList = () => {
       <Container className="text-center my-5">
         <p>No deliveries match your current search/filter criteria.</p>
         <Button variant="outline-secondary" onClick={() => { setSearchTerm(''); setSelectedClient(''); }}>
-          Clear Search/Filters
+          Go Back
         </Button>
         <Button variant="outline-danger" onClick={handleLogout} className="ml-2">
             Logout
