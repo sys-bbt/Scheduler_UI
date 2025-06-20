@@ -40,10 +40,19 @@ const DeliveryList = () => {
 
   const handleSort = (deliveriesToSort) => {
     return deliveriesToSort.sort((a, b) => {
-      const dateA = new Date(a.createdAt || a.Created_at);
-      const dateB = new Date(b.createdAt || b.Created_at);
-      if (isNaN(dateA) || isNaN(dateB)) return 0;
-      return sortOption === 'earliest' ? dateA - dateB : dateB - a;
+      // Use plannedStartTimestampRaw for sorting
+      const dateA = new Date(a.plannedStartTimestampRaw?.value || a.plannedStartTimestampRaw);
+      const dateB = new Date(b.plannedStartTimestampRaw?.value || b.plannedStartTimestampRaw);
+      
+      // Handle cases where date might be invalid or null
+      const isValidDateA = !isNaN(dateA.getTime());
+      const isValidDateB = !isNaN(dateB.getTime());
+
+      if (!isValidDateA && !isValidDateB) return 0; // Both invalid, treat as equal
+      if (!isValidDateA) return 1; // A is invalid, B comes first
+      if (!isValidDateB) return -1; // B is invalid, A comes first
+
+      return sortOption === 'earliest' ? dateA - dateB : dateB - dateA;
     });
   };
 
@@ -90,7 +99,8 @@ const DeliveryList = () => {
         const newDeliveries = deliveriesForList.map((delivery) => ({
           delCode: delivery.DelCode_w_o__,
           client: `${delivery.Client}`,
-          initiated: formatTimestamp(delivery.Planned_Start_Timestamp),
+          initiated: formatTimestamp(delivery.Planned_Start_Timestamp), // Formatted string for display
+          plannedStartTimestampRaw: delivery.Planned_Start_Timestamp, // Store raw timestamp for sorting
           deadline: calculateDeadline(
             delivery.Planned_Delivery_Timestamp,
             delivery.Planned_Start_Timestamp
@@ -137,6 +147,9 @@ const DeliveryList = () => {
   useEffect(() => {
     if (userEmail && authToken) {
       console.log("DeliveryList: userEmail and authToken are available, triggering fetchData(0).");
+      // Reset deliveries when user/auth changes or on initial fetch to prevent stale data
+      setDeliveries([]); 
+      setPage(0); // Reset page to 0 for a fresh fetch
       fetchData(0);
     } else {
       console.log("DeliveryList: userEmail or authToken not yet available for initial fetch.");
@@ -168,30 +181,30 @@ const DeliveryList = () => {
     setSearchTerm(event.target.value);
   };
 
-  // --- UPDATED FILTERING LOGIC ---
+  // Filtering logic
   const filteredDeliveries = handleSort(
     deliveries.filter((delivery) => {
       const lowerCaseSearchTerm = searchTerm.toLowerCase();
-      const lowerCaseSelectedClient = selectedClient.toLowerCase(); // Convert selected client to lowercase
-      
-      // Check if search term matches delCode or client (case-insensitive)
-      const matchesSearch = 
-        delivery.delCode.toLowerCase().includes(lowerCaseSearchTerm) ||
-        delivery.client.toLowerCase().includes(lowerCaseSearchTerm);
-      
-      // Check if client filter matches (case-insensitive)
-      const matchesClient = lowerCaseSelectedClient ? delivery.client.toLowerCase() === lowerCaseSelectedClient : true;
+      const lowerCaseSelectedClient = selectedClient.toLowerCase();
+
+      // Make sure delivery.delCode and delivery.client exist before calling .toLowerCase() or .includes()
+      const matchesSearch =
+        (delivery.delCode && String(delivery.delCode).toLowerCase().includes(lowerCaseSearchTerm)) ||
+        (delivery.client && String(delivery.client).toLowerCase().includes(lowerCaseSearchTerm));
+
+      const matchesClient = lowerCaseSelectedClient ? (delivery.client && String(delivery.client).toLowerCase() === lowerCaseSelectedClient) : true;
       
       return matchesSearch && matchesClient;
     })
   );
-  // --- END UPDATED FILTERING LOGIC ---
 
   useEffect(() => {
     if (observer.current) observer.current.disconnect();
     const loadMoreDeliveries = (entries) => {
       const [entry] = entries;
-      if (entry.isIntersecting && !loading && filteredDeliveries.length > 0) {
+      // Only load more if currently displaying ALL fetched deliveries and not actively searching/filtering
+      // This prevents infinite scroll from fetching new data while a search/filter is active and showing a subset
+      if (entry.isIntersecting && !loading && !searchTerm && !selectedClient && filteredDeliveries.length > 0 && deliveries.length === filteredDeliveries.length) {
         setPage((prevPage) => prevPage + 1);
       }
     };
@@ -201,7 +214,7 @@ const DeliveryList = () => {
     return () => {
       if (observer.current) observer.current.disconnect();
     };
-  }, [loading, filteredDeliveries]);
+  }, [loading, filteredDeliveries, searchTerm, selectedClient, deliveries.length]); // Added dependencies
 
   useEffect(() => {
     if (page > 0) {
@@ -209,12 +222,12 @@ const DeliveryList = () => {
     }
   }, [page, fetchData]);
 
-  // Ensure uniqueClients are derived from fetched deliveries and sorted (case-insensitive)
   const uniqueClients = [...new Set(deliveries.map((delivery) => delivery.client))]
-    .map(client => client.toLowerCase()) // Convert to lowercase for uniqueness
-    .filter((value, index, self) => self.indexOf(value) === index) // Filter out duplicates after lowercasing
-    .sort() // Sort alphabetically
-    .map(client => client.charAt(0).toUpperCase() + client.slice(1)); // Convert back to Title Case for display (optional, but good for UI)
+    .filter(client => client) // Filter out null/undefined clients before mapping and sorting
+    .map(client => client.toLowerCase())
+    .filter((value, index, self) => self.indexOf(value) === index)
+    .sort()
+    .map(client => client.charAt(0).toUpperCase() + client.slice(1));
 
 
   const handleLogout = () => {
@@ -222,7 +235,9 @@ const DeliveryList = () => {
     navigate('/login');
   };
 
-  if (loading && deliveries.length === 0) {
+  // --- Conditional Rendering for different states ---
+  // 1. Initial loading state (before any data is fetched)
+  if (loading && deliveries.length === 0 && !searchTerm && !selectedClient) {
     return (
       <Container className="text-center my-5">
         <FaSpinner
@@ -234,10 +249,12 @@ const DeliveryList = () => {
     );
   }
 
-  if (!loading && filteredDeliveries.length === 0) {
+  // 2. No deliveries fetched at all (after loading, and no search/filter is active)
+  // This means the user genuinely has no deliveries assigned or the DB is empty for them
+  if (!loading && deliveries.length === 0 && !searchTerm && !selectedClient) {
     return (
       <Container className="text-center my-5">
-        <p>No active deliveries found.</p>
+        <p>No active deliveries found for your account.</p>
         <Button variant="outline-primary" onClick={handleLogout}>
           Logout
         </Button>
@@ -245,6 +262,23 @@ const DeliveryList = () => {
     );
   }
 
+  // 3. Deliveries are loaded, but current search/filter yields no results
+  // This is where we show the "Clear Search/Filters" button
+  if (!loading && filteredDeliveries.length === 0 && (searchTerm || selectedClient)) {
+    return (
+      <Container className="text-center my-5">
+        <p>No deliveries match your current search/filter criteria.</p>
+        <Button variant="outline-secondary" onClick={() => { setSearchTerm(''); setSelectedClient(''); }}>
+          Clear Search/Filters
+        </Button>
+        <Button variant="outline-danger" onClick={handleLogout} className="ml-2">
+            Logout
+        </Button>
+      </Container>
+    );
+  }
+
+  // If none of the above, render the main list
   return (
     <Container>
       <Row className="justify-content-between align-items-center my-4">
@@ -264,7 +298,7 @@ const DeliveryList = () => {
         <Col xs={10}>
           <Form.Control
             type="text"
-            placeholder="Search for delivery code or client..." // Updated placeholder
+            placeholder="Search for delivery code or client..."
             value={searchTerm}
             onChange={handleSearchChange}
           />
@@ -309,7 +343,8 @@ const DeliveryList = () => {
                           >
                             {delivery.tasksPlanned} of {delivery.tasksTotal} Planned
                           </span>
-                          <DeleteButton deliveryCode={delivery.delCode} onDelete={handleDelete} />
+                          {/* Render DeleteButton only if isAdmin is true */}
+                          {isAdmin && <DeleteButton deliveryCode={delivery.delCode} onDelete={handleDelete} />}
                         </div>
                         {delivery.client && (
                           <p className="mb-1 text-muted">
