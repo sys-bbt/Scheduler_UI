@@ -119,27 +119,70 @@ const DeliveryDetail = () => {
         } else if (key === 'reassign') {
             setActionType('Reassign');
         }
-        // Removed the 'complete' action as per user request
         setActiveTaskKey(task.Key);
     };
 
-    const handleFormSubmit = (formData) => {
+    const handleFormSubmit = async (formData) => { // Made async to await API call
         console.log("Form submitted data:", formData);
-        const updatedTasks = tasks.map((task) =>
-            task.Key === activeTaskKey
-                ? {
-                      ...task,
-                      scheduled: true,
-                      personResponsible: formData.personResponsible || task.personResponsible,
-                      totalTime: formData.totalTime || task.totalTime,
-                      formattedDuration: `${Math.floor((formData.totalTime || 0) / 60)}h ${ (formData.totalTime || 0) % 60}m`,
-                      Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp,
-                      Current_Status: formData.Current_Status || task.Current_Status || 'Scheduled',
-                  }
-                : task
-        );
+        
+        let newPlannedTasksCount = 0;
+        let totalTasksCount = 0;
+
+        const updatedTasks = tasks.map((task) => {
+            if (task.Key === activeTaskKey) {
+                // This is the task that was just scheduled/updated
+                const updatedTask = {
+                    ...task,
+                    scheduled: true, // Mark as scheduled
+                    personResponsible: formData.personResponsible || task.personResponsible,
+                    totalTime: formData.totalTime || task.totalTime,
+                    formattedDuration: `${Math.floor((formData.totalTime || 0) / 60)}h ${ (formData.totalTime || 0) % 60}m`,
+                    Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp,
+                    Current_Status: formData.Current_Status || task.Current_Status || 'Scheduled',
+                };
+                return updatedTask;
+            }
+            return task;
+        });
+
+        // Calculate new planned and total tasks from the updatedTasks array
+        // planned tasks are those that have a Planned_Delivery_Timestamp
+        newPlannedTasksCount = updatedTasks.filter(task => 
+            !!task.Planned_Delivery_Timestamp && 
+            (typeof task.Planned_Delivery_Timestamp === 'string' ? task.Planned_Delivery_Timestamp !== "NULL" : task.Planned_Delivery_Timestamp.value !== null)
+        ).length;
+        
+        // Total tasks are all tasks in this detail view (excluding Step_ID=0, and not completed)
+        totalTasksCount = updatedTasks.length; 
+
+        // Update local state first
         setTasks(updatedTasks);
         setActiveTaskKey(null);
+
+        // --- NEW: Call backend to update Planned_Tasks and Total_Tasks for the main delivery ---
+        try {
+            console.log(`DeliveryDetail: Updating delivery counts for ${delCode}. Planned: ${newPlannedTasksCount}, Total: ${totalTasksCount}`);
+            const response = await fetch(`${BACKEND_API_BASE_URL}/api/delivery_counts/${delCode}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    newPlannedTasks: newPlannedTasksCount,
+                    newTotalTasks: totalTasksCount 
+                }),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Failed to update delivery counts: ${response.status} - ${errorText}`);
+            }
+            console.log('Delivery counts updated successfully on backend.');
+        } catch (error) {
+            console.error('Error updating delivery counts on backend:', error);
+            // Optionally, show an error message to the user
+        }
+        // --- END NEW ---
     };
 
     const toggleTimer = (taskKey) => {
@@ -165,8 +208,6 @@ const DeliveryDetail = () => {
         <Menu onClick={(info) => handleMenuClick(task, info)}>
             <MenuItem key="reschedule">Reschedule Task</MenuItem>
             <MenuItem key="reassign">Reassign Task</MenuItem>
-            {/* Removed the "Complete Task" option as per user request */}
-            {/* <MenuItem key="complete">Complete Task</MenuItem> */}
         </Menu>
     );
 
