@@ -10,9 +10,14 @@ import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
+
+// Define the status value that indicates a task is completed and should be hidden
+const COMPLETED_TASK_STATUS = 'Completed'; // Adjust this string to match your BigQuery 'Current_Status' for completed tasks
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
+    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -29,10 +34,8 @@ const DeliveryDetail = () => {
     console.log('DeliveryDetail: userEmail from Context:', userEmail);
     console.log('DeliveryDetail: Extracted delCode from URL:', delCode);
 
-    // Determine isAdmin status for the current user
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
     console.log(`DeliveryDetail: Current User Email: ${userEmail}, Is Admin: ${isAdmin}`);
-
 
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -53,7 +56,6 @@ const DeliveryDetail = () => {
             try {
                 setLoading(true);
 
-                // --- UPDATED: Pass isAdmin flag to backend ---
                 const deliveryResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&delCode=${delCode}&isAdmin=${isAdmin}`);
                 if (!deliveryResponse.ok) {
                     const errorText = await deliveryResponse.text();
@@ -69,12 +71,8 @@ const DeliveryDetail = () => {
                 const durationData = await durationResponse.json();
 
                 if (deliveryData.hasOwnProperty(delCode)) {
-                    // This filter remains the same:
-                    // It ensures only tasks (Step_ID !== 0) are shown in the list,
-                    // as the backend now sends ALL tasks for admins for a given delCode,
-                    // or only assigned tasks for non-admins.
                     const fetchedTasks = deliveryData[delCode]
-                       .filter((task) => task.Step_ID !== 0 && (task.Planned_Delivery_Timestamp === null || (typeof task.Planned_Delivery_Timestamp === 'object' && task.Planned_Delivery_Timestamp.value === null)))
+                       .filter((task) => task.Step_ID !== 0 && task.Current_Status !== COMPLETED_TASK_STATUS)
                         .map((task) => {
                             const taskDurationInMinutes = durationData[task.Key]?.totalDuration || 0;
                             const hours = Math.floor(taskDurationInMinutes / 60);
@@ -105,7 +103,7 @@ const DeliveryDetail = () => {
         };
 
         fetchDeliveryDetails();
-    }, [delCode, userEmail, isAdmin]); // Added isAdmin to dependencies
+    }, [delCode, userEmail, isAdmin]);
 
 
     const handleTaskClick = (task) => {
@@ -121,6 +119,7 @@ const DeliveryDetail = () => {
         } else if (key === 'reassign') {
             setActionType('Reassign');
         }
+        // Removed the 'complete' action as per user request
         setActiveTaskKey(task.Key);
     };
 
@@ -135,6 +134,7 @@ const DeliveryDetail = () => {
                       totalTime: formData.totalTime || task.totalTime,
                       formattedDuration: `${Math.floor((formData.totalTime || 0) / 60)}h ${ (formData.totalTime || 0) % 60}m`,
                       Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp,
+                      Current_Status: formData.Current_Status || task.Current_Status || 'Scheduled',
                   }
                 : task
         );
@@ -152,10 +152,21 @@ const DeliveryDetail = () => {
         setTasks(updatedTasks);
     };
 
+    const formatTimestamp = (timestamp) => {
+        if (!timestamp) return 'No start time';
+        const date = new Date(timestamp?.value || timestamp);
+        if (timestamp && typeof timestamp === 'object' && timestamp.value) {
+            return new Date(timestamp.value).toLocaleString();
+        }
+        return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
+    };
+
     const taskMenu = (task) => (
         <Menu onClick={(info) => handleMenuClick(task, info)}>
             <MenuItem key="reschedule">Reschedule Task</MenuItem>
             <MenuItem key="reassign">Reassign Task</MenuItem>
+            {/* Removed the "Complete Task" option as per user request */}
+            {/* <MenuItem key="complete">Complete Task</MenuItem> */}
         </Menu>
     );
 
@@ -220,7 +231,7 @@ const DeliveryDetail = () => {
                                     <div
                                         className="task-card"
                                         onClick={() => handleTaskClick(task)}
-                                        style={{ cursor: task.scheduled ? 'default' : 'pointer' }}
+                                        style={{ cursor: task.scheduled ? 'pointer' : 'pointer' }}
                                     >
                                         <Card className="mb-3">
                                             <Card.Body>
@@ -261,6 +272,15 @@ const DeliveryDetail = () => {
                                                 </div>
 
                                                 <div className="task-status mt-2">
+                                                    <p className="mb-1">
+                                                        Status: {task.scheduled ? 'Scheduled' : 'Unscheduled'}
+                                                        {task.Current_Status && task.Current_Status !== COMPLETED_TASK_STATUS && ` (${task.Current_Status})`}
+                                                    </p>
+                                                    {task.scheduled && task.Planned_Delivery_Timestamp && (
+                                                        <p className="mb-1">
+                                                            Delivery Deadline: {formatTimestamp(task.Planned_Delivery_Timestamp)}
+                                                        </p>
+                                                    )}
                                                     {task.isPlaying ? (
                                                         <p className="text-success">On time for going live</p>
                                                     ) : (
