@@ -15,14 +15,19 @@ const ADMIN_EMAILS = [
     "hitesh.r@brightbraintech.com"
 ];
 
-// Define a mapping from email to person name for non-admin users.
-const EMAIL_TO_PERSON_MAP = {
-    "neelam.p@brightbraintech.com": "Neelam Purohit",
-    "meghna.j@brightbraintech.com": "Meghna Jalali",
-    "zoya.a@brightbraintech.com": "Zoya Ansari",
-    "shweta.g@brightbraintech.com": "Shweta Gaikwad",
-    "hitesh.r@brightbraintech.com": "Hitesh Rattesar",
-    "systems@brightbraintech.com": "System",
+// NEW: Comprehensive map for person name to their primary email and full emails string (for BigQuery's 'Emails' column)
+// You MUST populate this map with ALL expected "Person Responsible" names and their corresponding email data
+// based on your BigQuery data and requirements.
+const PERSON_EMAIL_DATA_MAP = {
+    "Neelam Purohit": { primaryEmail: "neelam.p@brightbraintech.com", allEmails: "neelam.p@brightbraintech.com" },
+    "Meghna Jalali": { primaryEmail: "meghna.j@brightbraintech.com", allEmails: "meghna.j@brightbraintech.com" },
+    "Zoya Ansari": { primaryEmail: "zoya.a@brightbraintech.com", allEmails: "zoya.a@brightbraintech.com" },
+    "Shweta Gaikwad": { primaryEmail: "shweta.g@brightbraintech.com", allEmails: "shweta.g@brightbraintech.com" },
+    "Hitesh Rattesar": { primaryEmail: "hitesh.r@brightbraintech.com", allEmails: "hitesh.r@brightbraintech.com" },
+    "System": { primaryEmail: "systems@brightbraintech.com", allEmails: "systems@brightbraintech.com" },
+    // Example for a person/role associated with multiple emails (access emails)
+    // "Team Lead": { primaryEmail: "team.lead@brightbraintech.com", allEmails: "team.lead@brightbraintech.com,member1@brightbraintech.com,member2@brightbraintech.com" },
+    // Add any other specific "Access Emails" or multi-email mappings you need here.
 };
 
 // HARDCODED LIST OF PERSONS - THIS REPLACES THE API CALL
@@ -33,16 +38,8 @@ const ALL_AVAILABLE_PERSONS_HARDCODED = [
     "Shweta Gaikwad",
     "Hitesh Rattesar",
     "System",
-    // IMPORTANT: Add any other 'Responsibility' names that you expect from BigQuery here
-    // This list needs to be comprehensive and kept up-to-date manually for now.
-    // Ideally, you'd fetch this from the backend if it changes frequently.
+    // Ensure this list is comprehensive and matches the keys in PERSON_EMAIL_DATA_MAP
 ];
-
-// --- UPDATED: Define the base URL for your backend API ---
-// This will now correctly pick up from process.env.REACT_APP_BACKEND_URL
-// The fallback is provided for local development outside of a Vercel context.
-const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
-console.log('Using Backend API URL:', BACKEND_API_BASE_URL);
 
 
 const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
@@ -65,16 +62,16 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [numberOfDays, setNumberOfDays] = useState(0);
     const [existingSchedules, setExistingSchedules] = useState({});
 
-    // --- DEBUGGING LOGS START ---
     console.log('FormComponent: currentUserEmail received:', currentUserEmail);
     const isAdmin = ADMIN_EMAILS.includes(currentUserEmail);
     console.log('FormComponent: isAdmin calculated as:', isAdmin);
-    // --- DEBUGGING LOGS END ---
 
 
     // Memoize the mapping logic to prevent unnecessary re-renders
     const getPersonNameFromEmail = useCallback((email) => {
-        return EMAIL_TO_PERSON_MAP[email] || null;
+        // Find the person name by iterating through PERSON_EMAIL_DATA_MAP
+        const entry = Object.entries(PERSON_EMAIL_DATA_MAP).find(([, value]) => value.primaryEmail === email || value.allEmails.includes(email));
+        return entry ? entry[0] : null;
     }, []);
 
     // --- EFFECT HOOK 1: FETCH TASK DATA AND EXISTING SCHEDULES ---
@@ -86,12 +83,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         name: task.Task_Details || '',
                     });
 
-                    // --- Using full backend URL for API call ---
-                    const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-                    }
+                    const response = await fetch(`/api/per-key-per-day`);
                     const data = await response.json();
 
                     const taskData = data[task.Key];
@@ -111,7 +103,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                                 }
                             });
                         }
-                        // Fallback if taskEntries didn't set initial hours but total duration exists
                         if (Object.keys(initialHours).length === 0 && totalMinutes > 0 && startDate) {
                             initialHours[0] = totalMinutes;
                         }
@@ -152,12 +143,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     }
 
 
-                    // --- Using full backend URL for API call ---
-                    const perPersonResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-person-per-day`);
-                    if (!perPersonResponse.ok) {
-                        const errorText = await perPersonResponse.text();
-                        throw new Error(`HTTP error! status: ${perPersonResponse.status}, message: ${errorText}`);
-                    }
+                    const perPersonResponse = await fetch(`/api/per-person-per-day`);
                     const perPersonData = await perPersonResponse.json();
 
                     const schedules = {};
@@ -176,7 +162,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 console.error("Error fetching task data or schedules:", error);
                 notification.error({
                     message: 'Error',
-                    description: `Failed to load task data or existing schedules: ${error.message}. Please check network and server logs.`,
+                    description: 'Failed to load task data or existing schedules. Please check network and server logs.',
                 });
             }
         };
@@ -189,28 +175,19 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         const initialResponsibilityFromTask = task?.Responsibility || '';
         const userPersonName = getPersonNameFromEmail(currentUserEmail);
 
-        if (isAdmin) {
-            // Admin user: Can see full list, try to pre-fill from task.
-            if (initialResponsibilityFromTask && ALL_AVAILABLE_PERSONS_HARDCODED.includes(initialResponsibilityFromTask)) {
-                setPersonResponsible(initialResponsibilityFromTask);
-                form.setFieldsValue({ personResponsible: initialResponsibilityFromTask });
-            } else {
-                setPersonResponsible('');
-                form.setFieldsValue({ personResponsible: undefined });
-            }
+        // Determine initial personResponsible for form dropdown
+        if (initialResponsibilityFromTask && ALL_AVAILABLE_PERSONS_HARDCODED.includes(initialResponsibilityFromTask)) {
+            setPersonResponsible(initialResponsibilityFromTask);
+            form.setFieldsValue({ personResponsible: initialResponsibilityFromTask });
+        } else if (userPersonName && ALL_AVAILABLE_PERSONS_HARDCODED.includes(userPersonName)) {
+            // If task is unassigned, but current user can be mapped, use current user's name
+            setPersonResponsible(userPersonName);
+            form.setFieldsValue({ personResponsible: userPersonName });
         } else {
-            // Non-admin user: Only allowed to see their mapped name.
-            if (userPersonName && ALL_AVAILABLE_PERSONS_HARDCODED.includes(userPersonName)) {
-                setPersonResponsible(userPersonName);
-                form.setFieldsValue({ personResponsible: userPersonName });
-            } else {
-                // If current user's email doesn't map to a known person, or that person
-                // isn't in the hardcoded list, set to empty/undefined and disable.
-                setPersonResponsible('');
-                form.setFieldsValue({ personResponsible: undefined });
-            }
+            setPersonResponsible('');
+            form.setFieldsValue({ personResponsible: undefined });
         }
-    }, [task, currentUserEmail, form, getPersonNameFromEmail, isAdmin]);
+    }, [task, currentUserEmail, form, getPersonNameFromEmail]);
 
 
     const handleStartDateChange = (date) => {
@@ -277,6 +254,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     };
                 });
 
+                // --- NEW: Determine Email and Emails based on selected personResponsible ---
+                const selectedPersonEmailData = PERSON_EMAIL_DATA_MAP[personResponsible];
+                const newEmail = selectedPersonEmailData ? selectedPersonEmailData.primaryEmail : null;
+                const newEmails = selectedPersonEmailData ? selectedPersonEmailData.allEmails : null;
+                // --- END NEW ---
+
                 const scheduledData = {
                     Key: task.Key,
                     Delivery_code: task.Delivery_code,
@@ -288,16 +271,16 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     Short_Description: task.Short_Description,
                     Planned_Start_Timestamp: plannedStartTimestamp,
                     Planned_Delivery_Timestamp: plannedDeliveryTimestamp,
-                    Responsibility: personResponsible,
-                    Current_Status: task.Current_Status,
-                    Email: task.Email,
-                    Emails: task.Emails,
+                    Responsibility: personResponsible, // This comes from the dropdown
+                    Current_Status: task.Current_Status || 'Scheduled', // Default to 'Scheduled' if unassigned
+                    Email: newEmail, // Use the dynamically determined email
+                    Emails: newEmails, // Use the dynamically determined emails string
                     Total_Tasks: task.Total_Tasks,
                     Completed_Tasks: task.Completed_Tasks,
                     Planned_Tasks: task.Planned_Tasks,
                     Percent_Tasks_Completed: task.Percent_Tasks_Completed,
-                    Created_at: moment().format("DD/MM/YYYY"),
-                    Updated_at: moment().format("DD/MM/YYYY"),
+                    Created_at: task.Created_at || moment().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Preserve original or set new
+                    Updated_at: moment().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC",
                     Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss,
                     Card_Corner_Status: task.Card_Corner_Status,
                     sliders: slidersData,
@@ -305,9 +288,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
                 console.log('Scheduled Data for submission:', scheduledData);
 
-                // --- Using full backend URL for API call ---
-                fetch(`${BACKEND_API_BASE_URL}/api/post`, {
-                    method: 'POST',
+                fetch('/api/post', {
+                    method: 'POST', // This endpoint handles both insert and update based on Key existence
                     headers: {
                         'Content-Type': 'application/json',
                     },
@@ -315,8 +297,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 })
                     .then((response) => {
                         if (!response.ok) {
-                            // Attempt to parse error message from response body
-                            return response.text().then(text => { throw new Error(text); });
+                            throw new Error('Network response was not ok');
                         }
                         return response.json();
                     })
@@ -325,10 +306,14 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             message: 'Task Updated',
                             description: 'Your task has been successfully updated!',
                         });
+                        // Pass updated scheduling data back to parent (DeliveryDetail)
                         onSubmit({
-                            personResponsible,
-                            totalTime,
+                            personResponsible: scheduledData.Responsibility,
+                            totalTime: totalTime,
                             Planned_Delivery_Timestamp: scheduledData.Planned_Delivery_Timestamp,
+                            Current_Status: scheduledData.Current_Status,
+                            Email: scheduledData.Email,
+                            Emails: scheduledData.Emails // Pass back new Emails as well
                         });
                     })
                     .catch((error) => {
@@ -502,8 +487,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     filterOption={(input, option) =>
                         (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                     }
-                    // Disable if the user is not an admin
-                    disabled={!isAdmin}
+                    disabled={!isAdmin && !!getPersonNameFromEmail(currentUserEmail)} // Disable if not admin AND user has a mapped name
                 >
                     {personsToDisplay.map((person) => (
                         <Option key={person} value={person}>
