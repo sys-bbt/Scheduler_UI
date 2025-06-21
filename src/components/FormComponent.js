@@ -277,7 +277,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         day: formattedDay,
                         duration: hours[index] || 0,
                         slot: "Null", // Assuming 'Null' is the default slot
-                        personResponsible: personResponsible, // NEW: Include personResponsible for each slider entry
+                        personResponsible: personResponsible, // Include personResponsible for each slider entry
                     };
                 });
 
@@ -285,6 +285,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 const newEmail = selectedPersonEmailData ? selectedPersonEmailData.primaryEmail : null;
                 const newEmails = selectedPersonEmailData ? selectedPersonEmailData.allEmails : null;
                 
+                // Determine if this task was newly scheduled
+                const wasNewlyScheduled = !task.scheduled && totalTime > 0;
+
                 const scheduledData = {
                     Key: task.Key,
                     Delivery_code: task.Delivery_code,
@@ -339,7 +342,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             Planned_Delivery_Timestamp: scheduledData.Planned_Delivery_Timestamp,
                             Current_Status: scheduledData.Current_Status,
                             Email: scheduledData.Email,
-                            Emails: scheduledData.Emails // Pass back new Emails as well
+                            Emails: scheduledData.Emails, // Pass back new Emails as well
+                            wasNewlyScheduled: wasNewlyScheduled, // NEW: Pass this flag
                         });
                     })
                     .catch((error) => {
