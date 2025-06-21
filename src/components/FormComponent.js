@@ -41,6 +41,10 @@ const ALL_AVAILABLE_PERSONS_HARDCODED = [
     // Ensure this list is comprehensive and matches the keys in PERSON_EMAIL_DATA_MAP
 ];
 
+// Define the base URL for your backend API
+const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+console.log('Using Backend API URL:', BACKEND_API_BASE_URL);
+
 
 const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [form] = Form.useForm();
@@ -83,7 +87,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         name: task.Task_Details || '',
                     });
 
-                    const response = await fetch(`/api/per-key-per-day`);
+                    // --- CORRECTED: Use full backend URL for API call ---
+                    const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
                     const data = await response.json();
 
                     const taskData = data[task.Key];
@@ -103,6 +108,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                                 }
                             });
                         }
+                        // Fallback if taskEntries didn't set initial hours but total duration exists
                         if (Object.keys(initialHours).length === 0 && totalMinutes > 0 && startDate) {
                             initialHours[0] = totalMinutes;
                         }
@@ -143,7 +149,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     }
 
 
-                    const perPersonResponse = await fetch(`/api/per-person-per-day`);
+                    // --- CORRECTED: Use full backend URL for API call ---
+                    const perPersonResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-person-per-day`);
                     const perPersonData = await perPersonResponse.json();
 
                     const schedules = {};
@@ -254,11 +261,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     };
                 });
 
-                // --- NEW: Determine Email and Emails based on selected personResponsible ---
+                // --- Determine Email and Emails based on selected personResponsible ---
                 const selectedPersonEmailData = PERSON_EMAIL_DATA_MAP[personResponsible];
                 const newEmail = selectedPersonEmailData ? selectedPersonEmailData.primaryEmail : null;
                 const newEmails = selectedPersonEmailData ? selectedPersonEmailData.allEmails : null;
-                // --- END NEW ---
+                // --- END Determine Email and Emails ---
 
                 const scheduledData = {
                     Key: task.Key,
@@ -288,7 +295,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
                 console.log('Scheduled Data for submission:', scheduledData);
 
-                fetch('/api/post', {
+                // --- CORRECTED: Use full backend URL for API call ---
+                fetch(`${BACKEND_API_BASE_URL}/api/post`, {
                     method: 'POST', // This endpoint handles both insert and update based on Key existence
                     headers: {
                         'Content-Type': 'application/json',
