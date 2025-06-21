@@ -15,7 +15,7 @@ const ADMIN_EMAILS = [
     "hitesh.r@brightbraintech.com"
 ];
 
-// NEW: Comprehensive map for person name to their primary email and full emails string (for BigQuery's 'Emails' column)
+// Comprehensive map for person name to their primary email and full emails string (for BigQuery's 'Emails' column in main task table)
 // You MUST populate this map with ALL expected "Person Responsible" names and their corresponding email data
 // based on your BigQuery data and requirements.
 const PERSON_EMAIL_DATA_MAP = {
@@ -30,7 +30,9 @@ const PERSON_EMAIL_DATA_MAP = {
     // Add any other specific "Access Emails" or multi-email mappings you need here.
 };
 
-// HARDCODED LIST OF PERSONS - THIS REPLACES THE API CALL
+// HARDCODED LIST OF PERSONS - This list is used to populate the Person Responsible dropdown.
+// Ideally, this list could be fetched dynamically from the backend in a separate API call (e.g., /api/persons)
+// if your list of responsibilities changes frequently. For now, it's hardcoded here.
 const ALL_AVAILABLE_PERSONS_HARDCODED = [
     "Neelam Purohit",
     "Meghna Jalali",
@@ -87,8 +89,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         name: task.Task_Details || '',
                     });
 
-                    // --- CORRECTED: Use full backend URL for API call ---
+                    // Use full backend URL for API call
                     const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                    }
                     const data = await response.json();
 
                     const taskData = data[task.Key];
@@ -149,8 +155,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     }
 
 
-                    // --- CORRECTED: Use full backend URL for API call ---
+                    // Use full backend URL for API call
                     const perPersonResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-person-per-day`);
+                    if (!perPersonResponse.ok) {
+                        const errorText = await perPersonResponse.text();
+                        throw new Error(`HTTP error! status: ${perPersonResponse.status}, message: ${errorText}`);
+                    }
                     const perPersonData = await perPersonResponse.json();
 
                     const schedules = {};
@@ -169,7 +179,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 console.error("Error fetching task data or schedules:", error);
                 notification.error({
                     message: 'Error',
-                    description: 'Failed to load task data or existing schedules. Please check network and server logs.',
+                    description: `Failed to load task data or existing schedules: ${error.message}. Please check network and server logs.`,
                 });
             }
         };
@@ -182,19 +192,28 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         const initialResponsibilityFromTask = task?.Responsibility || '';
         const userPersonName = getPersonNameFromEmail(currentUserEmail);
 
-        // Determine initial personResponsible for form dropdown
-        if (initialResponsibilityFromTask && ALL_AVAILABLE_PERSONS_HARDCODED.includes(initialResponsibilityFromTask)) {
-            setPersonResponsible(initialResponsibilityFromTask);
-            form.setFieldsValue({ personResponsible: initialResponsibilityFromTask });
-        } else if (userPersonName && ALL_AVAILABLE_PERSONS_HARDCODED.includes(userPersonName)) {
-            // If task is unassigned, but current user can be mapped, use current user's name
-            setPersonResponsible(userPersonName);
-            form.setFieldsValue({ personResponsible: userPersonName });
+        if (isAdmin) {
+            // Admin user: Can see full list, try to pre-fill from task.
+            if (initialResponsibilityFromTask && ALL_AVAILABLE_PERSONS_HARDCODED.includes(initialResponsibilityFromTask)) {
+                setPersonResponsible(initialResponsibilityFromTask);
+                form.setFieldsValue({ personResponsible: initialResponsibilityFromTask });
+            } else {
+                setPersonResponsible('');
+                form.setFieldsValue({ personResponsible: undefined });
+            }
         } else {
-            setPersonResponsible('');
-            form.setFieldsValue({ personResponsible: undefined });
+            // Non-admin user: Only allowed to see their mapped name.
+            if (userPersonName && ALL_AVAILABLE_PERSONS_HARDCODED.includes(userPersonName)) {
+                setPersonResponsible(userPersonName);
+                form.setFieldsValue({ personResponsible: userPersonName });
+            } else {
+                // If current user's email doesn't map to a known person, or that person
+                // isn't in the hardcoded list, set to empty/undefined and disable.
+                setPersonResponsible('');
+                form.setFieldsValue({ personResponsible: undefined });
+            }
         }
-    }, [task, currentUserEmail, form, getPersonNameFromEmail]);
+    }, [task, currentUserEmail, form, getPersonNameFromEmail, isAdmin]);
 
 
     const handleStartDateChange = (date) => {
@@ -258,15 +277,14 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         day: formattedDay,
                         duration: hours[index] || 0,
                         slot: "Null", // Assuming 'Null' is the default slot
+                        personResponsible: personResponsible, // NEW: Include personResponsible for each slider entry
                     };
                 });
 
-                // --- Determine Email and Emails based on selected personResponsible ---
                 const selectedPersonEmailData = PERSON_EMAIL_DATA_MAP[personResponsible];
                 const newEmail = selectedPersonEmailData ? selectedPersonEmailData.primaryEmail : null;
                 const newEmails = selectedPersonEmailData ? selectedPersonEmailData.allEmails : null;
-                // --- END Determine Email and Emails ---
-
+                
                 const scheduledData = {
                     Key: task.Key,
                     Delivery_code: task.Delivery_code,
@@ -295,9 +313,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
                 console.log('Scheduled Data for submission:', scheduledData);
 
-                // --- CORRECTED: Use full backend URL for API call ---
+                // Using full backend URL for API call to Render.com backend
                 fetch(`${BACKEND_API_BASE_URL}/api/post`, {
-                    method: 'POST', // This endpoint handles both insert and update based on Key existence
+                    method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
@@ -305,7 +323,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 })
                     .then((response) => {
                         if (!response.ok) {
-                            throw new Error('Network response was not ok');
+                            return response.text().then(text => { throw new Error(text); });
                         }
                         return response.json();
                     })
@@ -495,7 +513,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     filterOption={(input, option) =>
                         (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                     }
-                    disabled={!isAdmin && !!getPersonNameFromEmail(currentUserEmail)} // Disable if not admin AND user has a mapped name
+                    // Disable if the user is not an admin
+                    disabled={!isAdmin}
                 >
                     {personsToDisplay.map((person) => (
                         <Option key={person} value={person}>
