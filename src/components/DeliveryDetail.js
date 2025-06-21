@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { Container, Card, ListGroup, Row, Col, Spinner } from 'react-bootstrap';
+import { Container, Card, ListGroup, Row, Col, Spinner, ProgressBar } from 'react-bootstrap'; // Import ProgressBar
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
-import { FaPause, FaPlay, FaStop, FaCalendarAlt } from 'react-icons/fa';
+import { FaPause, FaPlay, FaStop, FaCalendarAlt, FiCheckCircle } from 'react-icons/fa'; // Import FiCheckCircle
 import FormComponent from './FormComponent'; // Ensure your form component is imported
 import { UserContext } from './UserContext'; // Import UserContext
 import { notification } from 'antd'; // Ensure notification is imported
@@ -170,6 +170,24 @@ const DeliveryDetail = () => {
                 setDeliveryCounts(prev => ({ ...prev, plannedTasks: prev.plannedTasks - 1 }));
             }
         }
+    };
+
+    // Handler for clicking on a task to open the form
+    const handleTaskClick = (task) => {
+        if (!task.scheduled) {
+            setActionType('Schedule');
+            setActiveTaskKey(task.Key);
+        }
+    };
+
+    // Handler for menu clicks (Reschedule, Reassign)
+    const handleMenuClick = (task, { key }) => {
+        if (key === 'reschedule') {
+            setActionType('Reschedule');
+        } else if (key === 'reassign') {
+            setActionType('Reassign');
+        }
+        setActiveTaskKey(task.Key);
     };
 
     // Timer control logic for tasks
