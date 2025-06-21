@@ -4,38 +4,23 @@ import { Container, Card, ListGroup, Row, Col, Spinner } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
 import { FaPause, FaPlay, FaStop, FaCalendarAlt } from 'react-icons/fa';
-import FormComponent from './FormComponent';
-import { UserContext } from './UserContext';
+import FormComponent from './FormComponent'; // Ensure your form component is imported
+import { UserContext } from './UserContext'; // Import UserContext
+import { notification } from 'antd'; // Ensure notification is imported
 import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
 
+// --- NEW: Define the base URL for your backend API, consistent with FormComponent ---
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 
-// Define the status value that indicates a task is completed and should be hidden
-const COMPLETED_TASK_STATUS = 'Completed'; // Adjust this string to match your BigQuery 'Current_Status' for completed tasks
-
-// Define admin emails on the frontend, matching the backend
-const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
-    "neelam.p@brightbraintech.com",
-    "meghna.j@brightbraintech.com",
-    "zoya.a@brightbraintech.com",
-    "shweta.g@brightbraintech.com",
-    "hitesh.r@brightbraintech.com"
-];
-
 const DeliveryDetail = () => {
     const location = useLocation();
-    const delCodeMatch = location.pathname.match(/\/delivery\/data\/(.*)/);
+    const delCodeMatch = location.pathname.match(/\/delivery\/data\/(\d+)/);
     const delCode = delCodeMatch ? delCodeMatch[1] : null;
 
     const { userEmail } = useContext(UserContext);
     console.log('DeliveryDetail: userEmail from Context:', userEmail);
-    console.log('DeliveryDetail: Extracted delCode from URL:', delCode);
-
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
-    console.log(`DeliveryDetail: Current User Email: ${userEmail}, Is Admin: ${isAdmin}`);
 
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -43,7 +28,10 @@ const DeliveryDetail = () => {
     const [activeTaskKey, setActiveTaskKey] = useState(null);
     const [actionType, setActionType] = useState('');
     const [tasks, setTasks] = useState([]);
+    // NEW STATE: To hold Planned_Tasks and Total_Tasks for the main delivery card
+    const [deliveryCounts, setDeliveryCounts] = useState({ totalTasks: 0, plannedTasks: 0 });
 
+    // Fetching delivery details from the server
     useEffect(() => {
         const fetchDeliveryDetails = async () => {
             if (!delCode || !userEmail) {
@@ -56,7 +44,7 @@ const DeliveryDetail = () => {
             try {
                 setLoading(true);
 
-                const deliveryResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&delCode=${delCode}&isAdmin=${isAdmin}`);
+                const deliveryResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&delCode=${delCode}`);
                 if (!deliveryResponse.ok) {
                     const errorText = await deliveryResponse.text();
                     throw new Error(`HTTP error! status: ${deliveryResponse.status}, message: ${errorText}`);
@@ -71,28 +59,46 @@ const DeliveryDetail = () => {
                 const durationData = await durationResponse.json();
 
                 if (deliveryData.hasOwnProperty(delCode)) {
-                    const fetchedTasks = deliveryData[delCode]
-                       .filter((task) => task.Step_ID !== 0 && task.Current_Status !== COMPLETED_TASK_STATUS)
+                    const allTasksForDelCode = deliveryData[delCode];
+                    
+                    // Identify the main delivery card (Step_ID = 0)
+                    const mainDeliveryEntry = allTasksForDelCode.find(task => task.Step_ID === 0);
+                    if (mainDeliveryEntry) {
+                        setDeliveryCounts({
+                            totalTasks: mainDeliveryEntry.Total_Tasks || 0,
+                            plannedTasks: mainDeliveryEntry.Planned_Tasks || 0,
+                        });
+                    }
+
+                    // Filtering tasks with Step_ID !== 0 and Planned_Delivery_Timestamp being null
+                    const fetchedTasks = allTasksForDelCode
+                       .filter((task) => task.Step_ID !== 0) // Filter for sub-tasks
                         .map((task) => {
                             const taskDurationInMinutes = durationData[task.Key]?.totalDuration || 0;
                             const hours = Math.floor(taskDurationInMinutes / 60);
                             const minutes = taskDurationInMinutes % 60;
                             const formattedDuration = `${hours}h ${minutes}m`;
 
+                            // Determine 'scheduled' status based on whether it has a planned delivery timestamp
+                            const isScheduled = !!task.Planned_Delivery_Timestamp && 
+                                (typeof task.Planned_Delivery_Timestamp === 'string' 
+                                    ? task.Planned_Delivery_Timestamp !== "NULL" && task.Planned_Delivery_Timestamp !== ""
+                                    : task.Planned_Delivery_Timestamp.value !== null && task.Planned_Delivery_Timestamp.value !== "");
+
                             return {
                                 ...task,
-                                scheduled: !!task.Planned_Delivery_Timestamp && (typeof task.Planned_Delivery_Timestamp === 'string' ? task.Planned_Delivery_Timestamp !== "NULL" : task.Planned_Delivery_Timestamp.value !== null),
+                                scheduled: isScheduled, // Use the new isScheduled variable
                                 personResponsible: task.Responsibility || 'Unassigned',
-                                totalTime: taskDurationInMinutes,
+                                totalTime: taskDurationInMinutes, // Keep total duration in minutes
                                 formattedDuration,
-                                isPlaying: false,
+                                isPlaying: false, // Default to not playing
                             };
                         });
-                    setDelivery(deliveryData[delCode]);
-                    setTasks(fetchedTasks);
+                    setDelivery(allTasksForDelCode); // Set all delivery data
+                    setTasks(fetchedTasks); // Set filtered sub-tasks
                     console.log('Fetched tasks for delivery:', fetchedTasks);
                 } else {
-                    setError(`Delivery with code "${delCode}" not found in fetched data.`);
+                    setError('Delivery not found.');
                 }
             } catch (err) {
                 console.error('Error fetching delivery details:', err);
@@ -103,88 +109,70 @@ const DeliveryDetail = () => {
         };
 
         fetchDeliveryDetails();
-    }, [delCode, userEmail, isAdmin]);
+    }, [delCode, userEmail]); 
 
-
-    const handleTaskClick = (task) => {
-        if (!task.scheduled) {
-            setActionType('Schedule');
-            setActiveTaskKey(task.Key);
-        }
-    };
-
-    const handleMenuClick = (task, { key }) => {
-        if (key === 'reschedule') {
-            setActionType('Reschedule');
-        } else if (key === 'reassign') {
-            setActionType('Reassign');
-        }
-        setActiveTaskKey(task.Key);
-    };
-
-    const handleFormSubmit = async (formData) => { // Made async to await API call
-        console.log("Form submitted data:", formData);
+    // Handle form submission from FormComponent
+    const handleFormSubmit = async (formData) => {
+        console.log("Form submitted data to DeliveryDetail:", formData);
         
-        let newPlannedTasksCount = 0;
-        let totalTasksCount = 0;
-
-        const updatedTasks = tasks.map((task) => {
-            if (task.Key === activeTaskKey) {
-                // This is the task that was just scheduled/updated
-                const updatedTask = {
-                    ...task,
-                    scheduled: true, // Mark as scheduled
-                    personResponsible: formData.personResponsible || task.personResponsible,
-                    totalTime: formData.totalTime || task.totalTime,
-                    formattedDuration: `${Math.floor((formData.totalTime || 0) / 60)}h ${ (formData.totalTime || 0) % 60}m`,
-                    Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp,
-                    Current_Status: formData.Current_Status || task.Current_Status || 'Scheduled',
-                };
-                return updatedTask;
-            }
-            return task;
-        });
-
-        // Calculate new planned and total tasks from the updatedTasks array
-        // planned tasks are those that have a Planned_Delivery_Timestamp
-        newPlannedTasksCount = updatedTasks.filter(task => 
-            !!task.Planned_Delivery_Timestamp && 
-            (typeof task.Planned_Delivery_Timestamp === 'string' ? task.Planned_Delivery_Timestamp !== "NULL" : task.Planned_Delivery_Timestamp.value !== null)
-        ).length;
+        // Find the task that was just updated
+        const updatedTask = tasks.find(t => t.Key === activeTaskKey);
         
-        // Total tasks are all tasks in this detail view (excluding Step_ID=0, and not completed)
-        totalTasksCount = updatedTasks.length; 
+        // Check if the task was newly scheduled (it was unscheduled, and now has planned time)
+        // AND if the totalTime is greater than 0
+        const wasNewlyScheduled = !updatedTask?.scheduled && (formData.totalTime || 0) > 0;
 
-        // Update local state first
+        const updatedTasks = tasks.map((task) =>
+            task.Key === activeTaskKey
+                ? {
+                      ...task,
+                      scheduled: true, // Mark the task as scheduled
+                      personResponsible: formData.personResponsible || task.personResponsible, // Updated person responsible
+                      totalTime: formData.totalTime || task.totalTime, // Update totalTime with minutes from form
+                      formattedDuration: `${Math.floor((formData.totalTime || 0) / 60)}h ${ (formData.totalTime || 0) % 60}m`, // Recalculate formattedDuration
+                      Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp, // Update delivery timestamp
+                  }
+                : task
+        );
         setTasks(updatedTasks);
-        setActiveTaskKey(null);
+        setActiveTaskKey(null); // Reset after form submission
 
-        // --- NEW: Call backend to update Planned_Tasks and Total_Tasks for the main delivery ---
-        try {
-            console.log(`DeliveryDetail: Updating delivery counts for ${delCode}. Planned: ${newPlannedTasksCount}, Total: ${totalTasksCount}`);
-            const response = await fetch(`${BACKEND_API_BASE_URL}/api/delivery_counts/${delCode}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    newPlannedTasks: newPlannedTasksCount,
-                    newTotalTasks: totalTasksCount 
-                }),
-            });
+        // NEW LOGIC: Update Planned_Tasks for the main delivery card if a task was newly scheduled
+        if (wasNewlyScheduled) {
+            const newPlannedTasksCount = deliveryCounts.plannedTasks + 1;
+            setDeliveryCounts(prev => ({ ...prev, plannedTasks: newPlannedTasksCount })); // Update local state immediately
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Failed to update delivery counts: ${response.status} - ${errorText}`);
+            try {
+                // Call backend to update Planned_Tasks for the main delivery entry (Step_ID = 0)
+                const response = await fetch(`${BACKEND_API_BASE_URL}/api/delivery_counts/${delCode}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ newPlannedTasks: newPlannedTasksCount, newTotalTasks: deliveryCounts.totalTasks }), // Pass both for completeness
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                }
+                notification.success({
+                    message: 'Delivery Counts Updated',
+                    description: `Planned tasks for delivery ${delCode} updated successfully!`,
+                });
+            } catch (error) {
+                console.error('Error updating delivery counts:', error);
+                notification.error({
+                    message: 'Update Failed',
+                    description: `Failed to update delivery planned tasks: ${error.message}`,
+                });
+                // OPTIONAL: Rollback local state if backend update fails
+                setDeliveryCounts(prev => ({ ...prev, plannedTasks: prev.plannedTasks - 1 }));
             }
-            console.log('Delivery counts updated successfully on backend.');
-        } catch (error) {
-            console.error('Error updating delivery counts on backend:', error);
-            // Optionally, show an error message to the user
         }
-        // --- END NEW ---
     };
 
+    // Timer control logic for tasks
     const toggleTimer = (taskKey) => {
         const updatedTasks = tasks.map((task) => {
             if (task.Key === taskKey) {
@@ -195,19 +183,12 @@ const DeliveryDetail = () => {
         setTasks(updatedTasks);
     };
 
-    const formatTimestamp = (timestamp) => {
-        if (!timestamp) return 'No start time';
-        const date = new Date(timestamp?.value || timestamp);
-        if (timestamp && typeof timestamp === 'object' && timestamp.value) {
-            return new Date(timestamp.value).toLocaleString();
-        }
-        return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
-    };
-
     const taskMenu = (task) => (
         <Menu onClick={(info) => handleMenuClick(task, info)}>
             <MenuItem key="reschedule">Reschedule Task</MenuItem>
             <MenuItem key="reassign">Reassign Task</MenuItem>
+            {/* Conditional "Delete" option (example, if needed) */}
+            {/* <MenuItem key="delete">Delete Task</MenuItem> */}
         </Menu>
     );
 
@@ -230,19 +211,26 @@ const DeliveryDetail = () => {
         );
     }
 
+    // Ensure delivery array is not empty before accessing its first element
     if (!delivery || delivery.length === 0) {
         return (
             <Container className="text-center my-5">
-                <p>No delivery data found for code: {delCode}</p>
+                <p>No delivery found for code: {delCode}</p>
                 <Link to="/">Back to Deliveries</Link>
             </Container>
         );
     }
 
-    const client = delivery[0]?.Client || 'Unknown Client';
-    const shortDescription = delivery[0]?.Short_Description || 'No description available';
-    const plannedStart = delivery[0]?.Planned_Start_Timestamp?.value ? new Date(delivery[0].Planned_Start_Timestamp.value).toLocaleString() : 'N/A';
-    const plannedDelivery = delivery[0]?.Planned_Delivery_Timestamp?.value ? new Date(delivery[0].Planned_Delivery_Timestamp.value).toLocaleString() : 'N/A';
+    // Find the main delivery card for display data
+    const mainDeliveryDisplay = delivery.find(task => task.Step_ID === 0) || delivery[0]; // Fallback to first if 0 not found
+
+    const client = mainDeliveryDisplay?.Client || 'Unknown Client';
+    const shortDescription = mainDeliveryDisplay?.Short_Description || 'No description available';
+    const plannedStart = mainDeliveryDisplay?.Planned_Start_Timestamp?.value ? new Date(mainDeliveryDisplay.Planned_Start_Timestamp.value).toLocaleString() : 'N/A';
+    const plannedDelivery = mainDeliveryDisplay?.Planned_Delivery_Timestamp?.value ? new Date(mainDeliveryDisplay.Planned_Delivery_Timestamp.value).toLocaleString() : 'N/A';
+
+    const progress =
+        deliveryCounts.totalTasks === 0 ? 0 : (deliveryCounts.plannedTasks / deliveryCounts.totalTasks) * 100;
 
     return (
         <Container>
@@ -262,6 +250,28 @@ const DeliveryDetail = () => {
 
             <h3>Tasks</h3>
             <Row>
+                 <Col xs={12}>
+                    <Card className="p-3 shadow-sm task-card mb-3">
+                        <Card.Body>
+                            <div className="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div className="d-flex align-items-center mb-2">
+                                        <FiCheckCircle style={{ marginRight: '8px', color: 'green' }} />
+                                        <span className="font-weight-bold" style={{ fontSize: '1.5rem' }}>
+                                            {deliveryCounts.plannedTasks} of {deliveryCounts.totalTasks} Planned
+                                        </span>
+                                    </div>
+                                    <div className="mb-2">
+                                        <ProgressBar
+                                            now={progress}
+                                            variant={progress > 50 ? 'success' : progress > 20 ? 'warning' : 'danger'}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </Card.Body>
+                    </Card>
+                </Col>
                 {tasks.length > 0 ? (
                     tasks.map((task, index) => {
                         const displayDuration = task.totalTime || task.formattedDuration || '0m';
@@ -272,7 +282,7 @@ const DeliveryDetail = () => {
                                     <div
                                         className="task-card"
                                         onClick={() => handleTaskClick(task)}
-                                        style={{ cursor: task.scheduled ? 'pointer' : 'pointer' }}
+                                        style={{ cursor: task.scheduled ? 'default' : 'pointer' }}
                                     >
                                         <Card className="mb-3">
                                             <Card.Body>
@@ -306,22 +316,13 @@ const DeliveryDetail = () => {
 
                                                     <div className="flex-grow-1 text-center">
                                                         <h5 className="mb-1">{task.Task_Details}</h5>
-                                                        <span className="text-muted">{task.personResponsible}</span>
+                                                        <span className="text-muted">{task.personResponsible}</span> {/* Show the person responsible */}
                                                     </div>
 
                                                     <span>{displayDuration}</span>
                                                 </div>
 
                                                 <div className="task-status mt-2">
-                                                    <p className="mb-1">
-                                                        Status: {task.scheduled ? 'Scheduled' : 'Unscheduled'}
-                                                        {task.Current_Status && task.Current_Status !== COMPLETED_TASK_STATUS && ` (${task.Current_Status})`}
-                                                    </p>
-                                                    {task.scheduled && task.Planned_Delivery_Timestamp && (
-                                                        <p className="mb-1">
-                                                            Delivery Deadline: {formatTimestamp(task.Planned_Delivery_Timestamp)}
-                                                        </p>
-                                                    )}
                                                     {task.isPlaying ? (
                                                         <p className="text-success">On time for going live</p>
                                                     ) : (
