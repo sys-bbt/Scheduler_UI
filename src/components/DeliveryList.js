@@ -21,17 +21,29 @@ const ADMIN_EMAILS_FRONTEND = [
     "hitesh.r@brightbraintech.com"
 ];
 
+// Debounce utility function
+const debounce = (func, delay) => {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+};
+
 const DeliveryList = () => {
   const { userEmail, logoutUser } = useContext(UserContext);
   const navigate = useNavigate();
   const [deliveries, setDeliveries] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(''); // New state for debounced search term
   const [authToken, setAuthToken] = useState(null);
   const [page, setPage] = useState(0);
   const [selectedClient, setSelectedClient] = useState('');
   const [loading, setLoading] = useState(true);
   const observer = useRef(null);
   const [sortOption, setSortOption] = useState('earliest');
+  const [totalFilteredDeliveries, setTotalFilteredDeliveries] = useState(0); // To store the total count from backend
 
   // Determine isAdmin status for the current user
   const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
@@ -40,17 +52,15 @@ const DeliveryList = () => {
 
   const handleSort = (deliveriesToSort) => {
     return deliveriesToSort.sort((a, b) => {
-      // Use plannedStartTimestampRaw for sorting
       const dateA = new Date(a.plannedStartTimestampRaw?.value || a.plannedStartTimestampRaw);
       const dateB = new Date(b.plannedStartTimestampRaw?.value || b.plannedStartTimestampRaw);
       
-      // Handle cases where date might be invalid or null
       const isValidDateA = !isNaN(dateA.getTime());
       const isValidDateB = !isNaN(dateB.getTime());
 
-      if (!isValidDateA && !isValidDateB) return 0; // Both invalid, treat as equal
-      if (!isValidDateA) return 1; // A is invalid, B comes first
-      if (!isValidDateB) return -1; // B is invalid, A comes first
+      if (!isValidDateA && !isValidDateB) return 0;
+      if (!isValidDateA) return 1;
+      if (!isValidDateB) return -1;
 
       return sortOption === 'earliest' ? dateA - dateB : dateB - dateA;
     });
@@ -58,10 +68,14 @@ const DeliveryList = () => {
 
   const handleClientSelect = (client) => {
     setSelectedClient(client);
+    setDeliveries([]); // Reset deliveries to fetch new filtered set
+    setPage(0); // Reset page for new filter
+    setTotalFilteredDeliveries(0); // Reset count
   };
 
+  // Modified fetchData to accept search and client parameters
   const fetchData = useCallback(
-    async (currentPage) => {
+    async (currentPage, searchQuery, clientFilter, isInitialLoad = false) => {
       if (!authToken || !userEmail) {
         setLoading(false);
         console.log("DeliveryList: Skipping fetchData because userEmail or authToken is not available yet.");
@@ -70,9 +84,24 @@ const DeliveryList = () => {
 
       try {
         setLoading(true);
-        console.log(`DeliveryList: Fetching data for page ${currentPage} with email: ${userEmail}, isAdmin: ${isAdmin}`);
+        console.log(`DeliveryList: Fetching data for page ${currentPage} with email: ${userEmail}, isAdmin: ${isAdmin}, Search: "${searchQuery}", Client: "${clientFilter}"`);
 
-        const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&page=${currentPage}&isAdmin=${isAdmin}`, {
+        // Construct query parameters
+        const queryParams = new URLSearchParams({
+            email: userEmail,
+            offset: currentPage * 500, // Assuming a limit of 500 for infinite scroll
+            limit: 500, // Hardcoded limit for fetching data in chunks
+            isAdmin: isAdmin,
+        });
+
+        if (searchQuery) {
+            queryParams.append('searchTerm', searchQuery);
+        }
+        if (clientFilter) {
+            queryParams.append('selectedClient', clientFilter);
+        }
+
+        const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?${queryParams.toString()}`, {
           headers: {
             Authorization: `Bearer ${authToken}`,
             "Content-Type": "application/json",
@@ -87,20 +116,27 @@ const DeliveryList = () => {
         const data = await response.json();
         
         const tasksArray = Object.values(data).flat();
+        
+        // Count total relevant deliveries based on the current search/filter,
+        // without considering pagination for the total count display
+        // This requires an additional endpoint or a modification to current one to return count
+        // For now, let's assume the backend will only return *relevant* results
+        // and we will update totalFilteredDeliveries based on actual fetched items.
+        // A more robust solution for count would be a separate /api/count endpoint.
 
         const deliveriesForList = tasksArray.filter((delivery) => delivery.Step_ID === 0);
 
-
-        if (deliveriesForList.length === 0 && currentPage !== 0) {
+        if (deliveriesForList.length === 0 && currentPage !== 0 && !isInitialLoad) {
           console.log("No new deliveries to load, stopping further fetch.");
+          setLoading(false); // Stop loading if no more data is available
           return;
         }
 
         const newDeliveries = deliveriesForList.map((delivery) => ({
           delCode: delivery.DelCode_w_o__,
           client: `${delivery.Client}`,
-          initiated: formatTimestamp(delivery.Planned_Start_Timestamp), // Formatted string for display
-          plannedStartTimestampRaw: delivery.Planned_Start_Timestamp, // Store raw timestamp for sorting
+          initiated: formatTimestamp(delivery.Planned_Start_Timestamp),
+          plannedStartTimestampRaw: delivery.Planned_Start_Timestamp,
           deadline: calculateDeadline(
             delivery.Planned_Delivery_Timestamp,
             delivery.Planned_Start_Timestamp
@@ -111,22 +147,34 @@ const DeliveryList = () => {
         }));
 
         setDeliveries((prev) => {
-          const newUniqueDeliveries = newDeliveries.filter(
-            (newDel) => !prev.some((prevDel) => prevDel.delCode === newDel.delCode)
-          );
-          if (newUniqueDeliveries.length === 0 && currentPage !== 0) {
-            console.log('No new unique deliveries to add.');
-            return prev;
+          // If it's a new search/filter, replace existing deliveries
+          if (currentPage === 0) {
+            // Sort only the newly fetched batch for the first page
+            const sortedNewDeliveries = handleSort(newDeliveries);
+            setTotalFilteredDeliveries(sortedNewDeliveries.length); // Update total count for current filter
+            return sortedNewDeliveries;
+          } else {
+            const newUniqueDeliveries = newDeliveries.filter(
+              (newDel) => !prev.some((prevDel) => prevDel.delCode === newDel.delCode)
+            );
+            const combinedDeliveries = [...prev, ...newUniqueDeliveries];
+            // Only sort the entire list when new data is added for infinite scroll
+            const sortedCombinedDeliveries = handleSort(combinedDeliveries);
+            setTotalFilteredDeliveries(sortedCombinedDeliveries.length); // Update total count
+            return sortedCombinedDeliveries;
           }
-          return [...prev, ...newUniqueDeliveries];
         });
       } catch (error) {
         console.error('Error fetching data in DeliveryList:', error);
+        notification.error({
+            message: 'Data Fetch Error',
+            description: `Failed to load deliveries: ${error.message}. Please try again.`,
+        });
       } finally {
         setLoading(false);
       }
     },
-    [userEmail, authToken, isAdmin]
+    [userEmail, authToken, isAdmin, sortOption] // Added sortOption to dependency array
   );
 
   const handleDelete = (deliveryCode) => {
@@ -144,25 +192,37 @@ const DeliveryList = () => {
     }
   }, []);
 
+  // Effect to trigger data fetch when userEmail, authToken, debouncedSearchTerm, or selectedClient changes
   useEffect(() => {
     if (userEmail && authToken) {
-      console.log("DeliveryList: userEmail and authToken are available, triggering fetchData(0).");
-      // Reset deliveries when user/auth changes or on initial fetch to prevent stale data
-      setDeliveries([]); 
+      console.log("DeliveryList: Triggering fetchData with new search/filter criteria.");
+      setDeliveries([]); // Clear previous deliveries
       setPage(0); // Reset page to 0 for a fresh fetch
-      fetchData(0);
+      // Pass the current debouncedSearchTerm and selectedClient to fetchData
+      fetchData(0, debouncedSearchTerm, selectedClient, true);
     } else {
       console.log("DeliveryList: userEmail or authToken not yet available for initial fetch.");
       setDeliveries([]);
       setLoading(false);
     }
-  }, [fetchData, userEmail, authToken]);
+  }, [fetchData, userEmail, authToken, debouncedSearchTerm, selectedClient]); // Dependencies added
 
-  // NEW useEffect to reset page when search/filter terms change
-  useEffect(() => {
-    setPage(0);
-  }, [searchTerm, selectedClient]);
+  // Debounce the searchTerm update
+  const debouncedSetSearchTerm = useCallback(
+    debounce((value) => {
+      setDebouncedSearchTerm(value);
+      setDeliveries([]); // Reset deliveries to fetch new search results
+      setPage(0); // Reset page for new search
+      setTotalFilteredDeliveries(0); // Reset count
+    }, 500), // 500ms debounce delay
+    []
+  );
 
+  const handleSearchChange = (event) => {
+    const value = event.target.value;
+    setSearchTerm(value); // Update instant search term for input field
+    debouncedSetSearchTerm(value); // Update debounced search term
+  };
 
   const formatTimestamp = (timestamp) => {
     if (!timestamp) return 'No start time';
@@ -183,34 +243,27 @@ const DeliveryList = () => {
     return 'No deadline';
   };
 
-  const handleSearchChange = (event) => {
-    setSearchTerm(event.target.value);
-  };
-
-  // Filtering logic - This calculation will automatically re-run when 'deliveries', 'searchTerm', or 'selectedClient' changes.
-  const filteredDeliveries = handleSort(
-    deliveries.filter((delivery) => {
-      const lowerCaseSearchTerm = searchTerm.toLowerCase();
-      const lowerCaseSelectedClient = selectedClient.toLowerCase();
-
-      // Make sure delivery.delCode and delivery.client exist before calling .toLowerCase() or .includes()
-      const matchesSearch =
-        (delivery.delCode && String(delivery.delCode).toLowerCase().includes(lowerCaseSearchTerm)) ||
-        (delivery.client && String(delivery.client).toLowerCase().includes(lowerCaseSearchTerm));
-
-      const matchesClient = lowerCaseSelectedClient ? (delivery.client && String(delivery.client).toLowerCase() === lowerCaseSelectedClient) : true;
-      
-      return matchesSearch && matchesClient;
-    })
-  );
+  // No more client-side filtering needed here, as backend returns filtered data
+  // const filteredDeliveries = handleSort(deliveries.filter(...)); 
 
   useEffect(() => {
     if (observer.current) observer.current.disconnect();
     const loadMoreDeliveries = (entries) => {
       const [entry] = entries;
-      // Only load more if currently displaying ALL fetched deliveries and not actively searching/filtering
-      // This prevents infinite scroll from fetching new data while a search/filter is active and showing a subset
-      if (entry.isIntersecting && !loading && !searchTerm && !selectedClient && filteredDeliveries.length > 0 && deliveries.length === filteredDeliveries.length) {
+      // Only load more if at the end, not currently loading, and no active search/filter terms (for infinite scroll to load all)
+      // OR if search/filter is active and there's more data to load for that specific filter.
+      // This logic is tricky. Let's simplify: only load more if no search/filter.
+      // For filtered results, user might manually trigger "load more" or we rely on initial fetch.
+      // Let's adjust this: if there's a search term or selected client, we assume the initial fetch loaded *all*
+      // relevant results, unless the backend supports paginating filtered results.
+      // Given current backend, it supports pagination for filtered results, so we can allow infinite scroll
+      // but ensure `totalFilteredDeliveries` (if backend provides it) or `deliveries.length` vs `limit` helps.
+
+      // Simplified infinite scroll trigger: only if at end and not loading.
+      // The `fetchData` itself handles passing the current search/filter terms.
+      if (entry.isIntersecting && !loading && deliveries.length > 0) {
+        // If there's a search term or selected client, we assume backend handles pagination for it.
+        // We increment page and fetchData will use the existing searchTerm/selectedClient.
         setPage((prevPage) => prevPage + 1);
       }
     };
@@ -220,16 +273,17 @@ const DeliveryList = () => {
     return () => {
       if (observer.current) observer.current.disconnect();
     };
-  }, [loading, filteredDeliveries, searchTerm, selectedClient, deliveries.length]); // Added dependencies
+  }, [loading, deliveries.length]); // Dependencies adjusted
 
+  // Only fetch data when page changes (for infinite scroll)
   useEffect(() => {
-    if (page > 0) {
-      fetchData(page);
+    if (page > 0) { // Only fetch if page is incremented from 0 (i.e., not initial load due to search/filter change)
+      fetchData(page, debouncedSearchTerm, selectedClient);
     }
-  }, [page, fetchData]);
+  }, [page, fetchData, debouncedSearchTerm, selectedClient]); // Added dependencies
 
   const uniqueClients = [...new Set(deliveries.map((delivery) => delivery.client))]
-    .filter(client => client) // Filter out null/undefined clients before mapping and sorting
+    .filter(client => client)
     .map(client => client.toLowerCase())
     .filter((value, index, self) => self.indexOf(value) === index)
     .sort()
@@ -243,7 +297,7 @@ const DeliveryList = () => {
 
   // --- Conditional Rendering for different states ---
   // 1. Initial loading state (before any data is fetched)
-  if (loading && deliveries.length === 0 && !searchTerm && !selectedClient) {
+  if (loading && deliveries.length === 0 && !debouncedSearchTerm && !selectedClient && page === 0) {
     return (
       <Container className="text-center my-5">
         <FaSpinner
@@ -256,8 +310,7 @@ const DeliveryList = () => {
   }
 
   // 2. No deliveries fetched at all (after loading, and no search/filter is active)
-  // This means the user genuinely has no deliveries assigned or the DB is empty for them
-  if (!loading && deliveries.length === 0 && !searchTerm && !selectedClient) {
+  if (!loading && deliveries.length === 0 && !debouncedSearchTerm && !selectedClient) {
     return (
       <Container className="text-center my-5">
         <p>No active deliveries found for your account.</p>
@@ -269,12 +322,11 @@ const DeliveryList = () => {
   }
 
   // 3. Deliveries are loaded, but current search/filter yields no results
-  // This is where we show the "Clear Search/Filters" button
-  if (!loading && filteredDeliveries.length === 0 && (searchTerm || selectedClient)) {
+  if (!loading && deliveries.length === 0 && (debouncedSearchTerm || selectedClient)) {
     return (
       <Container className="text-center my-5">
         <p>No deliveries match your current search/filter criteria.</p>
-        <Button variant="outline-secondary" onClick={() => { setSearchTerm(''); setSelectedClient(''); }}>
+        <Button variant="outline-secondary" onClick={() => { setSearchTerm(''); setDebouncedSearchTerm(''); setSelectedClient(''); setDeliveries([]); setPage(0); setTotalFilteredDeliveries(0);}}>
           Clear Search/Filters
         </Button>
         <Button variant="outline-danger" onClick={handleLogout} className="ml-2">
@@ -305,8 +357,8 @@ const DeliveryList = () => {
           <Form.Control
             type="text"
             placeholder="Search for delivery code or client..."
-            value={searchTerm}
-            onChange={handleSearchChange}
+            value={searchTerm} // Controlled by instant searchTerm
+            onChange={handleSearchChange} // Triggers debounced update
           />
         </Col>
         <Col xs={2} className="text-right">
@@ -326,11 +378,10 @@ const DeliveryList = () => {
         </Col>
       </Row>
 
-      <p>You have {filteredDeliveries.length} active deliveries</p>
+      <p>You have {deliveries.length} active deliveries</p> {/* Now displays the count of *currently loaded* filtered deliveries */}
 
       <Row>
-        {/* THIS IS THE CRITICAL LINE THAT NEEDS TO USE filteredDeliveries */}
-        {filteredDeliveries.map((delivery) => {
+        {deliveries.map((delivery) => {
           const progress =
             delivery.tasksTotal === 0 ? 0 : (delivery.tasksPlanned / delivery.tasksTotal) * 100;
 
@@ -350,7 +401,6 @@ const DeliveryList = () => {
                           >
                             {delivery.tasksPlanned} of {delivery.tasksTotal} Planned
                           </span>
-                          {/* Render DeleteButton only if isAdmin is true */}
                           {isAdmin && <DeleteButton deliveryCode={delivery.delCode} onDelete={handleDelete} />}
                         </div>
                         {delivery.client && (
