@@ -65,7 +65,7 @@ const ALL_AVAILABLE_PERSONS_HARDCODED = [
 "Suhail Bajaj",
 "System",
 "Viraj Chindarkar",
-"Zoya Ansari",
+"Zoya Ansari"
     // Ensure this list is comprehensive and matches the keys in PERSON_EMAIL_DATA_MAP
 ];
 
