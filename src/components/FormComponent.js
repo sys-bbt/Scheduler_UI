@@ -35,7 +35,7 @@ const PERSON_EMAIL_DATA_MAP = {
 // if your list of responsibilities changes frequently. For now, it's hardcoded here.
 const ALL_AVAILABLE_PERSONS_HARDCODED = [
 "Abhinav Verma",
-"Aishwarya Mulay"
+"Aishwarya Mulay",
 "Akanksha Bhande",
 "Aniruddh Pachupate",
 "Arvanbir Sandhu",
