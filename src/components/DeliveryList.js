@@ -235,19 +235,28 @@ const DeliveryList = () => {
     return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
   };
 
-  const calculateDeadline = (deliveryTimestamp, startTimestamp) => {
-    if (deliveryTimestamp && startTimestamp) {
-      const deliveryTime = new Date(deliveryTimestamp?.value || deliveryTimestamp);
-      const startTime = new Date(startTimestamp?.value || startTimestamp);
-      if (isNaN(deliveryTime.getTime()) || isNaN(startTime.getTime())) return 'Invalid deadline';
-      const timeDiff = deliveryTime - startTime;
-      const daysLeft = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-      const hoursLeft = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      return `${daysLeft} days ${hoursLeft} hrs left`;
-    }
-    return 'No deadline';
-  };
+ const calculateDeadline = (deliveryTimestamp) => { // Removed startTimestamp parameter
+    if (!deliveryTimestamp) return 'No deadline';
 
+    const deliveryTime = new Date(deliveryTimestamp?.value || deliveryTimestamp);
+    const currentTime = new Date(); // Use current date and time
+
+    if (isNaN(deliveryTime.getTime()) || isNaN(currentTime.getTime())) return 'Invalid deadline';
+
+    const timeDiff = deliveryTime - currentTime; // Difference from current time
+
+    if (timeDiff <= 0) {
+        return 'Past Deadline'; // Or '0 days 0 hrs left' if you prefer
+    }
+
+    const daysLeft = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+    const hoursLeft = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutesLeft = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60)); // Optionally add minutes
+
+    // You can choose the level of detail: days/hours, or days/hours/minutes
+    return `${daysLeft} days ${hoursLeft} hrs left`;
+    // return `${daysLeft} days ${hoursLeft} hrs ${minutesLeft} mins left`; // Example with minutes
+  };
   useEffect(() => {
     if (observer.current) observer.current.disconnect();
     const loadMoreDeliveries = (entries) => {
