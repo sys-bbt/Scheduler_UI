@@ -25,7 +25,8 @@ const PERSON_EMAIL_DATA_MAP = {
     "Shweta Gaikwad": { primaryEmail: "shweta.g@brightbraintech.com", allEmails: "shweta.g@brightbraintech.com" },
     "Hitesh Rattesar": { primaryEmail: "hitesh.r@brightbraintech.com", allEmails: "hitesh.r@brightbraintech.com" },
     "System": { primaryEmail: "systems@brightbraintech.com", allEmails: "systems@brightbraintech.com" },
-    "Divya Sharma": { primaryEmail: "divya.s@brightbraintech.com", allEmails: "divya.s@brightbraintech.com"}
+    "Divya Sharma": { primaryEmail: "divya.s@brightbraintech.com", allEmails: "divya.s@brightbraintech.com"},
+    "Manish Hodlur": { primaryEmail: "manish.h@brightbraintech.com", allEmails: "manish.h@brightbraintech.com"}
     // Example for a person/role associated with multiple emails (access emails)
     // "Team Lead": { primaryEmail: "team.lead@brightbraintech.com", allEmails: "team.lead@brightbraintech.com,member1@brightbraintech.com,member2@brightbraintech.com" },
     // Add any other specific "Access Emails" or multi-email mappings you need here.
