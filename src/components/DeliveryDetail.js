@@ -17,7 +17,7 @@ const COMPLETED_TASK_STATUS = 'Completed'; // Adjust this string to match your B
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
+   
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
