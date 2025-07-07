@@ -1,23 +1,19 @@
-import React, { useEffect, useState, useContext } from 'react';
-import { useLocation, Link } from 'react-router-dom';
-import { Container, Card, ListGroup, Row, Col, Spinner } from 'react-bootstrap';
-import Dropdown from 'rc-dropdown';
-import Menu, { Item as MenuItem } from 'rc-menu';
-import { FaPause, FaPlay, FaStop, FaCalendarAlt } from 'react-icons/fa';
-import FormComponent from './FormComponent';
+import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
+import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
+import { FaSpinner } from 'react-icons/fa';
 import { UserContext } from './UserContext';
-import 'rc-dropdown/assets/index.css';
-import './DeliveryDetail.css';
+import './DeliveryList.css';
+import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSelected';
+import SortDeliveriesByDate from './SortDeliveriesByDate';
+import DeleteButton from './DeleteButton';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
-console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
-
-// Define the status value that indicates a task is completed and should be hidden
-const COMPLETED_TASK_STATUS = 'Completed'; // Adjust this string to match your BigQuery 'Current_Status' for completed tasks
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-   
+    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -25,337 +21,409 @@ const ADMIN_EMAILS_FRONTEND = [
     "hitesh.r@brightbraintech.com"
 ];
 
-const DeliveryDetail = () => {
-    const location = useLocation();
-    const delCodeMatch = location.pathname.match(/\/delivery\/data\/(.*)/);
-    const delCode = delCodeMatch ? delCodeMatch[1] : null;
+const DeliveryList = () => {
+  const { userEmail, logoutUser } = useContext(UserContext);
+  const navigate = useNavigate();
+  const [deliveries, setDeliveries] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [authToken, setAuthToken] = useState(null);
+  const [page, setPage] = useState(0);
+  const [selectedClient, setSelectedClient] = useState('');
+  const [loading, setLoading] = useState(true);
+  const observer = useRef(null);
+  const [sortOption, setSortOption] = useState('earliest');
+  const [hasMore, setHasMore] = useState(true); // New state to track if there's more data
 
-    const { userEmail } = useContext(UserContext);
-    console.log('DeliveryDetail: userEmail from Context:', userEmail);
-    console.log('DeliveryDetail: Extracted delCode from URL:', delCode);
-
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
-    console.log(`DeliveryDetail: Current User Email: ${userEmail}, Is Admin: ${isAdmin}`);
-
-    const [delivery, setDelivery] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [activeTaskKey, setActiveTaskKey] = useState(null);
-    const [actionType, setActionType] = useState('');
-    const [tasks, setTasks] = useState([]);
-
-    useEffect(() => {
-        const fetchDeliveryDetails = async () => {
-            if (!delCode || !userEmail) {
-                setLoading(false);
-                if (!delCode) setError('Delivery Code not found in URL.');
-                if (!userEmail) setError('User email not available. Please log in.');
-                return;
-            }
-
-            try {
-                setLoading(true);
-
-                const deliveryResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&delCode=${delCode}&isAdmin=${isAdmin}`);
-                if (!deliveryResponse.ok) {
-                    const errorText = await deliveryResponse.text();
-                    throw new Error(`HTTP error! status: ${deliveryResponse.status}, message: ${errorText}`);
-                }
-                const deliveryData = await deliveryResponse.json();
-
-                const durationResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
-                if (!durationResponse.ok) {
-                    const errorText = await durationResponse.text();
-                    throw new Error(`HTTP error! status: ${durationResponse.status}, message: ${errorText}`);
-                }
-                const durationData = await durationResponse.json();
-
-                if (deliveryData.hasOwnProperty(delCode)) {
-                    const fetchedTasks = deliveryData[delCode]
-                       .filter((task) => task.Step_ID !== 0 && task.Current_Status !== COMPLETED_TASK_STATUS)
-                        .map((task) => {
-                            const taskDurationInMinutes = durationData[task.Key]?.totalDuration || 0;
-                            const hours = Math.floor(taskDurationInMinutes / 60);
-                            const minutes = taskDurationInMinutes % 60;
-                            const formattedDuration = `${hours}h ${minutes}m`;
-
-                            return {
-                                ...task,
-                                scheduled: !!task.Planned_Delivery_Timestamp && (typeof task.Planned_Delivery_Timestamp === 'string' ? task.Planned_Delivery_Timestamp !== "NULL" : task.Planned_Delivery_Timestamp.value !== null),
-                                personResponsible: task.Responsibility || 'Unassigned',
-                                totalTime: taskDurationInMinutes,
-                                formattedDuration,
-                                isPlaying: false,
-                            };
-                        });
-                    setDelivery(deliveryData[delCode]);
-                    setTasks(fetchedTasks);
-                    console.log('Fetched tasks for delivery:', fetchedTasks);
-                } else {
-                    setError(`Delivery with code "${delCode}" not found in fetched data.`);
-                }
-            } catch (err) {
-                console.error('Error fetching delivery details:', err);
-                setError(`Failed to fetch delivery details: ${err.message}`);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchDeliveryDetails();
-    }, [delCode, userEmail, isAdmin]);
+  // Determine isAdmin status for the current user
+  const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
+  console.log(`DeliveryList: Current User Email: ${userEmail}, Is Admin: ${isAdmin}`);
 
 
-    const handleTaskClick = (task) => {
-        if (!task.scheduled) {
-            setActionType('Schedule');
-            setActiveTaskKey(task.Key);
-        }
-    };
+  const handleSort = (deliveriesToSort) => {
+    return deliveriesToSort.sort((a, b) => {
+      // Use plannedStartTimestampRaw for sorting
+      const dateA = new Date(a.plannedStartTimestampRaw?.value || a.plannedStartTimestampRaw);
+      const dateB = new Date(b.plannedStartTimestampRaw?.value || b.plannedStartTimestampRaw);
+      
+      // Handle cases where date might be invalid or null
+      const isValidDateA = !isNaN(dateA.getTime());
+      const isValidDateB = !isNaN(dateB.getTime());
 
-    const handleMenuClick = (task, { key }) => {
-        if (key === 'reschedule') {
-            setActionType('Reschedule');
-        } else if (key === 'reassign') {
-            setActionType('Reassign');
-        }
-        setActiveTaskKey(task.Key);
-    };
+      if (!isValidDateA && !isValidDateB) return 0; // Both invalid, treat as equal
+      if (!isValidDateA) return 1; // A is invalid, B comes first
+      if (!isValidDateB) return -1; // B is invalid, A comes first
 
-    const handleFormSubmit = async (formData) => { // Made async to await API call
-        console.log("Form submitted data:", formData);
-        
-        let newPlannedTasksCount = 0;
-        let totalTasksCount = 0;
+      return sortOption === 'earliest' ? dateA - dateB : dateB - dateA;
+    });
+  };
 
-        const updatedTasks = tasks.map((task) => {
-            if (task.Key === activeTaskKey) {
-                // This is the task that was just scheduled/updated
-                const updatedTask = {
-                    ...task,
-                    scheduled: true, // Mark as scheduled
-                    personResponsible: formData.personResponsible || task.personResponsible,
-                    totalTime: formData.totalTime || task.totalTime,
-                    formattedDuration: `${Math.floor((formData.totalTime || 0) / 60)}h ${ (formData.totalTime || 0) % 60}m`,
-                    Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp,
-                    Current_Status: formData.Current_Status || task.Current_Status || 'Scheduled',
-                };
-                return updatedTask;
-            }
-            return task;
+  const handleClientSelect = (client) => {
+    setSelectedClient(client);
+  };
+
+  const fetchData = useCallback(
+    async (currentPage) => {
+      if (!authToken || !userEmail) {
+        setLoading(false);
+        console.log("DeliveryList: Skipping fetchData because userEmail or authToken is not available yet.");
+        return;
+      }
+      if (!hasMore && currentPage > 0) { // Prevent fetching if no more data and not initial load
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        console.log(`DeliveryList: Fetching data for page ${currentPage} with email: ${userEmail}, isAdmin: ${isAdmin}, searchTerm: "${searchTerm}", selectedClient: "${selectedClient}"`);
+
+        const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&page=${currentPage}&isAdmin=${isAdmin}&searchTerm=${searchTerm}&selectedClient=${selectedClient}`, {
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+            "Content-Type": "application/json",
+          },
         });
 
-        // Calculate new planned and total tasks from the updatedTasks array
-        // planned tasks are those that have a Planned_Delivery_Timestamp
-        newPlannedTasksCount = updatedTasks.filter(task => 
-            !!task.Planned_Delivery_Timestamp && 
-            (typeof task.Planned_Delivery_Timestamp === 'string' ? task.Planned_Delivery_Timestamp !== "NULL" : task.Planned_Delivery_Timestamp.value !== null)
-        ).length;
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Network response was not ok: ${response.status} - ${errorText}`);
+        }
+
+        const data = await response.json();
         
-        // Total tasks are all tasks in this detail view (excluding Step_ID=0, and not completed)
-        totalTasksCount = updatedTasks.length; 
+        const tasksArray = Object.values(data).flat();
 
-        // Update local state first
-        setTasks(updatedTasks);
-        setActiveTaskKey(null);
+        const deliveriesForList = tasksArray.filter((delivery) => delivery.Step_ID === 0);
 
-        // --- NEW: Call backend to update Planned_Tasks and Total_Tasks for the main delivery ---
-        try {
-            console.log(`DeliveryDetail: Updating delivery counts for ${delCode}. Planned: ${newPlannedTasksCount}, Total: ${totalTasksCount}`);
-            const response = await fetch(`${BACKEND_API_BASE_URL}/api/delivery_counts/${delCode}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    newPlannedTasks: newPlannedTasksCount,
-                    newTotalTasks: totalTasksCount 
-                }),
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Failed to update delivery counts: ${response.status} - ${errorText}`);
-            }
-            console.log('Delivery counts updated successfully on backend.');
-        } catch (error) {
-            console.error('Error updating delivery counts on backend:', error);
-            // Optionally, show an error message to the user
+        // Determine if there's more data to load for infinite scroll
+        // Assuming your backend returns a limited number of results per page,
+        // if the number of results is less than the expected limit, it means no more data.
+        // (This assumes the backend's default limit is 500, as per your server.js)
+        if (deliveriesForList.length === 0 && currentPage !== 0) {
+            setHasMore(false); // No more data to load
+            console.log("No new deliveries to load, stopping further fetch.");
+            setLoading(false); // Ensure loading is set to false
+            return;
+        } else if (deliveriesForList.length < 500) { // Assuming 500 is the default limit
+            setHasMore(false); // Less than a full page, so likely no more data
+        } else {
+            setHasMore(true); // Might have more data
         }
-        // --- END NEW ---
-    };
 
-    const toggleTimer = (taskKey) => {
-        const updatedTasks = tasks.map((task) => {
-            if (task.Key === taskKey) {
-                return { ...task, isPlaying: !task.isPlaying };
-            }
-            return task;
+
+        const newDeliveries = deliveriesForList.map((delivery) => ({
+          delCode: delivery.DelCode_w_o__,
+          client: `${delivery.Client}`,
+          initiated: formatTimestamp(delivery.Planned_Start_Timestamp), // Formatted string for display
+          plannedStartTimestampRaw: delivery.Planned_Start_Timestamp, // Store raw timestamp for sorting
+          deadline: calculateDeadline(
+            delivery.Planned_Delivery_Timestamp,
+            delivery.Planned_Start_Timestamp
+          ),
+          tasksPlanned: delivery.Planned_Tasks || 0,
+          tasksTotal: delivery.Total_Tasks || 0,
+          createdAt: delivery.createdAt || delivery.Created_at,
+        }));
+
+        setDeliveries((prev) => {
+          const newUniqueDeliveries = newDeliveries.filter(
+            (newDel) => !prev.some((prevDel) => prevDel.delCode === newDel.delCode)
+          );
+          if (newUniqueDeliveries.length === 0 && currentPage !== 0) {
+            console.log('No new unique deliveries to add.');
+            return prev;
+          }
+          return [...prev, ...newUniqueDeliveries];
         });
-        setTasks(updatedTasks);
+      } catch (error) {
+        console.error('Error fetching data in DeliveryList:', error);
+        setHasMore(false); // On error, assume no more data to prevent infinite loops
+      } finally {
+        setLoading(false);
+      }
+    },
+    [userEmail, authToken, isAdmin, searchTerm, selectedClient, hasMore] // Added hasMore to dependencies
+  );
+
+  const handleDelete = (deliveryCode) => {
+    setDeliveries(prevDeliveries => prevDeliveries.filter(delivery => delivery.delCode !== deliveryCode));
+  };
+
+  useEffect(() => {
+    console.log("DeliveryList: useEffect - attempting to load authToken from localStorage.");
+    const storedAuthToken = localStorage.getItem('authToken');
+    if (storedAuthToken) {
+      setAuthToken(storedAuthToken);
+      console.log("DeliveryList: authToken loaded from localStorage.");
+    } else {
+      console.log("DeliveryList: authToken not found in localStorage.");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (userEmail && authToken) {
+      console.log("DeliveryList: userEmail and authToken are available, triggering fetchData(0).");
+      // Reset deliveries when user/auth changes or on initial fetch to prevent stale data
+      setDeliveries([]); 
+      setPage(0); // Reset page to 0 for a fresh fetch
+      setHasMore(true); // Reset hasMore when starting a new fetch
+      fetchData(0);
+    } else {
+      console.log("DeliveryList: userEmail or authToken not yet available for initial fetch.");
+      setDeliveries([]);
+      setLoading(false);
+      setHasMore(false); // No user, no more data
+    }
+  }, [fetchData, userEmail, authToken]);
+
+  // NEW useEffect to trigger a fresh fetch when search/filter terms change
+  useEffect(() => {
+    // Only trigger a new fetch if searchTerm or selectedClient actually changed
+    // and userEmail and authToken are already available.
+    if (userEmail && authToken) {
+        setDeliveries([]); // Clear existing deliveries for a fresh search/filter
+        setPage(0); // Reset page to 0
+        setHasMore(true); // Reset hasMore for new search/filter
+        fetchData(0); // Fetch data with new search/filter criteria
+    }
+  }, [searchTerm, selectedClient, userEmail, authToken, fetchData]); // Added fetchData as a dependency
+
+
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return 'No start time';
+    const date = new Date(timestamp?.value || timestamp);
+    return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
+  };
+
+  const calculateDeadline = (deliveryTimestamp, startTimestamp) => {
+    if (deliveryTimestamp && startTimestamp) {
+      const deliveryTime = new Date(deliveryTimestamp?.value || deliveryTimestamp);
+      const startTime = new Date(startTimestamp?.value || startTimestamp);
+      if (isNaN(deliveryTime.getTime()) || isNaN(startTime.getTime())) return 'Invalid deadline';
+      const timeDiff = deliveryTime - startTime;
+      const daysLeft = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+      const hoursLeft = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      return `${daysLeft} days ${hoursLeft} hrs left`;
+    }
+    return 'No deadline';
+  };
+
+  const handleSearchChange = (event) => {
+    setSearchTerm(event.target.value);
+  };
+
+  // The backend now handles filtering, so this is just for sorting the already filtered data
+  const sortedAndFilteredDeliveries = handleSort(deliveries);
+
+  useEffect(() => {
+    if (observer.current) observer.current.disconnect();
+    const loadMoreDeliveries = (entries) => {
+      const [entry] = entries;
+      // Trigger load more if the sentinel is intersecting, not currently loading, and there's potentially more data
+      if (entry.isIntersecting && !loading && hasMore) {
+        setPage((prevPage) => prevPage + 1);
+      }
     };
-
-    const formatTimestamp = (timestamp) => {
-        if (!timestamp) return 'No start time';
-        const date = new Date(timestamp?.value || timestamp);
-        if (timestamp && typeof timestamp === 'object' && timestamp.value) {
-            return new Date(timestamp.value).toLocaleString();
-        }
-        return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
+    observer.current = new IntersectionObserver(loadMoreDeliveries, { threshold: 1.0 });
+    const lastDeliveryElement = document.querySelector('.delivery-list-end');
+    if (lastDeliveryElement) observer.current.observe(lastDeliveryElement);
+    return () => {
+      if (observer.current) observer.current.disconnect();
     };
+  }, [loading, hasMore]); // Dependencies simplified, as fetchData handles search/filter changes
 
-    const taskMenu = (task) => (
-        <Menu onClick={(info) => handleMenuClick(task, info)}>
-            <MenuItem key="reschedule">Reschedule Task</MenuItem>
-            <MenuItem key="reassign">Reassign Task</MenuItem>
-        </Menu>
-    );
-
-    if (loading) {
-        return (
-            <Container className="text-center my-5">
-                <Spinner animation="border" role="status">
-                    <span className="sr-only">Loading...</span>
-                </Spinner>
-            </Container>
-        );
+  useEffect(() => {
+    if (page > 0) {
+      fetchData(page);
     }
+  }, [page, fetchData]);
 
-    if (error) {
-        return (
-            <Container className="text-center my-5">
-                <p className="text-danger">{error}</p>
-                <Link to="/">Back to Deliveries</Link>
-            </Container>
-        );
-    }
+  const uniqueClients = [...new Set(deliveries.map((delivery) => delivery.client))]
+    .filter(client => client) // Filter out null/undefined clients before mapping and sorting
+    .map(client => client.toLowerCase())
+    .filter((value, index, self) => self.indexOf(value) === index)
+    .sort()
+    .map(client => client.charAt(0).toUpperCase() + client.slice(1));
 
-    if (!delivery || delivery.length === 0) {
-        return (
-            <Container className="text-center my-5">
-                <p>No delivery data found for code: {delCode}</p>
-                <Link to="/">Back to Deliveries</Link>
-            </Container>
-        );
-    }
 
-    const client = delivery[0]?.Client || 'Unknown Client';
-    const shortDescription = delivery[0]?.Short_Description || 'No description available';
-    const plannedStart = delivery[0]?.Planned_Start_Timestamp?.value ? new Date(delivery[0].Planned_Start_Timestamp.value).toLocaleString() : 'N/A';
-    const plannedDelivery = delivery[0]?.Planned_Delivery_Timestamp?.value ? new Date(delivery[0].Planned_Delivery_Timestamp.value).toLocaleString() : 'N/A';
+  const handleLogout = () => {
+    logoutUser();
+    navigate('/login');
+  };
 
+  // --- Conditional Rendering for different states ---
+  // 1. Initial loading state (before any data is fetched)
+  if (loading && deliveries.length === 0 && !searchTerm && !selectedClient) {
     return (
-        <Container>
-            <h1 className="my-4">Delivery Details for {client}</h1>
-
-            <Card className="mb-4">
-                <Card.Body>
-                    <Card.Title>{shortDescription}</Card.Title>
-                    <Card.Subtitle className="mb-2 text-muted">
-                        Start Time: {plannedStart}
-                    </Card.Subtitle>
-                    <Card.Subtitle className="mb-2 text-muted">
-                        Delivery Deadline: {plannedDelivery}
-                    </Card.Subtitle>
-                </Card.Body>
-            </Card>
-
-            <h3>Tasks</h3>
-            <Row>
-                {tasks.length > 0 ? (
-                    tasks.map((task, index) => {
-                        const displayDuration = task.totalTime || task.formattedDuration || '0m';
-
-                        return (
-                            <Col xs={12} key={task.Key || index}>
-                                <Dropdown trigger={['contextMenu']} overlay={taskMenu(task)}>
-                                    <div
-                                        className="task-card"
-                                        onClick={() => handleTaskClick(task)}
-                                        style={{ cursor: task.scheduled ? 'pointer' : 'pointer' }}
-                                    >
-                                        <Card className="mb-3">
-                                            <Card.Body>
-                                                <div className="d-flex align-items-center">
-                                                    <div className="timer-controls" style={{ marginRight: '10px' }}>
-                                                        {!task.scheduled ? (
-                                                            <FaCalendarAlt
-                                                                onClick={() => handleTaskClick(task)}
-                                                                style={{ cursor: 'pointer' }}
-                                                            />
-                                                        ) : (
-                                                            <>
-                                                                {task.isPlaying ? (
-                                                                    <FaPause
-                                                                        onClick={() => toggleTimer(task.Key)}
-                                                                        style={{ cursor: 'pointer' }}
-                                                                    />
-                                                                ) : (
-                                                                    <FaPlay
-                                                                        onClick={() => toggleTimer(task.Key)}
-                                                                        style={{ cursor: 'pointer' }}
-                                                                    />
-                                                                )}
-                                                                <FaStop
-                                                                    onClick={() => toggleTimer(task.Key)}
-                                                                    style={{ cursor: 'pointer', marginLeft: '5px' }}
-                                                                />
-                                                            </>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="flex-grow-1 text-center">
-                                                        <h5 className="mb-1">{task.Task_Details}</h5>
-                                                        <span className="text-muted">{task.personResponsible}</span>
-                                                    </div>
-
-                                                    <span>{displayDuration}</span>
-                                                </div>
-
-                                                <div className="task-status mt-2">
-                                                    <p className="mb-1">
-                                                        Status: {task.scheduled ? 'Scheduled' : 'Unscheduled'}
-                                                        {task.Current_Status && task.Current_Status !== COMPLETED_TASK_STATUS && ` (${task.Current_Status})`}
-                                                    </p>
-                                                    {task.scheduled && task.Planned_Delivery_Timestamp && (
-                                                        <p className="mb-1">
-                                                            Delivery Deadline: {formatTimestamp(task.Planned_Delivery_Timestamp)}
-                                                        </p>
-                                                    )}
-                                                    {task.isPlaying ? (
-                                                        <p className="text-success">On time for going live</p>
-                                                    ) : (
-                                                        <p className="text-muted">Paused</p>
-                                                    )}
-                                                </div>
-
-                                                {activeTaskKey === task.Key && actionType && (
-                                                    <div className="mt-3">
-                                                        <h6>{actionType} Task: {task.Task_Details}</h6>
-                                                        <FormComponent
-                                                            onSubmit={handleFormSubmit}
-                                                            task={task}
-                                                            currentUserEmail={userEmail}
-                                                        />
-                                                    </div>
-                                                )}
-                                            </Card.Body>
-                                        </Card>
-                                    </div>
-                                </Dropdown>
-                            </Col>
-                        );
-                    })
-                ) : (
-                    <ListGroup.Item>No tasks available for this delivery.</ListGroup.Item>
-                )}
-            </Row>
-
-            <Link to="/" className="btn btn-primary mt-4">
-                Back to Deliveries
-            </Link>
-        </Container>
+      <Container className="text-center my-5">
+        <FaSpinner
+          className="spinner-icon"
+          style={{ fontSize: '3rem', color: '#007bff', animation: 'spin 1s linear infinite' }}
+        />
+        <p className="mt-3">Loading deliveries...</p>
+      </Container>
     );
+  }
+
+  // 2. No deliveries fetched at all (after loading, and no search/filter is active)
+  // This means the user genuinely has no deliveries assigned or the DB is empty for them
+  if (!loading && sortedAndFilteredDeliveries.length === 0 && !searchTerm && !selectedClient) {
+    return (
+      <Container className="text-center my-5">
+        <p>No active deliveries found for your account.</p>
+        <Button variant="outline-primary" onClick={handleLogout}>
+          Logout
+        </Button>
+      </Container>
+    );
+  }
+
+  // 3. Deliveries are loaded, but current search/filter yields no results
+  // This is where we show the "Clear Search/Filters" button
+  if (!loading && sortedAndFilteredDeliveries.length === 0 && (searchTerm || selectedClient)) {
+    return (
+      <Container className="text-center my-5">
+        <p>No deliveries match your current search/filter criteria.</p>
+        <Button variant="outline-secondary" onClick={() => { setSearchTerm(''); setSelectedClient(''); setPage(0); setDeliveries([]); setHasMore(true); }}>
+          Clear Search/Filters
+        </Button>
+        <Button variant="outline-danger" onClick={handleLogout} className="ml-2">
+            Logout
+        </Button>
+      </Container>
+    );
+  }
+
+  // If none of the above, render the main list
+  return (
+    <Container>
+      <Row className="justify-content-between align-items-center my-4">
+        <Col>
+          <h1 className="mb-0">List of Deliveries</h1>
+        </Col>
+        <Col xs="auto">
+          {userEmail && (
+            <span className="text-muted mr-2">Logged in as: {userEmail}</span>
+          )}
+          <Button variant="outline-danger" onClick={handleLogout}>
+            Logout
+          </Button>
+        </Col>
+      </Row>
+      <Row className="mb-4">
+        <Col xs={10}>
+          <Form.Control
+            type="text"
+            placeholder="Search for delivery code or client..."
+            value={searchTerm}
+            onChange={handleSearchChange}
+          />
+        </Col>
+        <Col xs={2} className="text-right">
+          <span role="img" aria-label="filter" style={{ fontSize: '1.5rem', cursor: 'pointer' }}>
+            🔍
+          </span>
+        </Col>
+        <Col xs={2} className="text-right">
+          <FilterDeliveryBasedOnClientSelected
+            clients={uniqueClients}
+            onClientSelect={handleClientSelect}
+            selectedClient={selectedClient}
+          />
+        </Col>
+        <Col xs={12}>
+          <SortDeliveriesByDate sortOption={sortOption} setSortOption={setSortOption} />
+        </Col>
+      </Row>
+
+      <p>You have {sortedAndFilteredDeliveries.length} active deliveries</p>
+
+      <Row>
+        {/* THIS IS THE CRITICAL LINE THAT NEEDS TO USE sortedAndFilteredDeliveries */}
+        {sortedAndFilteredDeliveries.map((delivery) => {
+          const progress =
+            delivery.tasksTotal === 0 ? 0 : (delivery.tasksPlanned / delivery.tasksTotal) * 100;
+
+          return (
+            <Col xs={12} key={delivery.delCode} className="mb-3">
+              <Link to={`/delivery/data/${delivery.delCode}`} className="card-link-wrapper">
+                <Card className="p-3 shadow-sm task-card">
+                  <div className="shaded-bg" style={{ width: `${progress}%` }}></div>
+                  <Card.Body>
+                    <div className="d-flex justify-content-between align-items-center">
+                      <div>
+                        <div className="d-flex align-items-center mb-2">
+                          <FiCheckCircle style={{ marginRight: '8px', color: 'green' }} />
+                          <span
+                            className="font-weight-bold"
+                            style={{ fontSize: '1.5rem' }}
+                          >
+                            {delivery.tasksPlanned} of {delivery.tasksTotal} Planned
+                          </span>
+                          {/* Render DeleteButton only if isAdmin is true */}
+                          {isAdmin && <DeleteButton deliveryCode={delivery.delCode} onDelete={handleDelete} />}
+                        </div>
+                        {delivery.client && (
+                          <p className="mb-1 text-muted">
+                            Client: {delivery.client}
+                          </p>
+                        )}
+                        <div className="mb-2">
+                          <ProgressBar
+                            now={progress}
+                            variant={progress > 50 ? 'success' : progress > 20 ? 'warning' : 'danger'}
+                          />
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="mb-1 text-muted">
+                          <FiClock style={{ marginRight: '5px' }} /> {delivery.initiated}
+                        </p>
+                        <p className="mb-0 text-danger">
+                          <FiFlag style={{ marginRight: '5px' }} /> {delivery.deadline}
+                        </p>
+                        <p
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const el = document.createElement('textarea');
+                            el.value = delivery.delCode;
+                            document.body.appendChild(el);
+                            el.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(el);
+                          }}
+                          style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+                          title="Click to copy"
+                        >
+                          {delivery.delCode}
+                        </p>
+                      </div>
+                    </div>
+                  </Card.Body>
+                </Card>
+              </Link>
+            </Col>
+          );
+        })}
+      </Row>
+
+      <div className="delivery-list-end"></div>
+
+      {loading && hasMore && ( // Show spinner only when loading and there's potentially more data
+        <div className="d-flex justify-content-center align-items-center" style={{ height: '100px' }}>
+          <FaSpinner
+            className="spinner-icon"
+            style={{ fontSize: '2rem', color: '#007bff', animation: 'spin 10s linear infinite' }}
+          />
+        </div>
+      )}
+      {!hasMore && sortedAndFilteredDeliveries.length > 0 && (
+        <div className="text-center my-3 text-muted">
+            End of results.
+        </div>
+      )}
+    </Container>
+  );
 };
 
-export default DeliveryDetail;
+export default DeliveryList;
