@@ -24,18 +24,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [form] = Form.useForm();
     const [sliderCount, setSliderCount] = useState(0);
     const [hours, setHours] = useState({});
-    const [startDate, setStartDate] = useState(() =>
-        task?.Planned_Start_Timestamp
-            ? moment(task.Planned_Start_Timestamp)
-            : null
-    );
-
-    const [endDate, setEndDate] = useState(() =>
-        task?.Planned_Delivery_Timestamp
-            ? moment(task.Planned_Delivery_Timestamp)
-            : null
-    );
-
+    // Initialize with null/0, useEffect will set based on task
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
     const [personResponsible, setPersonResponsible] = useState('');
     const [numberOfDays, setNumberOfDays] = useState(0);
     const [existingSchedules, setExistingSchedules] = useState({});
@@ -51,13 +42,25 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     // Memoize the mapping logic to prevent unnecessary re-renders
     const getPersonNameFromEmail = useCallback((email) => {
-        // Now directly use the fetched emailToPersonMap
         return emailToPersonMap[email.toLowerCase()] || null;
     }, [emailToPersonMap]);
 
-    // --- EFFECT HOOK 1: FETCH PERSON MAPPINGS, TASK DATA AND EXISTING SCHEDULES ---
+    // Function to calculate end date and slider count
+    const calculateEndDate = useCallback((start, days) => {
+        if (start && days > 0) {
+            const calculatedEndDate = moment(start).add(days - 1, 'days');
+            setEndDate(calculatedEndDate);
+            setSliderCount(days);
+        } else {
+            setEndDate(null);
+            setSliderCount(0);
+        }
+    }, []); // No dependencies, as it only uses its arguments
+
+    // --- EFFECT HOOK 1: FETCH PERSON MAPPINGS AND INITIAL TASK DATA ---
+    // This effect runs once on mount and whenever the 'task' prop changes.
     useEffect(() => {
-        const fetchAllData = async () => {
+        const fetchInitialData = async () => {
             try {
                 // 1. Fetch person mappings first
                 const personMappingsResponse = await fetch(`${BACKEND_API_BASE_URL}/api/person-mappings`);
@@ -69,7 +72,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 setEmailToPersonMap(personMappingsData.emailToPersonMap || {});
                 setAllAvailablePersons(personMappingsData.allAvailablePersons || []);
 
-                // 2. Proceed with task-specific data fetching if a task is provided
+                // 2. Initialize task-specific data if a task is provided
                 if (task) {
                     form.setFieldsValue({
                         name: task.Task_Details || '',
@@ -84,65 +87,54 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     const data = await response.json();
 
                     const taskData = data[task.Key];
+                    let initialStart = null;
+                    let initialEnd = null;
+                    let initialDays = 0;
+                    const initialHours = {};
+
                     if (taskData) {
                         const taskEntries = taskData.entries;
 
-                        const totalMinutes = taskData.totalDuration || 0;
-                        const initialHours = {};
                         if (taskEntries && taskEntries.length > 0) {
-                            taskEntries.forEach((entry) => {
-                                if (entry.Duration !== undefined && entry.Day !== undefined) {
-                                    const dayMoment = moment(entry.Day.value);
-                                    // Ensure dayMoment is valid and within the task's planned range if startDate exists
-                                    if (dayMoment.isValid() && startDate && dayMoment.isSameOrAfter(startDate, 'day')) {
-                                        const dayIndex = dayMoment.diff(startDate, 'days');
-                                        initialHours[dayIndex] = entry.Duration;
+                            const validDays = taskEntries
+                                .map((entry) => entry.Day?.value)
+                                .filter((date) => date);
+
+                            if (validDays.length > 0) {
+                                initialStart = moment.min(validDays.map((d) => moment(d)));
+                                initialEnd = moment.max(validDays.map((d) => moment(d)));
+                                initialDays = initialEnd.diff(initialStart, 'days') + 1;
+
+                                taskEntries.forEach((entry) => {
+                                    if (entry.Duration !== undefined && entry.Day !== undefined) {
+                                        const dayMoment = moment(entry.Day.value);
+                                        if (dayMoment.isValid() && initialStart && dayMoment.isSameOrAfter(initialStart, 'day')) {
+                                            const dayIndex = dayMoment.diff(initialStart, 'days');
+                                            initialHours[dayIndex] = entry.Duration;
+                                        }
                                     }
-                                }
-                            });
+                                });
+                            }
                         }
-                        if (Object.keys(initialHours).length === 0 && totalMinutes > 0 && startDate) {
-                            initialHours[0] = totalMinutes;
+
+                        // Fallback if no specific per-day entries but totalDuration exists
+                        if (Object.keys(initialHours).length === 0 && taskData.totalDuration > 0 && initialStart) {
+                            initialHours[0] = taskData.totalDuration;
                         }
-                        setHours(initialHours);
 
-                        const validDays = taskEntries
-                            .map((entry) => entry.Day?.value)
-                            .filter((date) => date);
-
-                        if (validDays.length > 0) {
-                            const start = moment.min(validDays.map((d) => moment(d)));
-                            const end = moment.max(validDays.map((d) => moment(d)));
-
-                            // ONLY SET START/END DATE HERE IF THEY ARE NOT ALREADY SET BY USER INTERACTION
-                            // OR IF THE TASK DATA OVERRIDES THE INITIAL STATE.
-                            // Given the previous problem, the user's interaction should take precedence.
-                            // However, for initial load, if a task is present, these should be set.
-                            // The dependency array change below is the primary fix.
-                            setStartDate(start);
-                            setEndDate(end);
-
-                            const daysDiff = end.diff(start, 'days') + 1;
-                            setNumberOfDays(daysDiff);
-                            setSliderCount(daysDiff);
-                        } else if (task?.Planned_Start_Timestamp && task?.Planned_Delivery_Timestamp) {
-                            const start = moment(task.Planned_Start_Timestamp);
-                            const end = moment(task.Planned_Delivery_Timestamp);
-                            const daysDiff = end.diff(start, 'days') + 1;
-                            setStartDate(start);
-                            setEndDate(end);
-                            setNumberOfDays(daysDiff);
-                            setSliderCount(daysDiff);
-                        }
                     } else if (task?.Planned_Start_Timestamp && task?.Planned_Delivery_Timestamp) {
-                        const start = moment(task.Planned_Start_Timestamp);
-                        const end = moment(task.Planned_Delivery_Timestamp);
-                        const daysDiff = end.diff(start, 'days') + 1;
-                        setStartDate(start);
-                        setEndDate(end);
-                        setNumberOfDays(daysDiff);
-                        setSliderCount(daysDiff);
+                        initialStart = moment(task.Planned_Start_Timestamp);
+                        initialEnd = moment(task.Planned_Delivery_Timestamp);
+                        initialDays = initialEnd.diff(initialStart, 'days') + 1;
                     }
+
+                    // Set the states based on fetched task data
+                    setStartDate(initialStart);
+                    setEndDate(initialEnd);
+                    setNumberOfDays(initialDays);
+                    setSliderCount(initialDays);
+                    setHours(initialHours);
+
 
                     // Fetch per-person-per-day data
                     const perPersonResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-person-per-day`);
@@ -172,8 +164,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             }
         };
 
-        fetchAllData();
-    }, [task, form]); // Removed startDate from dependencies
+        fetchInitialData();
+    }, [task, form, calculateEndDate]); // Dependencies
 
     // --- EFFECT HOOK 2: SET INITIAL PERSON RESPONSIBLE AND CONTROL EDITABILITY ---
     useEffect(() => {
@@ -211,7 +203,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     const handleStartDateChange = (date) => {
         setStartDate(date);
-        if (numberOfDays && date) {
+        if (date && numberOfDays > 0) {
             calculateEndDate(date, numberOfDays);
         } else {
             setEndDate(null);
@@ -226,17 +218,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         setNumberOfDays(numericDays);
         if (startDate && numericDays > 0) {
             calculateEndDate(startDate, numericDays);
-        } else {
-            setEndDate(null);
-            setSliderCount(0);
-        }
-    };
-
-    const calculateEndDate = (start, days) => {
-        if (start && days > 0) {
-            const calculatedEndDate = moment(start).add(days - 1, 'days');
-            setEndDate(calculatedEndDate);
-            setSliderCount(days);
         } else {
             setEndDate(null);
             setSliderCount(0);
@@ -269,31 +250,23 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     return {
                         day: formattedDay,
                         duration: hours[index] || 0,
-                        slot: "Null", // Assuming 'Null' is the default slot
+                        slot: "Null",
+                        **Duration_Uint: "min", // ADDED THIS**
+                        **Responsibility: personResponsible, // ADDED THIS**
                     };
                 });
 
-                // Get the email(s) associated with the selected personResponsible
-                // This logic needs to correctly map the selected personResponsible name back to their email(s)
-                // using the fetched emailToPersonMap.
                 let emailForSubmission = '';
-                let emailsForSubmission = ''; // This will be the string for the 'Emails' BigQuery column
+                let emailsForSubmission = '';
 
-                // Find the email(s) associated with the selected personResponsible
-                // Iterate through the emailToPersonMap to find the entry where the value (person name) matches
                 const foundEntry = Object.entries(emailToPersonMap).find(
                     ([email, personName]) => personName === personResponsible
                 );
 
                 if (foundEntry) {
-                    emailForSubmission = foundEntry[0]; // The email (key) from the map
-                    emailsForSubmission = foundEntry[0]; // Assuming 'Emails' column stores primary email for now
-                    // If you need 'Emails' to be a comma-separated list of multiple access emails,
-                    // you'd need to extend your Person_Email_Mappings table to include a column for that,
-                    // and then fetch that column here. For now, it's just the primary email.
+                    emailForSubmission = foundEntry[0];
+                    emailsForSubmission = foundEntry[0];
                 } else {
-                    // Fallback: If for some reason the selected person isn't in the map,
-                    // use the current user's email. This should ideally not happen if dropdown is constrained.
                     emailForSubmission = currentUserEmail;
                     emailsForSubmission = currentUserEmail;
                 }
@@ -312,8 +285,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     Planned_Delivery_Timestamp: plannedDeliveryTimestamp,
                     Responsibility: personResponsible,
                     Current_Status: task.Current_Status,
-                    Email: emailForSubmission, // Use the primary email for 'Email' field
-                    Emails: emailsForSubmission, // Use the primary email for 'Emails' field
+                    Email: emailForSubmission,
+                    Emails: emailsForSubmission,
                     Total_Tasks: task.Total_Tasks,
                     Completed_Tasks: task.Completed_Tasks,
                     Planned_Tasks: task.Planned_Tasks,
