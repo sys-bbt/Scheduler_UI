@@ -24,14 +24,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [form] = Form.useForm();
     const [sliderCount, setSliderCount] = useState(0);
     const [hours, setHours] = useState({});
-    // Initialize with null/0, useEffect will set based on task
     const [startDate, setStartDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
     const [personResponsible, setPersonResponsible] = useState('');
     const [numberOfDays, setNumberOfDays] = useState(0);
     const [existingSchedules, setExistingSchedules] = useState({});
 
-    // NEW STATE for dynamic person data
     const [emailToPersonMap, setEmailToPersonMap] = useState({});
     const [allAvailablePersons, setAllAvailablePersons] = useState([]);
 
@@ -55,10 +53,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             setEndDate(null);
             setSliderCount(0);
         }
-    }, []); // No dependencies, as it only uses its arguments
+    }, []);
 
     // --- EFFECT HOOK 1: FETCH PERSON MAPPINGS AND INITIAL TASK DATA ---
-    // This effect runs once on mount and whenever the 'task' prop changes.
     useEffect(() => {
         const fetchInitialData = async () => {
             try {
@@ -78,6 +75,15 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         name: task.Task_Details || '',
                     });
 
+                    let initialStart = null;
+                    let initialDays = 0;
+                    const initialHours = {};
+
+                    // Prioritize task's Planned_Start_Timestamp
+                    if (task?.Planned_Start_Timestamp) {
+                        initialStart = moment(task.Planned_Start_Timestamp);
+                    }
+
                     // Fetch per-key-per-day data
                     const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
                     if (!response.ok) {
@@ -87,10 +93,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     const data = await response.json();
 
                     const taskData = data[task.Key];
-                    let initialStart = null;
-                    let initialEnd = null;
-                    let initialDays = 0;
-                    const initialHours = {};
 
                     if (taskData) {
                         const taskEntries = taskData.entries;
@@ -101,9 +103,15 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                                 .filter((date) => date);
 
                             if (validDays.length > 0) {
-                                initialStart = moment.min(validDays.map((d) => moment(d)));
-                                initialEnd = moment.max(validDays.map((d) => moment(d)));
-                                initialDays = initialEnd.diff(initialStart, 'days') + 1;
+                                // If task has entries, derive initialStart from them, but only if it wasn't already set
+                                // or if the task entries provide a clearer start. For simplicity and user input priority,
+                                // we'll use Planned_Start_Timestamp as the ultimate source if it exists.
+                                if (!initialStart) {
+                                     initialStart = moment.min(validDays.map((d) => moment(d)));
+                                }
+
+                                const actualInitialEnd = moment.max(validDays.map((d) => moment(d)));
+                                initialDays = actualInitialEnd.diff(initialStart, 'days') + 1;
 
                                 taskEntries.forEach((entry) => {
                                     if (entry.Duration !== undefined && entry.Day !== undefined) {
@@ -123,17 +131,25 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         }
 
                     } else if (task?.Planned_Start_Timestamp && task?.Planned_Delivery_Timestamp) {
-                        initialStart = moment(task.Planned_Start_Timestamp);
-                        initialEnd = moment(task.Planned_Delivery_Timestamp);
-                        initialDays = initialEnd.diff(initialStart, 'days') + 1;
+                        // If no per-key-per-day data, use task's planned timestamps
+                        if (!initialStart) { // Only set if not already set by Planned_Start_Timestamp
+                            initialStart = moment(task.Planned_Start_Timestamp);
+                        }
+                        const initialEndFromTask = moment(task.Planned_Delivery_Timestamp);
+                        initialDays = initialEndFromTask.diff(initialStart, 'days') + 1;
                     }
 
                     // Set the states based on fetched task data
                     setStartDate(initialStart);
-                    setEndDate(initialEnd);
                     setNumberOfDays(initialDays);
-                    setSliderCount(initialDays);
+                    setSliderCount(initialDays); // Keep sliderCount in sync with numberOfDays
                     setHours(initialHours);
+                    if (initialStart && initialDays > 0) {
+                        calculateEndDate(initialStart, initialDays);
+                    } else {
+                        setEndDate(null);
+                        setSliderCount(0);
+                    }
 
 
                     // Fetch per-person-per-day data
@@ -203,6 +219,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     const handleStartDateChange = (date) => {
         setStartDate(date);
+        // Immediately recalculate end date and slider count based on new start date
         if (date && numberOfDays > 0) {
             calculateEndDate(date, numberOfDays);
         } else {
@@ -216,6 +233,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         const days = e.target.value;
         const numericDays = parseInt(days, 10) || 0;
         setNumberOfDays(numericDays);
+        // Immediately recalculate end date and slider count based on new number of days
         if (startDate && numericDays > 0) {
             calculateEndDate(startDate, numericDays);
         } else {
@@ -380,7 +398,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     message: 'Time Limit Reached',
                     description: `Cannot schedule more than ${remainingMinutes} minutes for ${personResponsible} on ${currentDay} due to existing tasks.`,
                 });
-                // REMOVED THE EXTRA '});' HERE
             }
         }
 
@@ -496,7 +513,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     filterOption={(input, option) =>
                         (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                     }
-                    // Disable if the user is not an admin, or if there are no persons to display (e.g., non-admin with no mapping)
                     disabled={!isAdmin && personsToDisplay.length === 0}
                 >
                     {personsToDisplay.map((person) => (
