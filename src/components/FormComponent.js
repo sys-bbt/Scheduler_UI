@@ -251,8 +251,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         day: formattedDay,
                         duration: hours[index] || 0,
                         slot: "Null",
-                        **Duration_Uint: "min", // ADDED THIS**
-                        **Responsibility: personResponsible, // ADDED THIS**
+                        Duration_Uint: "min",
+                        Responsibility: personResponsible,
                     };
                 });
 
@@ -380,6 +380,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     message: 'Time Limit Reached',
                     description: `Cannot schedule more than ${remainingMinutes} minutes for ${personResponsible} on ${currentDay} due to existing tasks.`,
                 });
+                // REMOVED THE EXTRA '});' HERE
             }
         }
 
