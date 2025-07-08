@@ -16,7 +16,7 @@ console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 
 // Define admin emails on the frontend, consistent with DeliveryList.js
 const ADMIN_EMAILS_FRONTEND = [
-     "systems@brightbraintech.com",
+    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -105,7 +105,7 @@ const DeliveryDetail = () => {
                     }
 
                     const fetchedTasks = allTasksForDelCode
-                       .filter((task) => task.Step_ID !== 0)
+                        .filter((task) => task.Step_ID !== 0)
                         .map((task) => {
                             const taskDurationInMinutes = durationData[task.Key]?.totalDuration || 0;
                             const hours = Math.floor(taskDurationInMinutes / 60);
@@ -173,6 +173,8 @@ const DeliveryDetail = () => {
             console.log("DeliveryDetail (handleFormSubmit): Incrementing planned tasks count to:", newPlannedTasksCount);
             setDeliveryCounts(prev => ({ ...prev, plannedTasks: newPlannedTasksCount }));
 
+            // START: Commented out the backend call to update delivery counts
+            /*
             try {
                 console.log(`DeliveryDetail (handleFormSubmit): Calling backend to update delivery counts for ${delCode}. Planned: ${newPlannedTasksCount}, Total: ${newTotalTasksCount}`);
                 const response = await fetch(`${BACKEND_API_BASE_URL}/api/delivery_counts/${delCode}`, {
@@ -199,6 +201,8 @@ const DeliveryDetail = () => {
                 });
                 setDeliveryCounts(prev => ({ ...prev, plannedTasks: prev.plannedTasks - 1 })); // Rollback local state
             }
+            */
+            // END: Commented out the backend call to update delivery counts
         }
     };
 
