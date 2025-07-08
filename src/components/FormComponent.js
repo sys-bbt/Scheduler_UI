@@ -46,7 +46,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         return emailToPersonMap[email.toLowerCase()] || null;
     }, [emailToPersonMap]);
 
-    // calculateEndDate now takes dependencies directly from component state
+    // calculateEndDate now directly depends on startDate and numberOfDays from state
     const calculateEndDate = useCallback(() => {
         console.log('calculateEndDate called by useEffect with: startDate =', startDate ? startDate.format('YYYY-MM-DD') : null, 'numberOfDays =', numberOfDays);
         if (moment.isMoment(startDate) && startDate.isValid() && numberOfDays > 0) {
@@ -111,7 +111,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                                 }
 
                                 const actualInitialEnd = moment.max(validDays);
+                                // Ensure positive days, at least 1 if dates are valid
                                 initialDaysForState = actualInitialEnd.diff(initialStartForState, 'days') + 1;
+                                if (initialDaysForState < 1) initialDaysForState = 1;
 
                                 taskEntries.forEach((entry) => {
                                     if (entry.Duration !== undefined && entry.Day !== undefined) {
@@ -125,19 +127,22 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             }
                         }
 
+                        // Fallback for cases where per-day data is missing but totalDuration exists
                         if (Object.keys(initialHours).length === 0 && taskData.totalDuration > 0 && initialStartForState) {
                             initialHours[0] = taskData.totalDuration;
                             if (initialDaysForState === 0) {
-                                initialDaysForState = 1;
+                                initialDaysForState = 1; // At least one day for total duration
                             }
                         }
 
                     } else if (task?.Planned_Start_Timestamp && task?.Planned_Delivery_Timestamp) {
+                        // If no detailed taskData, use task's planned timestamps
                         if (!initialStartForState) {
                             initialStartForState = moment(task.Planned_Start_Timestamp);
                         }
                         const initialEndFromTask = moment(task.Planned_Delivery_Timestamp);
                         initialDaysForState = initialEndFromTask.diff(initialStartForState, 'days') + 1;
+                        if (initialDaysForState < 1) initialDaysForState = 1; // At least one day
                         console.log('Initial days calculated from task timestamps (no per-day data):', initialDaysForState);
                     }
 
@@ -148,7 +153,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     setHours(initialHours);
 
                     // No direct call to calculateEndDate here anymore, as it's handled by a separate useEffect
-                    // that reacts to startDate and numberOfDays changes.
+                    // that reacts to startDate and numberOfDays changes after they've been set.
 
                     const perPersonResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-person-per-day`);
                     if (!perPersonResponse.ok) {
@@ -178,12 +183,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         };
 
         fetchInitialData();
-    }, [task, form]); // Removed calculateEndDate from dependencies here
+    }, [task, form]); // Dependencies are task and form, as they dictate initial data fetch
 
     // --- EFFECT HOOK 2: Calculate End Date and Slider Count when startDate or numberOfDays changes ---
+    // This useEffect ensures calculateEndDate runs whenever its dependencies (startDate, numberOfDays) change
     useEffect(() => {
-        console.log('useEffect (startDate/numberOfDays dependency): Recalculating end date and slider count.');
-        calculateEndDate();
+        console.log('useEffect (startDate/numberOfDays dependency): Recalculating end date and slider count based on latest state.');
+        calculateEndDate(); // Call the memoized callback
     }, [startDate, numberOfDays, calculateEndDate]);
 
 
@@ -217,15 +223,15 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     const handleStartDateChange = (date) => {
         console.log('handleStartDateChange: DatePicker selected (moment object):', date ? date.format('YYYY-MM-DD') : null); //
-        setStartDate(date); // This will trigger the useEffect for date calculation
+        setStartDate(date); // This update will trigger the `useEffect` for `calculateEndDate`
     };
 
 
     const handleNumberOfDaysChange = (e) => {
-        const days = parseInt(e.target.value, 10); // Ensures it's a number
-        const numericDays = isNaN(days) ? 0 : days;
+        const days = parseInt(e.target.value, 10);
+        const numericDays = isNaN(days) ? 0 : days; // Ensure it's a number, default to 0
         console.log('handleNumberOfDaysChange: Input days', numericDays); //
-        setNumberOfDays(numericDays); // This will trigger the useEffect for date calculation
+        setNumberOfDays(numericDays); // This update will trigger the `useEffect` for `calculateEndDate`
     };
 
     const calculateTotalTime = () => {
@@ -250,12 +256,15 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
                 const totalTime = calculateTotalTime();
                 const slidersData = Array.from({ length: sliderCount }).map((_, index) => {
-                    const calculatedDay = moment(startDate).add(index, 'days');
-                    const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
-                    console.log(`Slider ${index}: Day=${formattedDay}, Duration=${hours[index] || 0}`);
+                    const calculatedDay = startDate && startDate.isValid() ? moment(startDate).add(index, 'days') : null;
+                    const formattedDay = calculatedDay && calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
+                    const durationValue = parseInt(hours[index], 10); // Final safeguard: parse to int just before sending
+                    const finalDuration = isNaN(durationValue) ? 0 : durationValue; // Default to 0 if NaN
+
+                    console.log(`Slider ${index}: Day=${formattedDay}, Duration=${finalDuration}`);
                     return {
                         day: formattedDay,
-                        duration: hours[index] || 0, // Should now reliably be a number
+                        duration: finalDuration, // Ensure this is a number
                         slot: "Null",
                         Duration_Uint: "min",
                         Responsibility: personResponsible,
@@ -375,9 +384,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
         const remainingMinutes = maxAllowedMinutes - alreadyScheduledMinutes;
 
-        effectiveValue = Math.min(numericValue, remainingMinutes); // Use numericValue here
+        effectiveValue = Math.min(numericValue, remainingMinutes);
 
-        if (numericValue > remainingMinutes) { // Compare original numericValue
+        if (numericValue > remainingMinutes) {
             notification.warning({
                 message: 'Time Limit Reached',
                 description: `Cannot schedule more than ${remainingMinutes} minutes for ${personResponsible} on ${currentDay} due to existing tasks.`,
