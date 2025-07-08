@@ -16,7 +16,7 @@ console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 
 // Define admin emails on the frontend, consistent with DeliveryList.js
 const ADMIN_EMAILS_FRONTEND = [
-     "systems@brightbraintech.com"
+     "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
