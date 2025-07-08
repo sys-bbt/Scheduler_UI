@@ -18,7 +18,7 @@ const DeliveryDetail = () => {
     const location = useLocation();
     // *** CRITICAL FIX HERE: Changed regex to capture any characters (not just digits) for delCode ***
     // This allows for alphanumeric delivery codes like "DEL123-ABC"
-    const delCodeMatch = location.pathname.match(/\/delivery\/(?:data\/)?([^/]+)/);
+    const delCodeMatch = location.pathname.match(/\/delivery\/(?:data\/)?(.+)/);
     const delCode = delCodeMatch ? delCodeMatch[1] : null;
 
     const { userEmail } = useContext(UserContext);
