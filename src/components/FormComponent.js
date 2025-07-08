@@ -26,9 +26,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [personResponsible, setPersonResponsible] = useState('');
     const [numberOfDays, setNumberOfDays] = useState(0);
     const [existingSchedules, setExistingSchedules] = useState({});
-
     const [emailToPersonMap, setEmailToPersonMap] = useState({});
     const [allAvailablePersons, setAllAvailablePersons] = useState([]);
+    const [isDataLoaded, setIsDataLoaded] = useState(false);
 
     console.log('FormComponent: currentUserEmail received:', currentUserEmail);
     const isAdmin = ADMIN_EMAILS.includes(currentUserEmail);
@@ -36,29 +36,43 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     // Add comprehensive logs for state values on each render
     console.log('--- FormComponent Render Trace ---');
-    console.log('Current startDate state (for rendering):', startDate ? startDate.format('YYYY-MM-DD') : null);
-    console.log('Current numberOfDays state (for rendering):', numberOfDays);
-    console.log('Current endDate state (for rendering):', endDate ? endDate.format('YYYY-MM-DD') : null);
-    console.log('Current sliderCount state (for rendering):', sliderCount);
+    console.log('Current startDate state:', startDate ? startDate.format('YYYY-MM-DD') : null);
+    console.log('Current numberOfDays state:', numberOfDays);
+    console.log('Current endDate state:', endDate ? endDate.format('YYYY-MM-DD') : null);
+    console.log('Current sliderCount state:', sliderCount);
+    console.log('isDataLoaded:', isDataLoaded);
     console.log('---------------------------------');
 
     const getPersonNameFromEmail = useCallback((email) => {
         return emailToPersonMap[email.toLowerCase()] || null;
     }, [emailToPersonMap]);
 
-    // Fixed calculateEndDateLogic function
+    // Simplified and fixed calculateEndDateLogic function
     const calculateEndDateLogic = useCallback((start, days) => {
         console.log('calculateEndDateLogic called with: start =', start ? start.format('YYYY-MM-DD') : null, 'days =', days);
         
         if (start && moment.isMoment(start) && start.isValid() && days > 0) {
             const calculatedEndDate = moment(start).add(days - 1, 'days');
-            console.log('Calculated End Date inside calculateEndDateLogic:', calculatedEndDate.format('YYYY-MM-DD'));
+            console.log('Calculated End Date:', calculatedEndDate.format('YYYY-MM-DD'));
+            
             setEndDate(calculatedEndDate);
             setSliderCount(days);
+            
+            // Initialize hours array if it's empty
+            setHours(prevHours => {
+                const newHours = { ...prevHours };
+                for (let i = 0; i < days; i++) {
+                    if (newHours[i] === undefined) {
+                        newHours[i] = 0;
+                    }
+                }
+                return newHours;
+            });
         } else {
-            console.log('Setting endDate to null and sliderCount to 0 (invalid start/days/moment object)');
+            console.log('Invalid start date or days, clearing end date and slider count');
             setEndDate(null);
             setSliderCount(0);
+            setHours({});
         }
     }, []);
 
@@ -75,20 +89,21 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 setEmailToPersonMap(personMappingsData.emailToPersonMap || {});
                 setAllAvailablePersons(personMappingsData.allAvailablePersons || []);
 
+                let initialStartForState = null;
+                let initialDaysForState = 0;
+                const initialHours = {};
+
                 if (task) {
                     form.setFieldsValue({
                         name: task.Task_Details || '',
                     });
-
-                    let initialStartForState = null;
-                    let initialDaysForState = 0;
-                    const initialHours = {};
 
                     if (task?.Planned_Start_Timestamp) {
                         initialStartForState = moment(task.Planned_Start_Timestamp);
                         console.log('Initial start date from task.Planned_Start_Timestamp:', initialStartForState.format('YYYY-MM-DD'));
                     }
 
+                    // Fetch per-key-per-day data
                     const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
                     if (!response.ok) {
                         const errorText = await response.text();
@@ -97,45 +112,32 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     const data = await response.json();
                     const taskData = data[task.Key];
 
-                    if (taskData) {
+                    if (taskData && taskData.entries && taskData.entries.length > 0) {
                         const taskEntries = taskData.entries;
+                        const validDays = taskEntries
+                            .map((entry) => moment(entry.Day?.value))
+                            .filter((dateMoment) => dateMoment.isValid());
 
-                        if (taskEntries && taskEntries.length > 0) {
-                            const validDays = taskEntries
-                                .map((entry) => moment(entry.Day?.value))
-                                .filter((dateMoment) => dateMoment.isValid());
+                        if (validDays.length > 0) {
+                            if (!initialStartForState) {
+                                initialStartForState = moment.min(validDays);
+                                console.log('Initial start date from earliest task entry:', initialStartForState.format('YYYY-MM-DD'));
+                            }
 
-                            if (validDays.length > 0) {
-                                if (!initialStartForState) {
-                                    initialStartForState = moment.min(validDays);
-                                    console.log('Initial start date from earliest task entry (after moment conversion):', initialStartForState.format('YYYY-MM-DD'));
-                                }
+                            const actualInitialEnd = moment.max(validDays);
+                            initialDaysForState = actualInitialEnd.diff(initialStartForState, 'days') + 1;
+                            if (initialDaysForState < 1) initialDaysForState = 1;
 
-                                const actualInitialEnd = moment.max(validDays);
-                                // Ensure positive days, at least 1 if dates are valid
-                                initialDaysForState = actualInitialEnd.diff(initialStartForState, 'days') + 1;
-                                if (initialDaysForState < 1) initialDaysForState = 1;
-
-                                taskEntries.forEach((entry) => {
-                                    if (entry.Duration !== undefined && entry.Day !== undefined) {
-                                        const dayMoment = moment(entry.Day.value);
-                                        if (dayMoment.isValid() && initialStartForState && dayMoment.isSameOrAfter(initialStartForState, 'day')) {
-                                            const dayIndex = dayMoment.diff(initialStartForState, 'days');
-                                            initialHours[dayIndex] = entry.Duration;
-                                        }
+                            taskEntries.forEach((entry) => {
+                                if (entry.Duration !== undefined && entry.Day !== undefined) {
+                                    const dayMoment = moment(entry.Day.value);
+                                    if (dayMoment.isValid() && initialStartForState && dayMoment.isSameOrAfter(initialStartForState, 'day')) {
+                                        const dayIndex = dayMoment.diff(initialStartForState, 'days');
+                                        initialHours[dayIndex] = entry.Duration;
                                     }
-                                });
-                            }
+                                }
+                            });
                         }
-
-                        // Fallback for cases where per-day data is missing but totalDuration exists
-                        if (Object.keys(initialHours).length === 0 && taskData.totalDuration > 0 && initialStartForState) {
-                            initialHours[0] = taskData.totalDuration;
-                            if (initialDaysForState === 0) {
-                                initialDaysForState = 1; // At least one day for total duration
-                            }
-                        }
-
                     } else if (task?.Planned_Start_Timestamp && task?.Planned_Delivery_Timestamp) {
                         // If no detailed taskData, use task's planned timestamps
                         if (!initialStartForState) {
@@ -143,16 +145,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         }
                         const initialEndFromTask = moment(task.Planned_Delivery_Timestamp);
                         initialDaysForState = initialEndFromTask.diff(initialStartForState, 'days') + 1;
-                        if (initialDaysForState < 1) initialDaysForState = 1; // At least one day
-                        console.log('Initial days calculated from task timestamps (no per-day data):', initialDaysForState);
+                        if (initialDaysForState < 1) initialDaysForState = 1;
+                        console.log('Initial days calculated from task timestamps:', initialDaysForState);
                     }
 
-                    console.log('useEffect (initial fetch): Setting initial startDate state to:', initialStartForState ? initialStartForState.format('YYYY-MM-DD') : null);
-                    console.log('useEffect (initial fetch): Setting initial numberOfDays state to:', initialDaysForState);
-                    setStartDate(initialStartForState);
-                    setNumberOfDays(initialDaysForState);
-                    setHours(initialHours);
-
+                    // Fetch existing schedules
                     const perPersonResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-person-per-day`);
                     if (!perPersonResponse.ok) {
                         const errorText = await perPersonResponse.text();
@@ -171,12 +168,23 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     });
                     setExistingSchedules(schedules);
                 }
+
+                // Set initial state after all data is loaded
+                console.log('Setting initial state - Start Date:', initialStartForState ? initialStartForState.format('YYYY-MM-DD') : null);
+                console.log('Setting initial state - Days:', initialDaysForState);
+                
+                setStartDate(initialStartForState);
+                setNumberOfDays(initialDaysForState);
+                setHours(initialHours);
+                setIsDataLoaded(true);
+
             } catch (error) {
                 console.error("Error fetching data:", error);
                 notification.error({
                     message: 'Error',
                     description: `Failed to load data: ${error.message}. Please check network and server logs.`,
                 });
+                setIsDataLoaded(true); // Set to true even on error to prevent infinite loading
             }
         };
 
@@ -185,13 +193,15 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     // --- EFFECT HOOK 2: Calculate End Date and Slider Count whenever startDate or numberOfDays changes ---
     useEffect(() => {
-        console.log('useEffect (startDate/numberOfDays dependency): Recalculating end date and slider count based on latest state.');
+        if (!isDataLoaded) return; // Only run after initial data is loaded
+        
+        console.log('useEffect (startDate/numberOfDays dependency): Recalculating end date and slider count');
         calculateEndDateLogic(startDate, numberOfDays);
-    }, [startDate, numberOfDays, calculateEndDateLogic]);
+    }, [startDate, numberOfDays, calculateEndDateLogic, isDataLoaded]);
 
     // --- EFFECT HOOK 3: PERSON RESPONSIBLE LOGIC ---
     useEffect(() => {
-        if (allAvailablePersons.length === 0 || Object.keys(emailToPersonMap).length === 0) {
+        if (!isDataLoaded || allAvailablePersons.length === 0 || Object.keys(emailToPersonMap).length === 0) {
             return;
         }
 
@@ -215,11 +225,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 form.setFieldsValue({ personResponsible: undefined });
             }
         }
-    }, [task, currentUserEmail, form, getPersonNameFromEmail, isAdmin, allAvailablePersons, emailToPersonMap]);
+    }, [task, currentUserEmail, form, getPersonNameFromEmail, isAdmin, allAvailablePersons, emailToPersonMap, isDataLoaded]);
 
     // --- HANDLERS FOR USER INPUT ---
     const handleStartDateChange = (date) => {
-        console.log('handleStartDateChange: DatePicker selected (moment object):', date ? date.format('YYYY-MM-DD') : null);
+        console.log('handleStartDateChange: DatePicker selected:', date ? date.format('YYYY-MM-DD') : null);
         setStartDate(date);
         // Clear hours when start date changes
         setHours({});
@@ -456,6 +466,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             ? [getPersonNameFromEmail(currentUserEmail)]
             : [];
 
+    // Show loading state until data is loaded
+    if (!isDataLoaded) {
+        return <div>Loading...</div>;
+    }
+
     return (
         <Form form={form} layout="vertical">
             <Form.Item
@@ -501,37 +516,54 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 </Col>
             </Row>
 
-            {/* Render sliders only if startDate is valid and numberOfDays > 0 */}
-            {startDate && startDate.isValid() && numberOfDays > 0 && sliderCount > 0 && Array.from({ length: sliderCount }).map((_, index) => (
-                <Form.Item
-                    key={index}
-                    label={`Hours for Day ${index + 1} (${startDate && startDate.isValid() ? moment(startDate).add(index, 'days').format('YYYY-MM-DD') : 'N/A'})`}
-                >
-                    <Row gutter={20}>
-                        <Col xs={20}>
-                            <Slider
-                                marks={customMarks}
-                                min={0}
-                                max={480}
-                                step={1}
-                                onChange={(value) => handleSliderChange(index, value)}
-                                value={hours[index] || 0}
-                                tooltip={{ formatter: (value) => `${value} minutes` }}
-                            />
-                        </Col>
-                        <Col xs={4}>
-                            <Input
-                                type="number"
-                                min={0}
-                                max={480}
-                                value={hours[index] || 0}
-                                onChange={(e) => handleInputChange(index, e.target.value)}
-                                addonAfter="min"
-                            />
-                        </Col>
-                    </Row>
-                </Form.Item>
-            ))}
+            {/* Debug information */}
+            <div style={{ marginBottom: '16px', padding: '8px', backgroundColor: '#f0f0f0', fontSize: '12px' }}>
+                <strong>Debug Info:</strong><br />
+                Start Date Valid: {startDate && startDate.isValid() ? 'Yes' : 'No'}<br />
+                Number of Days: {numberOfDays}<br />
+                Slider Count: {sliderCount}<br />
+                End Date Valid: {endDate && endDate.isValid() ? 'Yes' : 'No'}<br />
+                Should Show Sliders: {startDate && startDate.isValid() && numberOfDays > 0 && sliderCount > 0 ? 'Yes' : 'No'}
+            </div>
+
+            {/* Render sliders with improved conditions */}
+            {startDate && startDate.isValid() && numberOfDays > 0 && sliderCount > 0 && 
+                Array.from({ length: sliderCount }).map((_, index) => {
+                    const dayDate = moment(startDate).add(index, 'days');
+                    const formattedDate = dayDate.isValid() ? dayDate.format('YYYY-MM-DD') : 'Invalid Date';
+                    
+                    return (
+                        <Form.Item
+                            key={index}
+                            label={`Hours for Day ${index + 1} (${formattedDate})`}
+                        >
+                            <Row gutter={20}>
+                                <Col xs={20}>
+                                    <Slider
+                                        marks={customMarks}
+                                        min={0}
+                                        max={480}
+                                        step={1}
+                                        onChange={(value) => handleSliderChange(index, value)}
+                                        value={hours[index] || 0}
+                                        tooltip={{ formatter: (value) => `${value} minutes` }}
+                                    />
+                                </Col>
+                                <Col xs={4}>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        max={480}
+                                        value={hours[index] || 0}
+                                        onChange={(e) => handleInputChange(index, e.target.value)}
+                                        addonAfter="min"
+                                    />
+                                </Col>
+                            </Row>
+                        </Form.Item>
+                    );
+                })
+            }
 
             <Form.Item
                 label="Person Responsible"
