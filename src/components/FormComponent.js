@@ -420,7 +420,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         const maxAllowedMinutes = 480;
         let effectiveValue = numericValue;
 
-        const alreadyScheduledMinutes = existingSchedulules[personResponsible]?.[currentDay] || 0;
+        const alreadyScheduledMinutes = existingSchedules[personResponsible]?.[currentDay] || 0;
         const remainingMinutes = maxAllowedMinutes - alreadyScheduledMinutes;
 
         effectiveValue = Math.min(numericValue, remainingMinutes);
