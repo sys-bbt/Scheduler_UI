@@ -14,17 +14,29 @@ import './DeliveryDetail.css';
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 
+// Define admin emails on the frontend, consistent with DeliveryList.js
+const ADMIN_EMAILS_FRONTEND = [
+     "systems@brightbraintech.com"
+    "neelam.p@brightbraintech.com",
+    "meghna.j@brightbraintech.com",
+    "zoya.a@brightbraintech.com",
+    "shweta.g@brightbraintech.com",
+    "hitesh.r@brightbraintech.com"
+];
+
 const DeliveryDetail = () => {
     const location = useLocation();
-    // *** CRITICAL FIX HERE: Changed regex to capture any characters (not just digits) for delCode ***
-    // This allows for alphanumeric delivery codes like "DEL123-ABC"
     const delCodeMatch = location.pathname.match(/\/delivery\/(?:data\/)?(.+)/);
     const delCode = delCodeMatch ? delCodeMatch[1] : null;
 
     const { userEmail } = useContext(UserContext);
+    // Determine if the current user is an admin
+    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
+
     console.log('DeliveryDetail (Render): userEmail from Context:', userEmail);
+    console.log('DeliveryDetail (Render): Is Admin:', isAdmin); // Added for debugging admin status
     console.log('DeliveryDetail (Render): Current pathname:', location.pathname);
-    console.log('DeliveryDetail (Render): Extracted delCode:', delCode); // Added for debugging
+    console.log('DeliveryDetail (Render): Extracted delCode:', delCode);
 
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -92,10 +104,8 @@ const DeliveryDetail = () => {
                         setDeliveryCounts({ totalTasks: 0, plannedTasks: 0 });
                     }
 
-                    // Now, all sub-tasks (Step_ID !== 0) will be fetched and displayed.
-                    // The 'scheduled' status will be derived for rendering logic.
                     const fetchedTasks = allTasksForDelCode
-                       .filter((task) => task.Step_ID !== 0) // Only filter out the main delivery entry
+                       .filter((task) => task.Step_ID !== 0)
                         .map((task) => {
                             const taskDurationInMinutes = durationData[task.Key]?.totalDuration || 0;
                             const hours = Math.floor(taskDurationInMinutes / 60);
@@ -133,7 +143,7 @@ const DeliveryDetail = () => {
         };
 
         fetchDeliveryDetails();
-    }, [delCode, userEmail, BACKEND_API_BASE_URL]);
+    }, [delCode, userEmail, BACKEND_API_BASE_URL]); // isAdmin is not a dependency here as it's not directly used in the fetch URL
 
     const handleFormSubmit = async (formData) => {
         console.log("DeliveryDetail (handleFormSubmit): Form submitted data:", formData);
@@ -145,12 +155,12 @@ const DeliveryDetail = () => {
         const updatedTasksList = tasks.map((task) =>
             task.Key === activeTaskKey
                 ? {
-                      ...task,
-                      scheduled: true,
-                      personResponsible: formData.personResponsible || task.personResponsible,
-                      totalTime: formData.totalTime || task.totalTime,
-                      formattedDuration: `${Math.floor((formData.totalTime || 0) / 60)}h ${ (formData.totalTime || 0) % 60}m`,
-                      Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp,
+                    ...task,
+                    scheduled: true,
+                    personResponsible: formData.personResponsible || task.personResponsible,
+                    totalTime: formData.totalTime || task.totalTime,
+                    formattedDuration: `${Math.floor((formData.totalTime || 0) / 60)}h ${ (formData.totalTime || 0) % 60}m`,
+                    Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp,
                   }
                 : task
         );
@@ -193,13 +203,29 @@ const DeliveryDetail = () => {
     };
 
     const handleTaskClick = (task) => {
-        if (!task.scheduled) {
+        // Only allow scheduling if the task is not already scheduled AND the user is an admin
+        if (!task.scheduled && isAdmin) {
             setActionType('Schedule');
             setActiveTaskKey(task.Key);
+        } else if (!isAdmin && !task.scheduled) {
+            // Optionally, show a notification if a non-admin tries to click an unscheduled task
+            notification.info({
+                message: 'Permission Denied',
+                description: 'Only administrators can schedule new tasks.',
+            });
         }
     };
 
     const handleMenuClick = (task, { key }) => {
+        // Only allow reschedule/reassign if the user is an admin
+        if (!isAdmin) {
+            notification.info({
+                message: 'Permission Denied',
+                description: 'Only administrators can reschedule or reassign tasks.',
+            });
+            return;
+        }
+
         if (key === 'reschedule') {
             setActionType('Reschedule');
         } else if (key === 'reassign') {
@@ -209,6 +235,8 @@ const DeliveryDetail = () => {
     };
 
     const toggleTimer = (taskKey) => {
+        // Allow timer toggle for all users, or restrict if needed.
+        // Current logic allows any user to toggle. If only admins should, add `if (!isAdmin) return;`
         const updatedTasks = tasks.map((task) => {
             if (task.Key === taskKey) {
                 return { ...task, isPlaying: !task.isPlaying };
@@ -220,17 +248,23 @@ const DeliveryDetail = () => {
 
     const formatTimestamp = (timestamp) => {
         if (!timestamp) return 'No start time';
-        // Handle both BigQuery's { value: "..." } and direct string timestamps
         const dateValue = typeof timestamp === 'object' && timestamp.value ? timestamp.value : timestamp;
         const date = new Date(dateValue);
         return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
     };
 
     const taskMenu = (task) => (
-        <Menu onClick={(info) => handleMenuClick(task, info)}>
-            <MenuItem key="reschedule">Reschedule Task</MenuItem>
-            <MenuItem key="reassign">Reassign Task</MenuItem>
-        </Menu>
+        // Only show reschedule/reassign options if the user is an admin
+        isAdmin ? (
+            <Menu onClick={(info) => handleMenuClick(task, info)}>
+                <MenuItem key="reschedule">Reschedule Task</MenuItem>
+                <MenuItem key="reassign">Reassign Task</MenuItem>
+            </Menu>
+        ) : (
+            <Menu>
+                <MenuItem disabled>No actions available</MenuItem>
+            </Menu>
+        )
     );
 
     if (loading) {
@@ -289,106 +323,110 @@ const DeliveryDetail = () => {
 
             <h3>Tasks</h3>
             <Row>
-                 <Col xs={12}>
-                    <Card className="p-3 shadow-sm task-card mb-3">
-                        <Card.Body>
-                            <div className="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div className="d-flex align-items-center mb-2">
-                                        <FiCheckCircle style={{ marginRight: '8px', color: 'green' }} />
-                                        <span className="font-weight-bold" style={{ fontSize: '1.5rem' }}>
-                                            {deliveryCounts.plannedTasks} of {deliveryCounts.totalTasks} Planned
-                                        </span>
-                                    </div>
-                                    <div className="mb-2">
-                                        <ProgressBar
-                                            now={progress}
-                                            variant={progress > 50 ? 'success' : progress > 20 ? 'warning' : 'danger'}
-                                        />
+                    <Col xs={12}>
+                        <Card className="p-3 shadow-sm task-card mb-3">
+                            <Card.Body>
+                                <div className="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div className="d-flex align-items-center mb-2">
+                                            <FiCheckCircle style={{ marginRight: '8px', color: 'green' }} />
+                                            <span className="font-weight-bold" style={{ fontSize: '1.5rem' }}>
+                                                {deliveryCounts.plannedTasks} of {deliveryCounts.totalTasks} Planned
+                                            </span>
+                                        </div>
+                                        <div className="mb-2">
+                                            <ProgressBar
+                                                now={progress}
+                                                variant={progress > 50 ? 'success' : progress > 20 ? 'warning' : 'danger'}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </Card.Body>
-                    </Card>
-                </Col>
-                {tasks.length > 0 ? (
-                    tasks.map((task, index) => {
-                        const displayDuration = task.totalTime || task.formattedDuration || '0m';
+                            </Card.Body>
+                        </Card>
+                    </Col>
+                    {tasks.length > 0 ? (
+                        tasks.map((task, index) => {
+                            const displayDuration = task.totalTime || task.formattedDuration || '0m';
 
-                        return (
-                            <Col xs={12} key={task.Key || index}>
-                                <Dropdown trigger={['contextMenu']} overlay={taskMenu(task)}>
-                                    <div
-                                        className="task-card"
-                                        onClick={() => handleTaskClick(task)}
-                                        style={{ cursor: task.scheduled ? 'default' : 'pointer' }}
-                                    >
-                                        <Card className="mb-3">
-                                            <Card.Body>
-                                                <div className="d-flex align-items-center">
-                                                    <div className="timer-controls" style={{ marginRight: '10px' }}>
-                                                        {!task.scheduled ? (
-                                                            <FaCalendarAlt
-                                                                onClick={() => handleTaskClick(task)}
-                                                                style={{ cursor: 'pointer' }}
-                                                            />
+                            return (
+                                <Col xs={12} key={task.Key || index}>
+                                    {/* Conditionally render Dropdown or a simple div based on isAdmin and task.scheduled */}
+                                    <Dropdown trigger={isAdmin && task.scheduled ? ['contextMenu'] : []} overlay={taskMenu(task)}>
+                                        <div
+                                            className="task-card"
+                                            onClick={() => handleTaskClick(task)}
+                                            style={{ cursor: task.scheduled ? 'default' : (isAdmin ? 'pointer' : 'default') }} // Cursor changes based on isAdmin and scheduled status
+                                        >
+                                            <Card className="mb-3">
+                                                <Card.Body>
+                                                    <div className="d-flex align-items-center">
+                                                        <div className="timer-controls" style={{ marginRight: '10px' }}>
+                                                            {!task.scheduled ? (
+                                                                // Only show calendar icon for scheduling if isAdmin
+                                                                isAdmin && (
+                                                                    <FaCalendarAlt
+                                                                        onClick={() => handleTaskClick(task)}
+                                                                        style={{ cursor: 'pointer' }}
+                                                                    />
+                                                                )
+                                                            ) : (
+                                                                <>
+                                                                    {task.isPlaying ? (
+                                                                        <FaPause
+                                                                            onClick={() => toggleTimer(task.Key)}
+                                                                            style={{ cursor: 'pointer' }}
+                                                                        />
+                                                                    ) : (
+                                                                        <FaPlay
+                                                                            onClick={() => toggleTimer(task.Key)}
+                                                                            style={{ cursor: 'pointer' }}
+                                                                        />
+                                                                    )}
+                                                                    <FaStop
+                                                                        onClick={() => toggleTimer(task.Key)}
+                                                                        style={{ cursor: 'pointer', marginLeft: '5px' }}
+                                                                    />
+                                                                </>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="flex-grow-1 text-center">
+                                                            <h5 className="mb-1">{task.Task_Details}</h5>
+                                                            <span className="text-muted">{task.personResponsible}</span>
+                                                        </div>
+
+                                                        <span>{displayDuration}</span>
+                                                    </div>
+
+                                                    <div className="task-status mt-2">
+                                                        {task.isPlaying ? (
+                                                            <p className="text-success">On time for going live</p>
                                                         ) : (
-                                                            <>
-                                                                {task.isPlaying ? (
-                                                                    <FaPause
-                                                                        onClick={() => toggleTimer(task.Key)}
-                                                                        style={{ cursor: 'pointer' }}
-                                                                    />
-                                                                ) : (
-                                                                    <FaPlay
-                                                                        onClick={() => toggleTimer(task.Key)}
-                                                                        style={{ cursor: 'pointer' }}
-                                                                    />
-                                                                )}
-                                                                <FaStop
-                                                                    onClick={() => toggleTimer(task.Key)}
-                                                                    style={{ cursor: 'pointer', marginLeft: '5px' }}
-                                                                />
-                                                            </>
+                                                            <p className="text-muted">Paused</p>
                                                         )}
                                                     </div>
 
-                                                    <div className="flex-grow-1 text-center">
-                                                        <h5 className="mb-1">{task.Task_Details}</h5>
-                                                        <span className="text-muted">{task.personResponsible}</span>
-                                                    </div>
-
-                                                    <span>{displayDuration}</span>
-                                                </div>
-
-                                                <div className="task-status mt-2">
-                                                    {task.isPlaying ? (
-                                                        <p className="text-success">On time for going live</p>
-                                                    ) : (
-                                                        <p className="text-muted">Paused</p>
+                                                    {activeTaskKey === task.Key && actionType && (
+                                                        <div className="mt-3">
+                                                            <h6>{actionType} Task: {task.Task_Details}</h6>
+                                                            <FormComponent
+                                                                onSubmit={handleFormSubmit}
+                                                                task={task}
+                                                                currentUserEmail={userEmail}
+                                                            />
+                                                        </div>
                                                     )}
-                                                </div>
-
-                                                {activeTaskKey === task.Key && actionType && (
-                                                    <div className="mt-3">
-                                                        <h6>{actionType} Task: {task.Task_Details}</h6>
-                                                        <FormComponent
-                                                            onSubmit={handleFormSubmit}
-                                                            task={task}
-                                                            currentUserEmail={userEmail}
-                                                        />
-                                                    </div>
-                                                )}
-                                            </Card.Body>
-                                        </Card>
-                                    </div>
-                                </Dropdown>
-                            </Col>
-                        );
-                    })
-                ) : (
-                    <ListGroup.Item>No tasks available for this delivery.</ListGroup.Item>
-                )}
+                                                </Card.Body>
+                                            </Card>
+                                        </div>
+                                    </Dropdown>
+                                </Col>
+                            );
+                        })
+                    ) : (
+                        <ListGroup.Item>No tasks available for this delivery.</ListGroup.Item>
+                    )}
             </Row>
 
             <Link to="/" className="btn btn-primary mt-4">
