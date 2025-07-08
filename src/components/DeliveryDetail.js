@@ -16,13 +16,15 @@ console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 
 const DeliveryDetail = () => {
     const location = useLocation();
-    const delCodeMatch = location.pathname.match(/\/delivery\/(?:data\/)?(\d+)/);
+    // *** CRITICAL FIX HERE: Changed regex to capture any characters (not just digits) for delCode ***
+    // This allows for alphanumeric delivery codes like "DEL123-ABC"
+    const delCodeMatch = location.pathname.match(/\/delivery\/(?:data\/)?([^/]+)/);
     const delCode = delCodeMatch ? delCodeMatch[1] : null;
 
     const { userEmail } = useContext(UserContext);
     console.log('DeliveryDetail (Render): userEmail from Context:', userEmail);
     console.log('DeliveryDetail (Render): Current pathname:', location.pathname);
-    console.log('DeliveryDetail (Render): Extracted delCode:', delCode);
+    console.log('DeliveryDetail (Render): Extracted delCode:', delCode); // Added for debugging
 
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -90,7 +92,6 @@ const DeliveryDetail = () => {
                         setDeliveryCounts({ totalTasks: 0, plannedTasks: 0 });
                     }
 
-                    // *** CRITICAL FIX HERE: Removed filtering by Planned_Delivery_Timestamp from initial task list ***
                     // Now, all sub-tasks (Step_ID !== 0) will be fetched and displayed.
                     // The 'scheduled' status will be derived for rendering logic.
                     const fetchedTasks = allTasksForDelCode
@@ -132,7 +133,7 @@ const DeliveryDetail = () => {
         };
 
         fetchDeliveryDetails();
-    }, [delCode, userEmail, BACKEND_API_BASE_URL]); // Added BACKEND_API_BASE_URL to dependencies for completeness
+    }, [delCode, userEmail, BACKEND_API_BASE_URL]);
 
     const handleFormSubmit = async (formData) => {
         console.log("DeliveryDetail (handleFormSubmit): Form submitted data:", formData);
