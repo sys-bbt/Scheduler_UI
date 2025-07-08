@@ -93,6 +93,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             taskEntries.forEach((entry) => {
                                 if (entry.Duration !== undefined && entry.Day !== undefined) {
                                     const dayMoment = moment(entry.Day.value);
+                                    // Ensure dayMoment is valid and within the task's planned range if startDate exists
                                     if (dayMoment.isValid() && startDate && dayMoment.isSameOrAfter(startDate, 'day')) {
                                         const dayIndex = dayMoment.diff(startDate, 'days');
                                         initialHours[dayIndex] = entry.Duration;
@@ -113,6 +114,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             const start = moment.min(validDays.map((d) => moment(d)));
                             const end = moment.max(validDays.map((d) => moment(d)));
 
+                            // ONLY SET START/END DATE HERE IF THEY ARE NOT ALREADY SET BY USER INTERACTION
+                            // OR IF THE TASK DATA OVERRIDES THE INITIAL STATE.
+                            // Given the previous problem, the user's interaction should take precedence.
+                            // However, for initial load, if a task is present, these should be set.
+                            // The dependency array change below is the primary fix.
                             setStartDate(start);
                             setEndDate(end);
 
@@ -167,8 +173,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         };
 
         fetchAllData();
-    }, [task, form, startDate]); // Dependencies for useCallback
-
+    }, [task, form]); // Removed startDate from dependencies
 
     // --- EFFECT HOOK 2: SET INITIAL PERSON RESPONSIBLE AND CONTROL EDITABILITY ---
     useEffect(() => {
