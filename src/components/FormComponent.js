@@ -36,30 +36,31 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     // Add comprehensive logs for state values on each render
     console.log('--- FormComponent Render Trace ---');
-    console.log('Current startDate state (for rendering):', startDate ? startDate.format('YYYY-MM-DD') : null); //
-    console.log('Current numberOfDays state (for rendering):', numberOfDays); //
-    console.log('Current endDate state (for rendering):', endDate ? endDate.format('YYYY-MM-DD') : null); //
-    console.log('Current sliderCount state (for rendering):', sliderCount); //
+    console.log('Current startDate state (for rendering):', startDate ? startDate.format('YYYY-MM-DD') : null);
+    console.log('Current numberOfDays state (for rendering):', numberOfDays);
+    console.log('Current endDate state (for rendering):', endDate ? endDate.format('YYYY-MM-DD') : null);
+    console.log('Current sliderCount state (for rendering):', sliderCount);
     console.log('---------------------------------');
 
     const getPersonNameFromEmail = useCallback((email) => {
         return emailToPersonMap[email.toLowerCase()] || null;
     }, [emailToPersonMap]);
 
-    // calculateEndDate now directly depends on startDate and numberOfDays from state
-    const calculateEndDate = useCallback(() => {
-        console.log('calculateEndDate called by useEffect with: startDate =', startDate ? startDate.format('YYYY-MM-DD') : null, 'numberOfDays =', numberOfDays);
-        if (moment.isMoment(startDate) && startDate.isValid() && numberOfDays > 0) {
-            const calculatedEndDate = moment(startDate).add(numberOfDays - 1, 'days');
+    // calculateEndDate now accepts start and days as arguments
+    const calculateEndDate = useCallback((start, days) => {
+        console.log('calculateEndDate called with: start =', start ? start.format('YYYY-MM-DD') : null, 'days =', days);
+        if (moment.isMoment(start) && start.isValid() && days > 0) {
+            const calculatedEndDate = moment(start).add(days - 1, 'days');
             console.log('Calculated End Date inside calculateEndDate:', calculatedEndDate.format('YYYY-MM-DD'));
             setEndDate(calculatedEndDate);
-            setSliderCount(numberOfDays);
+            setSliderCount(days);
         } else {
-            console.log('Setting endDate to null and sliderCount to 0 (invalid startDate/numberOfDays/moment object)'); //
+            console.log('Setting endDate to null and sliderCount to 0 (invalid start/days/moment object)');
             setEndDate(null);
             setSliderCount(0);
         }
-    }, [startDate, numberOfDays]); // Dependencies for useCallback
+    }, []); // Empty dependency array because it uses arguments, not state directly
+
 
     // --- EFFECT HOOK 1: FETCH PERSON MAPPINGS AND INITIAL TASK DATA ---
     useEffect(() => {
@@ -146,14 +147,22 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         console.log('Initial days calculated from task timestamps (no per-day data):', initialDaysForState);
                     }
 
-                    console.log('useEffect (initial fetch): Setting initial startDate state to:', initialStartForState ? initialStartForState.format('YYYY-MM-DD') : null); //
-                    console.log('useEffect (initial fetch): Setting initial numberOfDays state to:', initialDaysForState); //
+                    console.log('useEffect (initial fetch): Setting initial startDate state to:', initialStartForState ? initialStartForState.format('YYYY-MM-DD') : null);
+                    console.log('useEffect (initial fetch): Setting initial numberOfDays state to:', initialDaysForState);
                     setStartDate(initialStartForState);
                     setNumberOfDays(initialDaysForState);
                     setHours(initialHours);
 
-                    // No direct call to calculateEndDate here anymore, as it's handled by a separate useEffect
-                    // that reacts to startDate and numberOfDays changes after they've been set.
+                    // Crucial: Call calculateEndDate immediately after setting initial states
+                    // as these values are already available and stable for the first render.
+                    if (initialStartForState && initialStartForState.isValid() && initialDaysForState > 0) {
+                         console.log('useEffect (initial fetch): Calling calculateEndDate for initial values.');
+                         calculateEndDate(initialStartForState, initialDaysForState);
+                    } else {
+                         console.log('useEffect (initial fetch): Initial values not valid for calculating end date/sliders initially.');
+                         setEndDate(null);
+                         setSliderCount(0);
+                    }
 
                     const perPersonResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-person-per-day`);
                     if (!perPersonResponse.ok) {
@@ -183,16 +192,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         };
 
         fetchInitialData();
-    }, [task, form]); // Dependencies are task and form, as they dictate initial data fetch
+    }, [task, form, calculateEndDate]); // Added calculateEndDate to dependencies to ensure stability
 
-    // --- EFFECT HOOK 2: Calculate End Date and Slider Count when startDate or numberOfDays changes ---
-    // This useEffect ensures calculateEndDate runs whenever its dependencies (startDate, numberOfDays) change
-    useEffect(() => {
-        console.log('useEffect (startDate/numberOfDays dependency): Recalculating end date and slider count based on latest state.');
-        calculateEndDate(); // Call the memoized callback
-    }, [startDate, numberOfDays, calculateEndDate]);
-
-
+    // --- EFFECT HOOK 2: PERSON RESPONSIBLE LOGIC (no changes needed here for date/slider issue) ---
     useEffect(() => {
         if (allAvailablePersons.length === 0 || Object.keys(emailToPersonMap).length === 0) {
             return;
@@ -221,17 +223,23 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     }, [task, currentUserEmail, form, getPersonNameFromEmail, isAdmin, allAvailablePersons, emailToPersonMap]);
 
 
+    // --- HANDLERS FOR USER INPUT ---
     const handleStartDateChange = (date) => {
-        console.log('handleStartDateChange: DatePicker selected (moment object):', date ? date.format('YYYY-MM-DD') : null); //
-        setStartDate(date); // This update will trigger the `useEffect` for `calculateEndDate`
+        console.log('handleStartDateChange: DatePicker selected (moment object):', date ? date.format('YYYY-MM-DD') : null);
+        setStartDate(date);
+        // Directly trigger calculation with the NEW date and current numberOfDays
+        // This ensures immediate feedback for user interaction
+        calculateEndDate(date, numberOfDays);
     };
-
 
     const handleNumberOfDaysChange = (e) => {
         const days = parseInt(e.target.value, 10);
-        const numericDays = isNaN(days) ? 0 : days; // Ensure it's a number, default to 0
-        console.log('handleNumberOfDaysChange: Input days', numericDays); //
-        setNumberOfDays(numericDays); // This update will trigger the `useEffect` for `calculateEndDate`
+        const numericDays = isNaN(days) ? 0 : days;
+        console.log('handleNumberOfDaysChange: Input days', numericDays);
+        setNumberOfDays(numericDays);
+        // Directly trigger calculation with the NEW numericDays and current startDate
+        // This ensures immediate feedback for user interaction
+        calculateEndDate(startDate, numericDays);
     };
 
     const calculateTotalTime = () => {
