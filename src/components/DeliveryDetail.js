@@ -1,159 +1,196 @@
-import React, { useEffect, useState, useContext } from 'react';
-import { useParams, Link } from 'react-router-dom'; // Import useParams
-import { Container, Card, ListGroup, Row, Col, Spinner } from 'react-bootstrap';
-import Dropdown from 'rc-dropdown';
-import Menu, { Item as MenuItem } from 'rc-menu';
-import { FaPause, FaPlay, FaStop, FaCalendarAlt } from 'react-icons/fa';
-import FormComponent from './FormComponent'; // Ensure your form component is imported
+import React, { useState, useEffect, useContext } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Container, Row, Col, Card, Button, ProgressBar, Spinner, ListGroup, Badge, Alert } from 'react-bootstrap';
 import { UserContext } from './UserContext';
-import 'rc-dropdown/assets/index.css';
-import './DeliveryDetail.css';
+import { notification } from 'antd';
+import { FiClock, FiCheckCircle, FiFlag, FiLayers, FiAlertCircle, FiInfo } from 'react-icons/fi';
+import './DeliveryDetail.css'; // Make sure this CSS file exists for styling
+
+const BACKEND_API_BASE_URL = 'https://server-ui-2.onrender.com';
 
 const DeliveryDetail = () => {
-    console.log('DeliveryDetail component is attempting to render'); // Add this line
+    console.log('DeliveryDetail component is attempting to render'); // Debugging line
     const { delCode } = useParams();
-    console.log('delCode from useParams:', delCode);
-    const { userEmail } = useContext(UserContext);
-    const [delivery, setDelivery] = useState(null);
+    console.log('delCode from useParams:', delCode); // Debugging line - This should now show a value!
+
+    const { userEmail, logoutUser } = useContext(UserContext);
+    const navigate = useNavigate();
+    const [deliveryData, setDeliveryData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [activeTaskKey, setActiveTaskKey] = useState(null); // To track which task is active for scheduling/other actions
-    const [actionType, setActionType] = ''; // To differentiate between actions like 'schedule', 'reschedule'
-    const [tasks, setTasks] = useState([]); // State to manage tasks
+    const [authToken, setAuthToken] = useState(null);
 
-    // Fetching delivery details from the server
+    // Function to format timestamps
+    const formatTimestamp = (timestamp) => {
+        if (!timestamp) return 'N/A';
+        const date = new Date(timestamp?.value || timestamp); // Handles objects with .value or direct string/number
+        return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleString();
+    };
+
+    // Function to calculate deadline
+    const calculateDeadline = (deliveryTimestamp) => {
+        if (!deliveryTimestamp) return 'No deadline';
+
+        const deliveryTime = new Date(deliveryTimestamp?.value || deliveryTimestamp);
+        const currentTime = new Date();
+
+        if (isNaN(deliveryTime.getTime()) || isNaN(currentTime.getTime())) return 'Invalid deadline';
+
+        const timeDiff = deliveryTime - currentTime;
+
+        if (timeDiff <= 0) {
+            return 'Past Deadline';
+        }
+
+        const daysLeft = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+        const hoursLeft = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+        if (daysLeft > 0) {
+            return `${daysLeft} days ${hoursLeft} hrs left`;
+        } else if (hoursLeft > 0) {
+            return `${hoursLeft} hrs left`;
+        } else {
+            const minutesLeft = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+            return `${minutesLeft} mins left`;
+        }
+    };
+
+    // Determine isAdmin status on the frontend
+    const ADMIN_EMAILS_FRONTEND = [
+        "neelam.p@brightbraintech.com",
+        "meghna.j@brightbraintech.com",
+        "zoya.a@brightbraintech.com",
+        "shweta.g@brightbraintech.com",
+        "hitesh.r@brightbraintech.com"
+    ];
+    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
+
+    useEffect(() => {
+        const storedAuthToken = localStorage.getItem('authToken');
+        if (storedAuthToken) {
+            setAuthToken(storedAuthToken);
+        } else {
+            console.warn("No auth token found in localStorage. User might not be logged in.");
+            notification.error({
+                message: 'Authentication Required',
+                description: 'Please log in to view delivery details.',
+            });
+            navigate('/login');
+        }
+    }, [navigate]);
+
     useEffect(() => {
         const fetchDeliveryDetails = async () => {
+            if (!authToken || !delCode) {
+                console.log("DeliveryDetail: Skipping fetch because authToken or delCode is missing.");
+                setLoading(false);
+                if (!delCode) {
+                    setError("Delivery code is missing from the URL. Cannot fetch details.");
+                }
+                return;
+            }
+
+            setLoading(true);
+            setError(null);
+            console.log(`DeliveryDetail: Attempting to fetch details for delCode: ${delCode} with email: ${userEmail}, isAdmin: ${isAdmin}`);
+
             try {
-                setLoading(true);
-                // Ensure this URL matches your backend deployed URL or local development server
-                const BACKEND_API_BASE_URL = 'https://server-ui-2.onrender.com'; // Replace with your actual backend URL if different
+                const queryParams = new URLSearchParams({
+                    email: userEmail,
+                    isAdmin: isAdmin,
+                    delCode: delCode // Pass delCode to the backend
+                });
 
-                // Construct the URL with delCode and email as query parameters
-                // delCode from useParams will already be correctly decoded if it was encoded in the URL
-                const apiUrl = `${BACKEND_API_BASE_URL}/api/data?delCode=${encodeURIComponent(delCode)}&email=${encodeURIComponent(userEmail)}`;
-                console.log("Fetching data from:", apiUrl); // Add this for debugging
-
-                const response = await fetch(apiUrl, {
+                const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?${queryParams.toString()}`, {
                     headers: {
+                        'Authorization': `Bearer ${authToken}`,
                         'Content-Type': 'application/json',
-                        // Include Authorization header if your API requires authentication
-                        // For example: 'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
                     },
                 });
 
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                    const errorBody = await response.json();
+                    throw new Error(errorBody.error || `HTTP error! status: ${response.status}`);
                 }
 
-                const data = await response.json();
-                // Assuming the server returns an array of tasks for that delivery code
-                setTasks(data.filter(task => task.Step_ID !== 0)); // Filter out tasks with Step_ID 0 if needed
-                // If you want to store aggregated delivery info, you might set 'delivery' state from the first item
-                if (data.length > 0) {
-                    setDelivery(data[0]); // Example: Store the first task's details as general delivery info
-                } else {
-                    setDelivery(null);
+                const result = await response.json();
+
+                // Assuming the backend returns an object where keys are delCodes and values are arrays of tasks
+                // We need to find the specific delivery data for the requested delCode
+                const deliveryTasks = result[delCode];
+
+                if (!deliveryTasks || deliveryTasks.length === 0) {
+                    setError(`No details found for delivery code: ${delCode}. It might not exist or you don't have access.`);
+                    setDeliveryData(null);
+                    notification.info({
+                        message: 'No Data',
+                        description: `No details found for delivery code: ${delCode}.`,
+                    });
+                    return;
                 }
-            } catch (error) {
-                setError(error);
-                console.error('Error fetching delivery details:', error);
+
+                // Filter for Step_ID === 0 for main delivery info (if applicable, or just take first element)
+                const mainDeliveryInfo = deliveryTasks.find(task => task.Step_ID === 0) || deliveryTasks[0];
+
+                if (!mainDeliveryInfo) {
+                    setError(`Could not find main delivery info for ${delCode}.`);
+                    setDeliveryData(null);
+                    return;
+                }
+
+                // Calculate total and planned tasks from all tasks for this delCode
+                const totalTasks = deliveryTasks.length;
+                const plannedTasks = deliveryTasks.filter(task => task.is_planned_on_google_calendar).length;
+
+
+                setDeliveryData({
+                    delCode: mainDeliveryInfo.DelCode_w_o__,
+                    client: mainDeliveryInfo.Client,
+                    initiated: formatTimestamp(mainDeliveryInfo.Initiated_Timestamp),
+                    initiatedTimestampRaw: mainDeliveryInfo.Initiated_Timestamp, // Keep raw for deadline calc
+                    deadline: calculateDeadline(mainDeliveryInfo.Planned_Delivery_Timestamp),
+                    plannedDeliveryTimestamp: mainDeliveryInfo.Planned_Delivery_Timestamp,
+                    totalTasks: totalTasks,
+                    plannedTasks: plannedTasks,
+                    tasks: deliveryTasks.map(task => ({
+                        stepId: task.Step_ID,
+                        taskName: task.Task_Name,
+                        responsibility: task.Responsibility,
+                        durationMinutes: task.Duration_In_Minutes,
+                        isPlanned: task.is_planned_on_google_calendar,
+                        actualStart: formatTimestamp(task.Actual_Start_Timestamp),
+                        actualEnd: formatTimestamp(task.Actual_End_Timestamp),
+                        plannedStart: formatTimestamp(task.Planned_Start_Timestamp),
+                        plannedEnd: formatTimestamp(task.Planned_End_Timestamp),
+                        status: task.Status, // Assuming status field
+                        notes: task.Notes // Assuming notes field
+                    })),
+                });
+            } catch (err) {
+                console.error("Error fetching delivery details:", err);
+                setError(`Failed to load details: ${err.message}. Please try again.`);
+                notification.error({
+                    message: 'Fetch Error',
+                    description: `Could not load delivery details: ${err.message}`,
+                });
             } finally {
                 setLoading(false);
             }
         };
 
-        // Trigger the fetch when delCode or userEmail changes
-        if (delCode && userEmail) {
+        if (authToken && delCode) {
             fetchDeliveryDetails();
         }
-    }, [delCode, userEmail]); // Dependencies for the useEffect hook
+    }, [authToken, delCode, userEmail, isAdmin, navigate]);
 
-    const handleMenuClick = (key, taskKey) => {
-        if (key === 'schedule') {
-            setActiveTaskKey(taskKey);
-            setActionType('Schedule');
-        } else if (key === 'reschedule') {
-            setActiveTaskKey(taskKey);
-            setActionType('Reschedule');
-        } else if (key === 'pause') {
-            // Implement pause logic
-            alert(`Pause task: ${taskKey}`);
-        } else if (key === 'play') {
-            // Implement play logic
-            alert(`Play task: ${taskKey}`);
-        } else if (key === 'stop') {
-            // Implement stop logic
-            alert(`Stop task: ${taskKey}`);
-        }
-    };
-
-    const handleFormSubmit = async (formData) => {
-        console.log('Form submitted with data:', formData);
-        // Here you would typically send this data to your backend API
-        // After successful submission, you might want to refresh the task list
-        // and clear the activeTaskKey and actionType
-        try {
-            const response = await fetch('https://server-ui-2.onrender.com/api/update-task-status', { // Replace with your actual backend URL
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(formData),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to update task.');
-            }
-
-            // If the update is successful, re-fetch delivery details to show updated status
-            setLoading(true); // Set loading to true while re-fetching
-            const BACKEND_API_BASE_URL = 'https://server-ui-2.onrender.com';
-            // Construct the URL with delCode and email as query parameters for re-fetch
-            const updatedResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?delCode=${encodeURIComponent(delCode)}&email=${encodeURIComponent(userEmail)}`);
-            if (!updatedResponse.ok) {
-                throw new Error('Failed to re-fetch updated delivery details.');
-            }
-            const updatedData = await updatedResponse.json();
-            setTasks(updatedData.filter(task => task.Step_ID !== 0));
-            if (updatedData.length > 0) {
-                setDelivery(updatedData[0]);
-            } else {
-                setDelivery(null);
-            }
-
-            // Clear the form and active task
-            setActiveTaskKey(null);
-            setActionType('');
-            alert('Task updated successfully!');
-        } catch (error) {
-            console.error('Error updating task:', error);
-            alert(`Failed to update task: ${error.message}`);
-        } finally {
-            setLoading(false); // Set loading to false after re-fetching
-        }
-    };
-
-
-    const menu = (taskKey) => (
-        <Menu onSelect={({ key }) => handleMenuClick(key, taskKey)}>
-            <MenuItem key="schedule">Schedule</MenuItem>
-            <MenuItem key="reschedule">Reschedule</MenuItem>
-            <MenuItem key="pause" className="text-warning"><FaPause /> Pause</MenuItem>
-            <MenuItem key="play" className="text-success"><FaPlay /> Play</MenuItem>
-            <MenuItem key="stop" className="text-danger"><FaStop /> Stop</MenuItem>
-        </Menu>
-    );
 
     if (loading) {
         return (
             <Container className="text-center my-5">
                 <Spinner animation="border" role="status">
-                    <span className="visually-hidden">Loading...</span>
+                    <span className="sr-only">Loading...</span>
                 </Spinner>
-                <p>Loading delivery details...</p>
+                <p className="mt-3">Loading delivery details...</p>
             </Container>
         );
     }
@@ -161,100 +198,99 @@ const DeliveryDetail = () => {
     if (error) {
         return (
             <Container className="text-center my-5">
-                <p className="text-danger">Error: {error.message}</p>
-                <p>Please try again later.</p>
-                <Link to="/" className="btn btn-primary mt-3">Back to Deliveries</Link>
+                <Alert variant="danger">
+                    <FiAlertCircle style={{ marginRight: '10px' }} />
+                    {error}
+                </Alert>
+                <Button variant="primary" onClick={() => navigate('/deliveries')}>
+                    Back to Deliveries List
+                </Button>
+                <Button variant="outline-danger" onClick={logoutUser} className="ml-2">
+                    Logout
+                </Button>
             </Container>
         );
     }
 
-    if (!delivery && tasks.length === 0) {
+    if (!deliveryData) {
         return (
             <Container className="text-center my-5">
-                <p>No delivery found for code: {delCode}</p>
-                <Link to="/" className="btn btn-primary mt-3">Back to Deliveries</Link>
+                <p>No data available for this delivery code.</p>
+                <Button variant="primary" onClick={() => navigate('/deliveries')}>
+                    Back to Deliveries List
+                </Button>
+                <Button variant="outline-danger" onClick={logoutUser} className="ml-2">
+                    Logout
+                </Button>
             </Container>
         );
     }
 
+    const progress = deliveryData.totalTasks === 0 ? 0 : (deliveryData.plannedTasks / deliveryData.totalTasks) * 100;
+
     return (
-        <Container className="delivery-detail-container mt-4">
-            <h2 className="mb-4 text-center">Delivery Details for: {delCode}</h2>
-            {delivery && (
-                <Card className="mb-4">
-                    <Card.Body>
-                        <Card.Title>{delivery.Short_Description}</Card.Title>
-                        <Card.Text>
-                            <strong>Client:</strong> {delivery.Client} <br />
-                            <strong>Total Tasks:</strong> {delivery.Total_Tasks} <br />
-                            <strong>Completed Tasks:</strong> {delivery.Completed_Tasks} <br />
-                            <strong>Percent Complete:</strong> {delivery.Percent_Tasks_Completed}%
-                        </Card.Text>
-                    </Card.Body>
-                </Card>
-            )}
-
-            <h3 className="mb-3">Tasks:</h3>
-            <Row>
-                {tasks.length > 0 ? (
-                    tasks.map((task) => (
-                        <Col md={6} lg={4} key={task.Key} className="mb-3">
-                            <Dropdown
-                                overlay={() => menu(task.Key)}
-                                animation="slide-up"
-                                trigger={['contextMenu']}
-                            >
-                                <div style={{ cursor: 'context-menu' }}>
-                                    <Card className="task-card">
-                                        <Card.Body>
-                                            <Card.Title><h5>{task.Task_Details}</h5></Card.Title>
-                                            <Card.Subtitle className="mb-2 text-muted task-meta">
-                                                Step ID: {task.Step_ID} | Responsibility: {task.Responsibility}
-                                            </Card.Subtitle>
-                                            <Card.Text className="task-meta">
-                                                <FaCalendarAlt /> Planned Start: {task.Planned_Start_Timestamp ? new Date(task.Planned_Start_Timestamp).toLocaleDateString() : 'N/A'}
-                                            </Card.Text>
-                                            <Card.Text className="task-meta">
-                                                <FaCalendarAlt /> Planned Delivery: {task.Planned_Delivery_Timestamp ? new Date(task.Planned_Delivery_Timestamp).toLocaleDateString() : 'N/A'}
-                                            </Card.Text>
-                                            <div className="task-status">
-                                                <strong>Status:</strong> {task.Current_Status || 'N/A'}
-                                            </div>
-                                            <div className="task-status">
-                                                {task.Card_Corner_Status === 'Upcoming' ? (
-                                                    <p className="text-muted">Upcoming</p>
-                                                ) : task.Card_Corner_Status === 'Behind Schedule' ? (
-                                                    <p className="text-danger">Behind Schedule</p>
-                                                ) : task.Card_Corner_Status === 'On Time' ? (
-                                                    <p className="text-success">On time for going live</p>
-                                                ) : (
-                                                    <p className="text-muted">Paused</p>
-                                                )}
-                                            </div>
-
-                                            {activeTaskKey === task.Key && actionType && (
-                                                <div className="mt-3">
-                                                    <h6>{actionType} Task: {task.Task_Details}</h6>
-                                                    <FormComponent
-                                                        onSubmit={handleFormSubmit}
-                                                        task={task}
-                                                    />
-                                                </div>
-                                            )}
-                                        </Card.Body>
-                                    </Card>
-                                </div>
-                            </Dropdown>
-                        </Col>
-                    ))
-                ) : (
-                    <ListGroup.Item>No tasks available for this delivery.</ListGroup.Item>
-                )}
+        <Container className="delivery-detail-container my-4">
+            <Row className="mb-4 align-items-center">
+                <Col>
+                    <h1 className="mb-0">Delivery: {deliveryData.delCode}</h1>
+                    <p className="text-muted">Client: {deliveryData.client}</p>
+                </Col>
+                <Col xs="auto" className="text-right">
+                    <Button variant="secondary" onClick={() => navigate('/deliveries')} className="mr-2">
+                        Back to List
+                    </Button>
+                    <Button variant="outline-danger" onClick={logoutUser}>
+                        Logout
+                    </Button>
+                </Col>
             </Row>
 
-            <Link to="/" className="btn btn-primary mt-4">
-                Back to Deliveries
-            </Link>
+            <Card className="shadow-sm mb-4">
+                <Card.Body>
+                    <Row className="align-items-center">
+                        <Col md={6}>
+                            <p className="mb-1"><FiCheckCircle style={{ marginRight: '8px', color: 'green' }} /> <strong>{deliveryData.plannedTasks} of {deliveryData.totalTasks} Tasks Planned</strong></p>
+                            <ProgressBar
+                                now={progress}
+                                variant={progress > 50 ? 'success' : progress > 20 ? 'warning' : 'danger'}
+                                className="mb-3"
+                            />
+                        </Col>
+                        <Col md={6} className="text-md-right">
+                            <p className="mb-1 text-muted"><FiClock style={{ marginRight: '8px' }} /> Initiated: {deliveryData.initiated}</p>
+                            <p className="mb-0 text-danger"><FiFlag style={{ marginRight: '8px' }} /> Deadline: {deliveryData.deadline}</p>
+                        </Col>
+                    </Row>
+                </Card.Body>
+            </Card>
+
+            <h2 className="mb-3">Tasks Breakdown <FiLayers style={{ marginLeft: '5px' }} /></h2>
+            {deliveryData.tasks && deliveryData.tasks.length > 0 ? (
+                <ListGroup className="tasks-list">
+                    {deliveryData.tasks.map((task, index) => (
+                        <ListGroup.Item key={index} className="task-item shadow-sm mb-3">
+                            <Row className="align-items-center">
+                                <Col md={8}>
+                                    <h5 className="mb-1">Task {task.stepId}: {task.taskName}</h5>
+                                    <p className="mb-1 text-muted">Responsibility: <Badge variant="info">{task.responsibility}</Badge></p>
+                                    <p className="mb-1 text-muted">Duration: {task.durationMinutes} minutes</p>
+                                    <p className="mb-1 text-muted">Planned: {task.isPlanned ? <Badge variant="success">Yes</Badge> : <Badge variant="warning">No</Badge>}</p>
+                                    {task.notes && <p className="mb-0 text-info small"><FiInfo /> Notes: {task.notes}</p>}
+                                </Col>
+                                <Col md={4} className="text-md-right">
+                                    <p className="mb-1"><strong>Status:</strong> <Badge variant={task.status === 'Completed' ? 'success' : task.status === 'In Progress' ? 'primary' : 'secondary'}>{task.status || 'N/A'}</Badge></p>
+                                    {task.plannedStart !== 'N/A' && <p className="mb-1 text-muted">Planned Start: {task.plannedStart}</p>}
+                                    {task.plannedEnd !== 'N/A' && <p className="mb-1 text-muted">Planned End: {task.plannedEnd}</p>}
+                                    {task.actualStart !== 'N/A' && <p className="mb-1 text-muted">Actual Start: {task.actualStart}</p>}
+                                    {task.actualEnd !== 'N/A' && <p className="mb-0 text-muted">Actual End: {task.actualEnd}</p>}
+                                </Col>
+                            </Row>
+                        </ListGroup.Item>
+                    ))}
+                </ListGroup>
+            ) : (
+                <Alert variant="info">No tasks found for this delivery.</Alert>
+            )}
         </Container>
     );
 };
