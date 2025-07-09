@@ -11,7 +11,8 @@ import './DeliveryDetail.css';
 
 const DeliveryDetail = () => {
     const location = useLocation();
-    const delCode = location.pathname.substring(location.pathname.lastIndexOf("/data/") + 11); // Adjust to your actual path
+    // Correctly extract delCode as it's passed in the URL, e.g., /delivery/PC%2FSCNW%2FJUN16%2F6246
+    const delCode = location.pathname.substring(location.pathname.lastIndexOf("/") + 1);
     const { userEmail } = useContext(UserContext);
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -28,8 +29,8 @@ const DeliveryDetail = () => {
                 // Ensure this URL matches your backend deployed URL or local development server
                 const BACKEND_API_BASE_URL = 'https://server-ui-2.onrender.com'; // Replace with your actual backend URL if different
 
-                // Update the fetch call to use the new /api/delivery/:delCode endpoint
-                const response = await fetch(`${BACKEND_API_BASE_URL}/api/delivery/${encodeURIComponent(delCode)}`, {
+                // **UPDATED**: Change fetch call to use /api/data with delCode as a query parameter
+                const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?delCode=${encodeURIComponent(delCode)}&email=${encodeURIComponent(userEmail)}`, {
                     headers: {
                         'Content-Type': 'application/json',
                         // Include Authorization header if your API requires authentication
@@ -106,7 +107,8 @@ const DeliveryDetail = () => {
             // If the update is successful, re-fetch delivery details to show updated status
             setLoading(true); // Set loading to true while re-fetching
             const BACKEND_API_BASE_URL = 'https://server-ui-2.onrender.com';
-            const updatedResponse = await fetch(`${BACKEND_API_BASE_URL}/api/delivery/${encodeURIComponent(delCode)}`);
+            // **UPDATED**: Change re-fetch call to use /api/data with delCode as a query parameter
+            const updatedResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?delCode=${encodeURIComponent(delCode)}&email=${encodeURIComponent(userEmail)}`);
             if (!updatedResponse.ok) {
                 throw new Error('Failed to re-fetch updated delivery details.');
             }
