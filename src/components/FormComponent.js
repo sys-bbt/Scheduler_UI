@@ -1,357 +1,274 @@
-import React, { useState, useEffect, memo, useCallback } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { Form, Input, Button, Slider, DatePicker, Select, notification, Row, Col } from 'antd';
 import moment from 'moment';
 import './FormComponent.css';
 
 const { Option } = Select;
 
-// Define the emails of users who can see and edit the full list
-const ADMIN_EMAILS = [
-    
-    "neelam.p@brightbraintech.com",
-    "meghna.j@brightbraintech.com",
-    "zoya.a@brightbraintech.com",
-    "shweta.g@brightbraintech.com",
-    "hitesh.r@brightbraintech.com"
-];
-
-// Comprehensive map for person name to their primary email and full emails string (for BigQuery's 'Emails' column in main task table)
-// You MUST populate this map with ALL expected "Person Responsible" names and their corresponding email data
-// based on your BigQuery data and requirements.
-const PERSON_EMAIL_DATA_MAP = {
-    "Neelam Purohit": { primaryEmail: "neelam.p@brightbraintech.com", allEmails: "neelam.p@brightbraintech.com" },
-    "Meghna Jalali": { primaryEmail: "meghna.j@brightbraintech.com", allEmails: "meghna.j@brightbraintech.com" },
-    "Zoya Ansari": { primaryEmail: "zoya.a@brightbraintech.com", allEmails: "zoya.a@brightbraintech.com" },
-    "Shweta Gaikwad": { primaryEmail: "shweta.g@brightbraintech.com", allEmails: "shweta.g@brightbraintech.com" },
-    "Hitesh Rattesar": { primaryEmail: "hitesh.r@brightbraintech.com", allEmails: "hitesh.r@brightbraintech.com" },
-    "System": { primaryEmail: "systems@brightbraintech.com", allEmails: "systems@brightbraintech.com" },
-    "Divya Sharma": { primaryEmail: "divya.s@brightbraintech.com", allEmails: "divya.s@brightbraintech.com"},
-    "Manish Hodlur": { primaryEmail: "manish.h@brightbraintech.com", allEmails: "manish.h@brightbraintech.com"}
-    // Example for a person/role associated with multiple emails (access emails)
-    // "Team Lead": { primaryEmail: "team.lead@brightbraintech.com", allEmails: "team.lead@brightbraintech.com,member1@brightbraintech.com,member2@brightbraintech.com" },
-    // Add any other specific "Access Emails" or multi-email mappings you need here.
-};
-
-// HARDCODED LIST OF PERSONS - This list is used to populate the Person Responsible dropdown.
-// Ideally, this list could be fetched dynamically from the backend in a separate API call (e.g., /api/persons)
-// if your list of responsibilities changes frequently. For now, it's hardcoded here.
-const ALL_AVAILABLE_PERSONS_HARDCODED = [
-"Abhinav Verma",
-"Aishwarya Mulay",
-"Akanksha Bhande",
-"Aniruddh Pachupate",
-"Arvanbir Sandhu",
-"Divya Sharma",
-"Divyanshi Agarwal",
-"Hitesh Rattesar",
-"HR",
-"Jairaj Shetty",
-"Josika Bhattacharjee",
-"Manish Hodlur",
-"Megha Vyas",
-"Meghna Jalali",
-"Nasir Ali  Shaikh", 
-"Neelam Purohit",
-"Neha Saraogi",
-"Nikhil Surve",
-"Nirali Shah",
-"Pooja Rane",
-"Prashant Shaharkar",
-"Pratham Kotian",
-"Ranjeet Bubber",
-"Sarthak Chauhan",
-"Shameen Bajaj",
-"Shayesha Lobo",
-"Shumael Nawaz",
-"Shweta Gaikwad",
-"Suhail Bajaj",
-"System",
-"Viraj Chindarkar",
-"Zoya Ansari"
-    // Ensure this list is comprehensive and matches the keys in PERSON_EMAIL_DATA_MAP
-];
-
-// Define the base URL for your backend API
-const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
-console.log('Using Backend API URL:', BACKEND_API_BASE_URL);
-
-
-const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
+// FormComponent now expects 'peopleMapping' as a prop
+const FormComponent = ({ onSubmit, task, peopleMapping }) => {
     const [form] = Form.useForm();
     const [sliderCount, setSliderCount] = useState(0);
-    const [hours, setHours] = useState({});
-    const [startDate, setStartDate] = useState(() =>
-        task?.Planned_Start_Timestamp
-            ? moment(task.Planned_Start_Timestamp)
-            : null
-    );
+    const [hours, setHours] = useState({}); // Stores hours per day for the current task's schedule
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
 
-    const [endDate, setEndDate] = useState(() =>
-        task?.Planned_Delivery_Timestamp
-            ? moment(task.Planned_Delivery_Timestamp)
-            : null
-    );
-
+    const [deliverySlot, setDeliverySlot] = useState(null);
     const [personResponsible, setPersonResponsible] = useState('');
     const [numberOfDays, setNumberOfDays] = useState(0);
+    // existingSchedules will store aggregated per-person-per-day data (Responsibility -> Day -> TotalMinutes)
     const [existingSchedules, setExistingSchedules] = useState({});
 
-    console.log('FormComponent: currentUserEmail received:', currentUserEmail);
-    const isAdmin = ADMIN_EMAILS.includes(currentUserEmail);
-    console.log('FormComponent: isAdmin calculated as:', isAdmin);
 
-
-    // Memoize the mapping logic to prevent unnecessary re-renders
-    const getPersonNameFromEmail = useCallback((email) => {
-        // Find the person name by iterating through PERSON_EMAIL_DATA_MAP
-        const entry = Object.entries(PERSON_EMAIL_DATA_MAP).find(([, value]) => value.primaryEmail === email || value.allEmails.includes(email));
-        return entry ? entry[0] : null;
-    }, []);
-
-    // --- EFFECT HOOK 1: FETCH TASK DATA AND EXISTING SCHEDULES ---
     useEffect(() => {
-        const fetchTaskAndScheduleData = async () => {
+        const fetchTaskData = async () => {
             try {
-                if (task) {
+                if (task && task.Key) {
+                    // Set initial form values from the task prop
                     form.setFieldsValue({
                         name: task.Task_Details || '',
+                        deliverySlot: task.Delivery_Slot || null, // Assuming Delivery_Slot exists in task
+                        status: task.Status || 'Scheduled', // Assuming Status exists in task
                     });
+                    setPersonResponsible(task.Responsibility || '');
+                    setDeliverySlot(task.Delivery_Slot || null);
 
-                    // Use full backend URL for API call
-                    const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                    // 1. Fetch data per key per day for this specific task
+                    const perKeyResponse = await fetch(`https://server-ui-2.onrender.com/api/per-key-per-day?key=${task.Key}`);
+                    if (!perKeyResponse.ok) {
+                        throw new Error(`HTTP error! status: ${perKeyResponse.status}`);
                     }
-                    const data = await response.json();
+                    const perKeyData = await perKeyResponse.json(); // This will be an array of objects
 
-                    const taskData = data[task.Key];
-                    if (taskData) {
-                        const taskEntries = taskData.entries;
+                    const newHours = {};
+                    let currentStartDate = null;
+                    let currentEndDate = null;
 
-                        const totalMinutes = taskData.totalDuration || 0;
-                        const initialHours = {};
-                        if (taskEntries && taskEntries.length > 0) {
-                            taskEntries.forEach((entry) => {
-                                if (entry.Duration !== undefined && entry.Day !== undefined) {
-                                    const dayMoment = moment(entry.Day.value);
-                                    if (dayMoment.isValid() && startDate && dayMoment.isSameOrAfter(startDate, 'day')) {
-                                        const dayIndex = dayMoment.diff(startDate, 'days');
-                                        initialHours[dayIndex] = entry.Duration;
-                                    }
-                                }
-                            });
-                        }
-                        // Fallback if taskEntries didn't set initial hours but total duration exists
-                        if (Object.keys(initialHours).length === 0 && totalMinutes > 0 && startDate) {
-                            initialHours[0] = totalMinutes;
-                        }
-                        setHours(initialHours);
+                    if (perKeyData.length > 0) {
+                        // Sort data by Day to correctly determine start/end dates and map to slider index
+                        perKeyData.sort((a, b) => moment(a.Day).diff(moment(b.Day)));
+                        currentStartDate = moment(perKeyData[0].Day);
+                        currentEndDate = moment(perKeyData[perKeyData.length - 1].Day);
 
+                        perKeyData.forEach((entry) => {
+                            const dayMoment = moment(entry.Day);
+                            const dayIndex = dayMoment.diff(currentStartDate, 'days');
+                            if (dayIndex >= 0) { // Ensure dayIndex is valid
+                                newHours[dayIndex] = entry.Duration_In_Minutes;
+                            }
+                        });
 
-                        const validDays = taskEntries
-                            .map((entry) => entry.Day?.value)
-                            .filter((date) => date);
-
-                        if (validDays.length > 0) {
-                            const start = moment.min(validDays.map((d) => moment(d)));
-                            const end = moment.max(validDays.map((d) => moment(d)));
-
-                            setStartDate(start);
-                            setEndDate(end);
-
-                            const daysDiff = end.diff(start, 'days') + 1;
-                            setNumberOfDays(daysDiff);
-                            setSliderCount(daysDiff);
-                        } else if (task?.Planned_Start_Timestamp && task?.Planned_Delivery_Timestamp) {
-                            const start = moment(task.Planned_Start_Timestamp);
-                            const end = moment(task.Planned_Delivery_Timestamp);
-                            const daysDiff = end.diff(start, 'days') + 1;
-                            setStartDate(start);
-                            setEndDate(end);
-                            setNumberOfDays(daysDiff);
-                            setSliderCount(daysDiff);
-                        }
-                    } else if (task?.Planned_Start_Timestamp && task?.Planned_Delivery_Timestamp) {
-                        const start = moment(task.Planned_Start_Timestamp);
-                        const end = moment(task.Planned_Delivery_Timestamp);
-                        const daysDiff = end.diff(start, 'days') + 1;
-                        setStartDate(start);
-                        setEndDate(end);
+                        setStartDate(currentStartDate);
+                        setEndDate(currentEndDate);
+                        const daysDiff = currentEndDate.diff(currentStartDate, 'days') + 1;
                         setNumberOfDays(daysDiff);
-                        setSliderCount(daysDiff);
-                    }
-
-
-                    // Use full backend URL for API call
-                    const perPersonResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-person-per-day`);
-                    if (!perPersonResponse.ok) {
-                        const errorText = await perPersonResponse.text();
-                        throw new Error(`HTTP error! status: ${perPersonResponse.status}, message: ${errorText}`);
-                    }
-                    const perPersonData = await perPersonResponse.json();
-
-                    const schedules = {};
-                    perPersonData.forEach((entry) => {
-                        const { Responsibility, Day, Duration_In_Minutes } = entry;
-                        const date = Day.value;
-                        if (!schedules[Responsibility]) {
-                            schedules[Responsibility] = {};
+                        setSliderCount(daysDiff); // Set slider count based on fetched days
+                    } else {
+                        // If no per-key data, initialize with planned dates from main task, if available
+                        if (task.Planned_Start_Timestamp) {
+                            const plannedStart = moment(task.Planned_Start_Timestamp);
+                            setStartDate(plannedStart);
+                            if (task.Planned_Delivery_Timestamp) {
+                                const plannedEnd = moment(task.Planned_Delivery_Timestamp);
+                                setEndDate(plannedEnd);
+                                const days = plannedEnd.diff(plannedStart, 'days') + 1;
+                                setNumberOfDays(days);
+                                setSliderCount(days);
+                            }
                         }
-                        schedules[Responsibility][date] = Duration_In_Minutes;
-                    });
+                    }
+                    setHours(newHours); // Set the hours state with fetched data
 
-                    setExistingSchedules(schedules);
+
+                    // 2. Fetch data per person per day (for max allowed minutes calculation)
+                    // NOTE: The backend /api/per-person-per-day currently fetches ALL data.
+                    // For large datasets, this could be inefficient. Ideally, this endpoint
+                    // should be extended to filter by person and/or date.
+                    const perPersonResponse = await fetch(`https://server-ui-2.onrender.com/api/per-person-per-day`);
+                    if (!perPersonResponse.ok) {
+                        throw new Error(`HTTP error! status: ${perPersonResponse.status}`);
+                    }
+                    const perPersonRawData = await perPersonResponse.json();
+
+                    // Aggregate the raw data into a more usable structure:
+                    // { 'person@example.com': { 'YYYY-MM-DD': totalMinutesForThatDay, ... }, ... }
+                    const aggregatedPerPersonSchedules = {};
+                    perPersonRawData.forEach((entry) => {
+                        const { Responsibility: resp, Day, Duration_In_Minutes } = entry;
+                        // Use moment(Day).format('YYYY-MM-DD') to ensure consistent date string format for keys
+                        const date = moment(Day).format('YYYY-MM-DD');
+                        if (!aggregatedPerPersonSchedules[resp]) {
+                            aggregatedPerPersonSchedules[resp] = {};
+                        }
+                        // Initialize if not exists, then add. BigQuery's MERGE handles summing on backend.
+                        // Here we just represent the current state from the fetch.
+                        if (!aggregatedPerPersonSchedules[resp][date]) {
+                            aggregatedPerPersonSchedules[resp][date] = 0;
+                        }
+                        aggregatedPerPersonSchedules[resp][date] += Duration_In_Minutes;
+                    });
+                    setExistingSchedules(aggregatedPerPersonSchedules);
+
+                } else {
+                    // Reset states if task or task.Key is not available (e.g., when opening for a new task)
+                    form.resetFields();
+                    setSliderCount(0);
+                    setHours({});
+                    setStartDate(null);
+                    setEndDate(null);
+                    setDeliverySlot(null);
+                    setPersonResponsible('');
+                    setNumberOfDays(0);
+                    setExistingSchedules({});
                 }
             } catch (error) {
-                console.error("Error fetching task data or schedules:", error);
+                console.error("Error fetching task data:", error);
                 notification.error({
                     message: 'Error',
-                    description: `Failed to load task data or existing schedules: ${error.message}. Please check network and server logs.`,
+                    description: 'Failed to load task details and schedules. ' + error.message,
                 });
+                // Reset states on error to prevent displaying partial/incorrect data
+                form.resetFields();
+                setSliderCount(0);
+                setHours({});
+                setStartDate(null);
+                setEndDate(null);
+                setDeliverySlot(null);
+                setPersonResponsible('');
+                setNumberOfDays(0);
+                setExistingSchedules({});
             }
         };
 
-        fetchTaskAndScheduleData();
-    }, [task, form, startDate]);
+        fetchTaskData();
+    }, [task, form]); // Dependencies: run effect when 'task' prop or 'form' instance changes
 
-    // --- EFFECT HOOK 2: SET INITIAL PERSON RESPONSIBLE AND CONTROL EDITABILITY ---
-    useEffect(() => {
-        const initialResponsibilityFromTask = task?.Responsibility || '';
-        const userPersonName = getPersonNameFromEmail(currentUserEmail);
 
-        if (isAdmin) {
-            // Admin user: Can see full list, try to pre-fill from task.
-            if (initialResponsibilityFromTask && ALL_AVAILABLE_PERSONS_HARDCODED.includes(initialResponsibilityFromTask)) {
-                setPersonResponsible(initialResponsibilityFromTask);
-                form.setFieldsValue({ personResponsible: initialResponsibilityFromTask });
-            } else {
-                setPersonResponsible('');
-                form.setFieldsValue({ personResponsible: undefined });
+    // Handles changes to the Start Date input field
+    const handleStartDateChange = (e) => {
+        const inputDate = e.target.value;
+        const parsedDate = moment(inputDate, 'YYYY-MM-DD', true); // `true` for strict parsing
+
+        if (parsedDate.isValid()) {
+            setStartDate(parsedDate);
+            if (numberOfDays) {
+                calculateEndDate(parsedDate, numberOfDays);
             }
         } else {
-            // Non-admin user: Only allowed to see their mapped name.
-            if (userPersonName && ALL_AVAILABLE_PERSONS_HARDCODED.includes(userPersonName)) {
-                setPersonResponsible(userPersonName);
-                form.setFieldsValue({ personResponsible: userPersonName });
-            } else {
-                // If current user's email doesn't map to a known person, or that person
-                // isn't in the hardcoded list, set to empty/undefined and disable.
-                setPersonResponsible('');
-                form.setFieldsValue({ personResponsible: undefined });
-            }
-        }
-    }, [task, currentUserEmail, form, getPersonNameFromEmail, isAdmin]);
-
-
-    const handleStartDateChange = (date) => {
-        setStartDate(date);
-        if (numberOfDays && date) {
-            calculateEndDate(date, numberOfDays);
-        } else {
+            console.error("Invalid start date format. Please use 'YYYY-MM-DD'");
+            setStartDate(null); // Clear start date if invalid
             setEndDate(null);
+            setNumberOfDays(0);
             setSliderCount(0);
         }
     };
 
+    // Handles changes to the Number of Days input field
+    const handleNumberOfDaysChange = (days) => {
+        const numericDays = parseInt(days, 10);
+        if (isNaN(numericDays) || numericDays < 0) { // Ensure non-negative days
+            setNumberOfDays(0);
+            setSliderCount(0);
+            setEndDate(null);
+            setHours({}); // Clear hours if days become invalid/zero
+            return;
+        }
 
-    const handleNumberOfDaysChange = (e) => {
-        const days = e.target.value;
-        const numericDays = parseInt(days, 10) || 0;
         setNumberOfDays(numericDays);
+        setSliderCount(numericDays); // Update slider count immediately
         if (startDate && numericDays > 0) {
             calculateEndDate(startDate, numericDays);
         } else {
-            setEndDate(null);
-            setSliderCount(0);
+            setEndDate(null); // Clear end date if start date is not set or days are zero
         }
     };
 
+    // Calculates and sets the End Date based on Start Date and Number of Days
     const calculateEndDate = (start, days) => {
         if (start && days > 0) {
             const calculatedEndDate = moment(start).add(days - 1, 'days');
             setEndDate(calculatedEndDate);
-            setSliderCount(days);
         } else {
             setEndDate(null);
-            setSliderCount(0);
         }
     };
 
+    // Calculates the total scheduled time across all days (sum of slider values)
     const calculateTotalTime = () => {
-        return Object.values(hours).reduce((acc, curr) => {
-            return acc + (typeof curr === 'number' ? curr : 0);
-        }, 0);
+        return Object.values(hours).reduce((acc, curr) => acc + curr, 0);
     };
 
 
+    // Handles form submission
     const handleSubmit = () => {
         form
-            .validateFields()
+            .validateFields() // Trigger Ant Design form validation
             .then((values) => {
-                const plannedStartTimestamp = startDate
-                    ? moment(startDate).startOf('day').utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
+                const slotTimes = {
+                    "1pm": { hour: 13, minute: 0 },
+                    "4pm": { hour: 16, minute: 0 },
+                    "7pm": { hour: 19, minute: 0 },
+                };
+
+                const selectedSlot = deliverySlot ? slotTimes[deliverySlot] : null;
+
+                // Format timestamps for BigQuery
+                const plannedStartTimestamp = startDate && selectedSlot
+                    ? moment(startDate)
+                          .hour(selectedSlot.hour)
+                          .minute(selectedSlot.minute)
+                          .utc() // Ensure UTC timezone
+                          .format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
                     : null;
 
-                const plannedDeliveryTimestamp = endDate
-                    ? moment(endDate).endOf('day').utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
+                const plannedDeliveryTimestamp = endDate && selectedSlot
+                    ? moment(endDate)
+                          .hour(selectedSlot.hour)
+                          .minute(selectedSlot.minute)
+                          .utc() // Ensure UTC timezone
+                          .format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
                     : null;
 
-                const totalTime = calculateTotalTime();
-                const slidersData = Array.from({ length: sliderCount }).map((_, index) => {
+                // Calculate total actual hours from all sliders for the main task record
+                const actualHours = calculateTotalTime();
+
+                // Prepare newSchedules array for Per_Key_Per_Day and Per_Person_Per_Day updates
+                const newSchedules = Array.from({ length: numberOfDays }).map((_, index) => {
                     const calculatedDay = moment(startDate).add(index, 'days');
                     const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
                     return {
-                        day: formattedDay,
-                        duration: hours[index] || 0,
-                        slot: "Null", // Assuming 'Null' is the default slot
-                        personResponsible: personResponsible, // NEW: Include personResponsible for each slider entry
+                        date: formattedDay,
+                        duration: hours[index] || 0, // Get the value for this specific day
                     };
-                });
+                }).filter(s => s.date !== null); // Filter out any entries without valid dates
 
-                const selectedPersonEmailData = PERSON_EMAIL_DATA_MAP[personResponsible];
-                const newEmail = selectedPersonEmailData ? selectedPersonEmailData.primaryEmail : null;
-                const newEmails = selectedPersonEmailData ? selectedPersonEmailData.allEmails : null;
-                
-                const scheduledData = {
-                    Key: task.Key,
-                    Delivery_code: task.Delivery_code,
-                    DelCode_w_o__: task.DelCode_w_o__,
-                    Step_ID: task.Step_ID,
-                    Task_Details: values.name,
-                    Frequency___Timeline: task.Frequency___Timeline,
-                    Client: task.Client,
-                    Short_Description: task.Short_Description,
-                    Planned_Start_Timestamp: plannedStartTimestamp,
-                    Planned_Delivery_Timestamp: plannedDeliveryTimestamp,
-                    Responsibility: personResponsible, // This comes from the dropdown
-                    Current_Status: task.Current_Status || 'Scheduled', // Default to 'Scheduled' if unassigned
-                    Email: newEmail, // Use the dynamically determined email
-                    Emails: newEmails, // Use the dynamically determined emails string
-                    Total_Tasks: task.Total_Tasks,
-                    Completed_Tasks: task.Completed_Tasks,
-                    Planned_Tasks: task.Planned_Tasks,
-                    Percent_Tasks_Completed: task.Percent_Tasks_Completed,
-                    Created_at: task.Created_at || moment().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Preserve original or set new
-                    Updated_at: moment().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC",
-                    Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss,
-                    Card_Corner_Status: task.Card_Corner_Status,
-                    sliders: slidersData,
+                // Payload matches backend's /api/update-task-status expected body
+                const payload = {
+                    key: task.Key,
+                    taskName: values.name,
+                    startDate: plannedStartTimestamp,
+                    endDate: plannedDeliveryTimestamp,
+                    assignTo: personResponsible,
+                    status: values.status, // Get status from Ant Design form values
+                    actualHours: actualHours, // Total minutes for the main task record
+                    newSchedules: newSchedules, // Array of { date, duration } for BigQuery upserts
                 };
 
-                console.log('Scheduled Data for submission:', scheduledData);
+                console.log('Update Payload:', payload);
 
-                // Using full backend URL for API call to Render.com backend
-                fetch(`${BACKEND_API_BASE_URL}/api/post`, {
-                    method: 'POST',
+                fetch('https://server-ui-2.onrender.com/api/update-task-status', {
+                    method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(scheduledData),
+                    body: JSON.stringify(payload),
                 })
                     .then((response) => {
                         if (!response.ok) {
-                            return response.text().then(text => { throw new Error(text); });
+                            // Attempt to read error message from response body
+                            return response.json().then(err => {
+                                throw new Error(err.error || `Server responded with status ${response.status}`);
+                            });
                         }
                         return response.json();
                     })
@@ -360,14 +277,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             message: 'Task Updated',
                             description: 'Your task has been successfully updated!',
                         });
-                        // Pass updated scheduling data back to parent (DeliveryDetail)
+                        // Call onSubmit prop to update parent component/list
                         onSubmit({
-                            personResponsible: scheduledData.Responsibility,
-                            totalTime: totalTime,
-                            Planned_Delivery_Timestamp: scheduledData.Planned_Delivery_Timestamp,
-                            Current_Status: scheduledData.Current_Status,
-                            Email: scheduledData.Email,
-                            Emails: scheduledData.Emails // Pass back new Emails as well
+                            personResponsible,
+                            totalTime: actualHours,
+                            Planned_Delivery_Timestamp: plannedDeliveryTimestamp,
+                            status: values.status,
                         });
                     })
                     .catch((error) => {
@@ -378,63 +293,43 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     });
             })
             .catch((info) => {
-                console.error('Validation Failed:', info);
+                // Validation failed on the frontend
+                console.log('Validate Failed:', info);
                 notification.error({
-                    message: 'Error',
-                    description: 'Please fill in all required fields correctly.',
+                    message: 'Validation Error',
+                    description: 'Please fill in all required fields and check for validation errors.',
                 });
             });
     };
 
-
+    // Handles changes to the slider. Capping value between 1 and 480 minutes (8 hours)
     const handleSliderChange = (index, value) => {
-        const currentDay = moment(startDate).add(index, 'days').format('YYYY-MM-DD');
-        const maxAllowedMinutes = 480;
-        let effectiveValue = value;
-
-        if (existingSchedules[personResponsible]?.[currentDay]) {
-            const alreadyScheduledMinutes = existingSchedules[personResponsible][currentDay];
-            const remainingMinutes = maxAllowedMinutes - (alreadyScheduledMinutes || 0);
-            effectiveValue = Math.min(value, remainingMinutes);
-            if (value > remainingMinutes) {
-                notification.warning({
-                    message: 'Time Limit Reached',
-                    description: `Cannot schedule more than ${remainingMinutes} minutes for ${personResponsible} on ${currentDay} due to existing tasks.`,
-                });
-            }
+        let numericValue = value;
+        if (isNaN(numericValue) || numericValue < 1) {
+            numericValue = 1;
         }
-
-        setHours((prev) => ({ ...prev, [index]: effectiveValue }));
+        if (numericValue > 480) {
+            numericValue = 480;
+        }
+        setHours((prev) => ({ ...prev, [index]: numericValue }));
     };
 
+    // Handles changes to the input field next to the slider. Capping value between 1 and 480 minutes.
     const handleInputChange = (index, value) => {
         let numericValue = parseInt(value, 10);
-        if (isNaN(numericValue)) {
-            numericValue = 0;
+        if (isNaN(numericValue) || numericValue < 1) { // Ensure minimum 1 minute
+            numericValue = 1;
         }
-
-        const currentDay = moment(startDate).add(index, 'days').format('YYYY-MM-DD');
-        const maxAllowedMinutes = 480;
-        let effectiveValue = numericValue;
-
-        if (existingSchedules[personResponsible]?.[currentDay]) {
-            const alreadyScheduledMinutes = existingSchedules[personResponsible][currentDay];
-            const remainingMinutes = maxAllowedMinutes - (alreadyScheduledMinutes || 0);
-            effectiveValue = Math.min(numericValue, remainingMinutes);
-            if (numericValue > remainingMinutes) {
-                notification.warning({
-                    message: 'Time Limit Reached',
-                    description: `Cannot schedule more than ${remainingMinutes} minutes for ${personResponsible} on ${currentDay} due to existing tasks.`,
-                });
-            }
+        if (numericValue > 480) { // Max 8 hours (480 minutes)
+            numericValue = 480;
         }
-
         setHours((prev) => ({
             ...prev,
-            [index]: effectiveValue < 0 ? 0 : effectiveValue,
+            [index]: numericValue,
         }));
     };
 
+    // Custom marks for the slider for better visual representation
     const customMarks = {
         1: '1 m',
         60: '1 h',
@@ -447,31 +342,29 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         480: '8 h',
     };
 
-    // Define personsToDisplay based on user role
-    const personsToDisplay = isAdmin
-        ? ALL_AVAILABLE_PERSONS_HARDCODED
-        : (getPersonNameFromEmail(currentUserEmail) && ALL_AVAILABLE_PERSONS_HARDCODED.includes(getPersonNameFromEmail(currentUserEmail)))
-            ? [getPersonNameFromEmail(currentUserEmail)]
-            : [];
+    // Function to disable dates in the DatePicker (e.g., end date cannot be before start date)
+    const disabledEndDate = (current) => {
+        return startDate ? current && current < startDate.startOf('day') : false;
+    };
 
     return (
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onFinish={handleSubmit}>
             <Form.Item
                 name="name"
                 label="Task Name"
                 rules={[{ required: true, message: 'Please input the task name!' }]}
             >
-                <Input readOnly={true} />
+                <Input />
             </Form.Item>
 
             <Row gutter={[8, 16]}>
                 <Col xs={24} sm={8}>
                     <Form.Item label="Start Date">
-                        <DatePicker
-                            format="YYYY-MM-DD"
+                        <Input
+                            type="date"
                             onChange={handleStartDateChange}
-                            value={startDate}
-                            placeholder="Select start date"
+                            value={startDate ? startDate.format('YYYY-MM-DD') : ''}
+                            placeholder="Enter start date (YYYY-MM-DD)"
                             style={{ width: '100%' }}
                         />
                     </Form.Item>
@@ -481,8 +374,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         <Input
                             type="number"
                             value={numberOfDays}
-                            onChange={handleNumberOfDaysChange}
-                            min={0}
+                            onChange={(e) => handleNumberOfDaysChange(e.target.value)}
+                            min={0} // Allow 0 days if no schedule is intended
                             style={{ width: '100%' }}
                         />
                     </Form.Item>
@@ -490,22 +383,27 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 <Col xs={24} sm={8}>
                     <Form.Item label="End Date">
                         <DatePicker
+                            value={endDate} // Use moment object directly
                             format="YYYY-MM-DD"
-                            value={endDate}
-                            disabled
+                            disabledDate={disabledEndDate} // Apply disabled date logic
+                            disabled // Keep disabled as it's calculated
                             style={{ width: '100%' }}
                         />
                     </Form.Item>
                 </Col>
             </Row>
 
-            {Array.from({ length: sliderCount }).map((_, index) => (
-                <Form.Item key={index} label={`Hours for Day ${index + 1} (${startDate ? moment(startDate).add(index, 'days').format('YYYY-MM-DD') : 'N/A'})`}>
+            {/* Render sliders for each day if numberOfDays > 0 */}
+            {numberOfDays > 0 && Array.from({ length: numberOfDays }).map((_, index) => (
+                <Form.Item
+                    key={index}
+                    label={`Hours for Day ${index + 1} (${startDate ? moment(startDate).add(index, 'days').format('YYYY-MM-DD') : 'N/A'})`}
+                >
                     <Row gutter={20}>
                         <Col xs={20}>
                             <Slider
                                 marks={customMarks}
-                                min={0}
+                                min={1}
                                 max={480}
                                 step={1}
                                 onChange={(value) => handleSliderChange(index, value)}
@@ -516,7 +414,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         <Col xs={4}>
                             <Input
                                 type="number"
-                                min={0}
+                                min={1}
                                 max={480}
                                 value={hours[index] || 0}
                                 onChange={(e) => handleInputChange(index, e.target.value)}
@@ -528,32 +426,62 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             ))}
 
             <Form.Item
+                name="deliverySlot"
+                label="Delivery Slot"
+                rules={[{ required: true, message: 'Please select a delivery slot!' }]}
+            >
+                <Select
+                    placeholder="Select a delivery slot"
+                    onChange={setDeliverySlot}
+                    value={deliverySlot} // Control value with state
+                >
+                    <Option value="1pm">1pm</Option>
+                    <Option value="4pm">4pm</Option>
+                    <Option value="7pm">7pm</Option>
+                </Select>
+            </Form.Item>
+
+            <Form.Item
+                name="personResponsible" // Ant Design will manage this field value
                 label="Person Responsible"
-                name="personResponsible"
                 rules={[{ required: true, message: 'Please select the person responsible!' }]}
             >
                 <Select
                     placeholder="Select a person"
                     onChange={setPersonResponsible}
-                    value={personResponsible || undefined}
-                    showSearch
-                    optionFilterProp="children"
+                    value={personResponsible} // Control value with state
+                    showSearch // Enable search for long lists
                     filterOption={(input, option) =>
-                        (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                        option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
                     }
-                    // Disable if the user is not an admin
-                    disabled={!isAdmin}
                 >
-                    {personsToDisplay.map((person) => (
-                        <Option key={person} value={person}>
-                            {person}
+                    {/* Render options from peopleMapping prop */}
+                    {peopleMapping && peopleMapping.map((person) => (
+                        <Option key={person.Email_ID} value={person.Email_ID}>
+                            {person.Name} ({person.Email_ID})
                         </Option>
                     ))}
                 </Select>
             </Form.Item>
 
+            {/* Add Status field as per backend update-task-status endpoint */}
+            <Form.Item
+                name="status"
+                label="Status"
+                rules={[{ required: true, message: 'Please select a status!' }]}
+                // Set initial value from task prop or default to 'Scheduled' for new tasks
+                initialValue={task?.Status || 'Scheduled'}
+            >
+                <Select placeholder="Select status">
+                    <Option value="Scheduled">Scheduled</Option>
+                    <Option value="In Progress">In Progress</Option>
+                    <Option value="Paused">Paused</Option>
+                    <Option value="Completed">Completed</Option>
+                </Select>
+            </Form.Item>
+
             <Form.Item>
-                <Button type="primary" htmlType="submit" onClick={handleSubmit}>
+                <Button type="primary" htmlType="submit">
                     Submit
                 </Button>
             </Form.Item>
