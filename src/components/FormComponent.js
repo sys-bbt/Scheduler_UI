@@ -1,27 +1,67 @@
-import React, { useState, useEffect, memo } from 'react';
+import React, { useState, useEffect, memo, useCallback } from 'react';
 import { Form, Input, Button, Slider, DatePicker, Select, notification, Row, Col } from 'antd';
 import moment from 'moment';
 import './FormComponent.css';
 
 const { Option } = Select;
 
-// FormComponent now expects 'peopleMapping' as a prop
-const FormComponent = ({ onSubmit, task, peopleMapping }) => {
+// Define the emails of users who can see and edit the full list
+const ADMIN_EMAILS = [
+    "neelam.p@brightbraintech.com",
+    "meghna.j@brightbraintech.com",
+    "zoya.a@brightbraintech.com",
+    "shweta.g@brightbraintech.com",
+    "hitesh.r@brightbraintech.com"
+];
+
+// Define the base URL for your backend API
+// Ensure REACT_APP_BACKEND_URL is set in your frontend's .env file (e.g., .env.development, .env.production)
+const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+console.log('Using Backend API URL:', BACKEND_API_BASE_URL);
+
+// FormComponent now expects 'task', 'onSubmit', 'peopleMapping', and 'currentUserEmail' as props
+const FormComponent = ({ onSubmit, task, peopleMapping, currentUserEmail }) => {
     const [form] = Form.useForm();
     const [sliderCount, setSliderCount] = useState(0);
     const [hours, setHours] = useState({}); // Stores hours per day for the current task's schedule
     const [startDate, setStartDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
-
     const [deliverySlot, setDeliverySlot] = useState(null);
-    const [personResponsible, setPersonResponsible] = useState('');
+    const [personResponsible, setPersonResponsible] = useState(''); // Stores the NAME of the person
     const [numberOfDays, setNumberOfDays] = useState(0);
     // existingSchedules will store aggregated per-person-per-day data (Responsibility -> Day -> TotalMinutes)
     const [existingSchedules, setExistingSchedules] = useState({});
 
+    // Determine if the current user is an admin
+    const isAdmin = ADMIN_EMAILS.includes(currentUserEmail);
+    console.log('FormComponent: currentUserEmail received:', currentUserEmail);
+    console.log('FormComponent: isAdmin calculated as:', isAdmin);
 
+    // Memoize the mapping logic to get email data from person's name using peopleMapping prop
+    const getPersonEmailData = useCallback((personName) => {
+        if (!peopleMapping || !personName) return null;
+        const person = peopleMapping.find(p => p.Name === personName);
+        if (person) {
+            // Assuming your Google Sheet has 'Email_ID' and potentially an 'All_Emails' column
+            return {
+                primaryEmail: person.Email_ID,
+                allEmails: person.All_Emails || person.Email_ID // Fallback to primary if All_Emails not present
+            };
+        }
+        return null;
+    }, [peopleMapping]);
+
+    // Memoize the mapping logic to get person name from email
+    const getPersonNameFromEmail = useCallback((email) => {
+        if (!peopleMapping || !email) return null;
+        const person = peopleMapping.find(p => p.Email_ID === email);
+        return person ? person.Name : null;
+    }, [peopleMapping]);
+
+
+    // --- EFFECT HOOK 1: FETCH TASK DATA AND EXISTING SCHEDULES ---
     useEffect(() => {
-        const fetchTaskData = async () => {
+        const fetchTaskAndScheduleData = async () => {
             try {
                 if (task && task.Key) {
                     // Set initial form values from the task prop
@@ -30,13 +70,20 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
                         deliverySlot: task.Delivery_Slot || null, // Assuming Delivery_Slot exists in task
                         status: task.Status || 'Scheduled', // Assuming Status exists in task
                     });
-                    setPersonResponsible(task.Responsibility || '');
                     setDeliverySlot(task.Delivery_Slot || null);
 
+                    // Set initial person responsible based on task data
+                    const initialResponsibilityFromTask = task.Responsibility || '';
+                    if (initialResponsibilityFromTask) {
+                        setPersonResponsible(initialResponsibilityFromTask);
+                        form.setFieldsValue({ personResponsible: initialResponsibilityFromTask });
+                    }
+
                     // 1. Fetch data per key per day for this specific task
-                    const perKeyResponse = await fetch(`https://server-ui-2.onrender.com/api/per-key-per-day?key=${task.Key}`);
+                    const perKeyResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day?key=${task.Key}`);
                     if (!perKeyResponse.ok) {
-                        throw new Error(`HTTP error! status: ${perKeyResponse.status}`);
+                        const errorText = await perKeyResponse.text();
+                        throw new Error(`HTTP error! status: ${perKeyResponse.status}, message: ${errorText}`);
                     }
                     const perKeyData = await perKeyResponse.json(); // This will be an array of objects
 
@@ -84,9 +131,10 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
                     // NOTE: The backend /api/per-person-per-day currently fetches ALL data.
                     // For large datasets, this could be inefficient. Ideally, this endpoint
                     // should be extended to filter by person and/or date.
-                    const perPersonResponse = await fetch(`https://server-ui-2.onrender.com/api/per-person-per-day`);
+                    const perPersonResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-person-per-day`);
                     if (!perPersonResponse.ok) {
-                        throw new Error(`HTTP error! status: ${perPersonResponse.status}`);
+                        const errorText = await perPersonResponse.text();
+                        throw new Error(`HTTP error! status: ${perPersonResponse.status}, message: ${errorText}`);
                     }
                     const perPersonRawData = await perPersonResponse.json();
 
@@ -122,10 +170,10 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
                     setExistingSchedules({});
                 }
             } catch (error) {
-                console.error("Error fetching task data:", error);
+                console.error("Error fetching task data or schedules:", error);
                 notification.error({
                     message: 'Error',
-                    description: 'Failed to load task details and schedules. ' + error.message,
+                    description: `Failed to load task details and schedules: ${error.message}. Please check network and server logs.`,
                 });
                 // Reset states on error to prevent displaying partial/incorrect data
                 form.resetFields();
@@ -140,33 +188,59 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
             }
         };
 
-        fetchTaskData();
+        fetchTaskAndScheduleData();
     }, [task, form]); // Dependencies: run effect when 'task' prop or 'form' instance changes
 
 
-    // Handles changes to the Start Date input field
-    const handleStartDateChange = (e) => {
-        const inputDate = e.target.value;
-        const parsedDate = moment(inputDate, 'YYYY-MM-DD', true); // `true` for strict parsing
+    // --- EFFECT HOOK 2: SET INITIAL PERSON RESPONSIBLE AND CONTROL EDITABILITY ---
+    useEffect(() => {
+        const initialResponsibilityFromTask = task?.Responsibility || '';
+        const userPersonName = getPersonNameFromEmail(currentUserEmail);
 
-        if (parsedDate.isValid()) {
-            setStartDate(parsedDate);
-            if (numberOfDays) {
-                calculateEndDate(parsedDate, numberOfDays);
+        if (isAdmin) {
+            // Admin user: Can see full list, try to pre-fill from task.
+            if (initialResponsibilityFromTask) {
+                setPersonResponsible(initialResponsibilityFromTask);
+                form.setFieldsValue({ personResponsible: initialResponsibilityFromTask });
+            } else {
+                setPersonResponsible('');
+                form.setFieldsValue({ personResponsible: undefined });
             }
         } else {
-            console.error("Invalid start date format. Please use 'YYYY-MM-DD'");
-            setStartDate(null); // Clear start date if invalid
+            // Non-admin user: Only allowed to see their mapped name.
+            if (userPersonName) {
+                setPersonResponsible(userPersonName);
+                form.setFieldsValue({ personResponsible: userPersonName });
+            } else {
+                // If current user's email doesn't map to a known person,
+                // set to empty/undefined and disable.
+                setPersonResponsible('');
+                form.setFieldsValue({ personResponsible: undefined });
+                notification.warning({
+                    message: 'Access Restricted',
+                    description: 'Your email is not mapped to a person. Please contact an admin.',
+                });
+            }
+        }
+    }, [task, currentUserEmail, form, getPersonNameFromEmail, isAdmin]);
+
+
+    const handleStartDateChange = (date) => {
+        setStartDate(date);
+        if (numberOfDays && date) {
+            calculateEndDate(date, numberOfDays);
+        } else {
             setEndDate(null);
-            setNumberOfDays(0);
             setSliderCount(0);
+            setHours({}); // Clear hours if start date is null or invalid
         }
     };
 
-    // Handles changes to the Number of Days input field
-    const handleNumberOfDaysChange = (days) => {
+
+    const handleNumberOfDaysChange = (e) => {
+        const days = e.target.value;
         const numericDays = parseInt(days, 10);
-        if (isNaN(numericDays) || numericDays < 0) { // Ensure non-negative days
+        if (isNaN(numericDays) || numericDays < 0) {
             setNumberOfDays(0);
             setSliderCount(0);
             setEndDate(null);
@@ -179,11 +253,11 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
         if (startDate && numericDays > 0) {
             calculateEndDate(startDate, numericDays);
         } else {
-            setEndDate(null); // Clear end date if start date is not set or days are zero
+            setEndDate(null);
+            setHours({}); // Clear hours if start date is not set or days are zero
         }
     };
 
-    // Calculates and sets the End Date based on Start Date and Number of Days
     const calculateEndDate = (start, days) => {
         if (start && days > 0) {
             const calculatedEndDate = moment(start).add(days - 1, 'days');
@@ -193,13 +267,13 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
         }
     };
 
-    // Calculates the total scheduled time across all days (sum of slider values)
     const calculateTotalTime = () => {
-        return Object.values(hours).reduce((acc, curr) => acc + curr, 0);
+        return Object.values(hours).reduce((acc, curr) => {
+            return acc + (typeof curr === 'number' ? curr : 0);
+        }, 0);
     };
 
 
-    // Handles form submission
     const handleSubmit = () => {
         form
             .validateFields() // Trigger Ant Design form validation
@@ -210,7 +284,7 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
                     "7pm": { hour: 19, minute: 0 },
                 };
 
-                const selectedSlot = deliverySlot ? slotTimes[deliverySlot] : null;
+                const selectedSlot = values.deliverySlot ? slotTimes[values.deliverySlot] : null;
 
                 // Format timestamps for BigQuery
                 const plannedStartTimestamp = startDate && selectedSlot
@@ -242,21 +316,32 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
                     };
                 }).filter(s => s.date !== null); // Filter out any entries without valid dates
 
+                const selectedPersonEmailData = getPersonEmailData(values.personResponsible);
+                const primaryEmail = selectedPersonEmailData ? selectedPersonEmailData.primaryEmail : null;
+                const allEmails = selectedPersonEmailData ? selectedPersonEmailData.allEmails : null;
+
                 // Payload matches backend's /api/update-task-status expected body
                 const payload = {
                     key: task.Key,
                     taskName: values.name,
                     startDate: plannedStartTimestamp,
                     endDate: plannedDeliveryTimestamp,
-                    assignTo: personResponsible,
-                    status: values.status, // Get status from Ant Design form values
+                    assignTo: values.personResponsible, // Send the person's NAME
+                    status: values.status,
                     actualHours: actualHours, // Total minutes for the main task record
                     newSchedules: newSchedules, // Array of { date, duration } for BigQuery upserts
+                    // These are not directly used by the backend's update-task-status Joi schema,
+                    // but might be useful for other backend logic or future extensions.
+                    // If your backend actually updates 'Email' and 'Emails' columns in the main table
+                    // via this endpoint, you'd need to add them to the Joi schema and SQL query.
+                    // For now, they are part of the payload but might be ignored by current backend.
+                    primaryEmail: primaryEmail,
+                    allEmails: allEmails
                 };
 
                 console.log('Update Payload:', payload);
 
-                fetch('https://server-ui-2.onrender.com/api/update-task-status', {
+                fetch(`${BACKEND_API_BASE_URL}/api/update-task-status`, { // Corrected endpoint
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
@@ -279,10 +364,12 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
                         });
                         // Call onSubmit prop to update parent component/list
                         onSubmit({
-                            personResponsible,
+                            personResponsible: values.personResponsible, // Pass back the NAME
                             totalTime: actualHours,
                             Planned_Delivery_Timestamp: plannedDeliveryTimestamp,
                             status: values.status,
+                            Email: primaryEmail, // Pass back primary email
+                            Emails: allEmails // Pass back all emails string
                         });
                     })
                     .catch((error) => {
@@ -294,7 +381,7 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
             })
             .catch((info) => {
                 // Validation failed on the frontend
-                console.log('Validate Failed:', info);
+                console.error('Validate Failed:', info);
                 notification.error({
                     message: 'Validation Error',
                     description: 'Please fill in all required fields and check for validation errors.',
@@ -302,36 +389,79 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
             });
     };
 
-    // Handles changes to the slider. Capping value between 1 and 480 minutes (8 hours)
+    // Handles changes to the slider. Capping value between 0 and 480 minutes (8 hours)
     const handleSliderChange = (index, value) => {
         let numericValue = value;
-        if (isNaN(numericValue) || numericValue < 1) {
-            numericValue = 1;
+        if (isNaN(numericValue) || numericValue < 0) { // Allow 0 minutes
+            numericValue = 0;
         }
         if (numericValue > 480) {
             numericValue = 480;
         }
-        setHours((prev) => ({ ...prev, [index]: numericValue }));
+
+        const currentDay = startDate ? moment(startDate).add(index, 'days').format('YYYY-MM-DD') : null;
+        let effectiveValue = numericValue;
+
+        // Apply max allowed minutes based on existing schedules for the selected person
+        if (currentDay && personResponsible && existingSchedules[personResponsible]?.[currentDay] !== undefined) {
+            const alreadyScheduledMinutes = existingSchedules[personResponsible][currentDay];
+            // The value from the slider is the *new* value for this task.
+            // We need to calculate how much *this task* is contributing to the total for the day.
+            // This logic is tricky if you're editing an existing task's duration.
+            // For simplicity here, we'll cap the *current task's* input to ensure it doesn't exceed 8 hours
+            // *if combined with the existing total for that person/day*.
+            // A more robust solution might involve:
+            // 1. Fetching the *current task's* existing duration for that day.
+            // 2. Subtracting that from the 'alreadyScheduledMinutes' to get other tasks' contributions.
+            // 3. Then calculating remaining capacity.
+            // For now, this simply caps the *new total* for this task on that day.
+            // If the backend handles total aggregation, this frontend check is a UX helper.
+            const totalForDayIfThisTaskIsValue = alreadyScheduledMinutes - (hours[index] || 0) + numericValue; // Calculate potential new total
+            if (totalForDayIfThisTaskIsValue > 480) {
+                effectiveValue = numericValue - (totalForDayIfThisTaskIsValue - 480); // Adjust down to fit
+                notification.warning({
+                    message: 'Time Limit Reached',
+                    description: `Scheduling ${numericValue} minutes would exceed the 8-hour limit for ${personResponsible} on ${currentDay}. Adjusted to ${effectiveValue} minutes.`,
+                });
+            }
+        }
+        setHours((prev) => ({ ...prev, [index]: effectiveValue }));
     };
 
-    // Handles changes to the input field next to the slider. Capping value between 1 and 480 minutes.
+    // Handles changes to the input field next to the slider. Capping value between 0 and 480 minutes.
     const handleInputChange = (index, value) => {
         let numericValue = parseInt(value, 10);
-        if (isNaN(numericValue) || numericValue < 1) { // Ensure minimum 1 minute
-            numericValue = 1;
+        if (isNaN(numericValue) || numericValue < 0) {
+            numericValue = 0;
         }
-        if (numericValue > 480) { // Max 8 hours (480 minutes)
+        if (numericValue > 480) {
             numericValue = 480;
         }
+
+        const currentDay = startDate ? moment(startDate).add(index, 'days').format('YYYY-MM-DD') : null;
+        let effectiveValue = numericValue;
+
+        if (currentDay && personResponsible && existingSchedules[personResponsible]?.[currentDay] !== undefined) {
+            const alreadyScheduledMinutes = existingSchedules[personResponsible][currentDay];
+            const totalForDayIfThisTaskIsValue = alreadyScheduledMinutes - (hours[index] || 0) + numericValue;
+            if (totalForDayIfThisTaskIsValue > 480) {
+                effectiveValue = numericValue - (totalForDayIfThisTaskIsValue - 480);
+                notification.warning({
+                    message: 'Time Limit Reached',
+                    description: `Scheduling ${numericValue} minutes would exceed the 8-hour limit for ${personResponsible} on ${currentDay}. Adjusted to ${effectiveValue} minutes.`,
+                });
+            }
+        }
+
         setHours((prev) => ({
             ...prev,
-            [index]: numericValue,
+            [index]: effectiveValue,
         }));
     };
 
     // Custom marks for the slider for better visual representation
     const customMarks = {
-        1: '1 m',
+        0: '0 m',
         60: '1 h',
         120: '2 h',
         180: '3 h',
@@ -342,10 +472,11 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
         480: '8 h',
     };
 
-    // Function to disable dates in the DatePicker (e.g., end date cannot be before start date)
-    const disabledEndDate = (current) => {
-        return startDate ? current && current < startDate.startOf('day') : false;
-    };
+    // Filter persons to display in the dropdown based on admin status
+    const personsToDisplay = isAdmin
+        ? peopleMapping.map(p => p.Name) // Admins see all names
+        : (getPersonNameFromEmail(currentUserEmail) ? [getPersonNameFromEmail(currentUserEmail)] : []); // Non-admins see only their name
+
 
     return (
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
@@ -354,39 +485,38 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
                 label="Task Name"
                 rules={[{ required: true, message: 'Please input the task name!' }]}
             >
-                <Input />
+                <Input readOnly={true} />
             </Form.Item>
 
             <Row gutter={[8, 16]}>
                 <Col xs={24} sm={8}>
-                    <Form.Item label="Start Date">
-                        <Input
-                            type="date"
+                    <Form.Item label="Start Date" name="startDate">
+                        <DatePicker
+                            format="YYYY-MM-DD"
                             onChange={handleStartDateChange}
-                            value={startDate ? startDate.format('YYYY-MM-DD') : ''}
-                            placeholder="Enter start date (YYYY-MM-DD)"
+                            value={startDate}
+                            placeholder="Select start date"
                             style={{ width: '100%' }}
                         />
                     </Form.Item>
                 </Col>
                 <Col xs={24} sm={8}>
-                    <Form.Item label="Number of Days">
+                    <Form.Item label="Number of Days" name="numberOfDays">
                         <Input
                             type="number"
                             value={numberOfDays}
-                            onChange={(e) => handleNumberOfDaysChange(e.target.value)}
-                            min={0} // Allow 0 days if no schedule is intended
+                            onChange={handleNumberOfDaysChange}
+                            min={0}
                             style={{ width: '100%' }}
                         />
                     </Form.Item>
                 </Col>
                 <Col xs={24} sm={8}>
-                    <Form.Item label="End Date">
+                    <Form.Item label="End Date" name="endDate">
                         <DatePicker
-                            value={endDate} // Use moment object directly
                             format="YYYY-MM-DD"
-                            disabledDate={disabledEndDate} // Apply disabled date logic
-                            disabled // Keep disabled as it's calculated
+                            value={endDate}
+                            disabled // End date is calculated and disabled
                             style={{ width: '100%' }}
                         />
                     </Form.Item>
@@ -403,7 +533,7 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
                         <Col xs={20}>
                             <Slider
                                 marks={customMarks}
-                                min={1}
+                                min={0}
                                 max={480}
                                 step={1}
                                 onChange={(value) => handleSliderChange(index, value)}
@@ -414,7 +544,7 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
                         <Col xs={4}>
                             <Input
                                 type="number"
-                                min={1}
+                                min={0}
                                 max={480}
                                 value={hours[index] || 0}
                                 onChange={(e) => handleInputChange(index, e.target.value)}
@@ -433,7 +563,7 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
                 <Select
                     placeholder="Select a delivery slot"
                     onChange={setDeliverySlot}
-                    value={deliverySlot} // Control value with state
+                    value={deliverySlot}
                 >
                     <Option value="1pm">1pm</Option>
                     <Option value="4pm">4pm</Option>
@@ -442,35 +572,33 @@ const FormComponent = ({ onSubmit, task, peopleMapping }) => {
             </Form.Item>
 
             <Form.Item
-                name="personResponsible" // Ant Design will manage this field value
                 label="Person Responsible"
+                name="personResponsible"
                 rules={[{ required: true, message: 'Please select the person responsible!' }]}
             >
                 <Select
                     placeholder="Select a person"
                     onChange={setPersonResponsible}
-                    value={personResponsible} // Control value with state
-                    showSearch // Enable search for long lists
+                    value={personResponsible || undefined} // Use undefined for Ant Design placeholder behavior
+                    showSearch
+                    optionFilterProp="children"
                     filterOption={(input, option) =>
-                        option.children.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                        (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                     }
+                    disabled={!isAdmin && personsToDisplay.length === 1} // Disable if not admin and only one option
                 >
-                    {/* Render options from peopleMapping prop */}
-                    {peopleMapping && peopleMapping.map((person) => (
-                        <Option key={person.Email_ID} value={person.Email_ID}>
-                            {person.Name} ({person.Email_ID})
+                    {personsToDisplay.map((personName) => (
+                        <Option key={personName} value={personName}>
+                            {personName}
                         </Option>
                     ))}
                 </Select>
             </Form.Item>
 
-            {/* Add Status field as per backend update-task-status endpoint */}
             <Form.Item
                 name="status"
                 label="Status"
                 rules={[{ required: true, message: 'Please select a status!' }]}
-                // Set initial value from task prop or default to 'Scheduled' for new tasks
-                initialValue={task?.Status || 'Scheduled'}
             >
                 <Select placeholder="Select status">
                     <Option value="Scheduled">Scheduled</Option>
