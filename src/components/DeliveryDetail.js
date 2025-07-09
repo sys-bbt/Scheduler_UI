@@ -10,7 +10,9 @@ import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
 
 const DeliveryDetail = () => {
-    const { delCode } = useParams(); // Use useParams to get the delCode directly from the URL
+    console.log('DeliveryDetail component is attempting to render'); // Add this line
+    const { delCode } = useParams();
+    console.log('delCode from useParams:', delCode);
     const { userEmail } = useContext(UserContext);
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
