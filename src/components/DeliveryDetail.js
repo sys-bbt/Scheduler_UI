@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useContext } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom'; // Import useParams
 import { Container, Card, ListGroup, Row, Col, Spinner } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
@@ -10,15 +10,13 @@ import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
 
 const DeliveryDetail = () => {
-    const location = useLocation();
-    // Correctly extract delCode as it's passed in the URL, e.g., /delivery/PC%2FSCNW%2FJUN16%2F6246
-    const delCode = location.pathname.substring(location.pathname.lastIndexOf("/") + 1);
+    const { delCode } = useParams(); // Use useParams to get the delCode directly from the URL
     const { userEmail } = useContext(UserContext);
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [activeTaskKey, setActiveTaskKey] = useState(null); // To track which task is active for scheduling/other actions
-    const [actionType, setActionType] = useState(''); // To differentiate between actions like 'schedule', 'reschedule'
+    const [actionType, setActionType] = ''; // To differentiate between actions like 'schedule', 'reschedule'
     const [tasks, setTasks] = useState([]); // State to manage tasks
 
     // Fetching delivery details from the server
@@ -29,8 +27,12 @@ const DeliveryDetail = () => {
                 // Ensure this URL matches your backend deployed URL or local development server
                 const BACKEND_API_BASE_URL = 'https://server-ui-2.onrender.com'; // Replace with your actual backend URL if different
 
-                // **UPDATED**: Change fetch call to use /api/data with delCode as a query parameter
-                const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?delCode=${encodeURIComponent(delCode)}&email=${encodeURIComponent(userEmail)}`, {
+                // Construct the URL with delCode and email as query parameters
+                // delCode from useParams will already be correctly decoded if it was encoded in the URL
+                const apiUrl = `${BACKEND_API_BASE_URL}/api/data?delCode=${encodeURIComponent(delCode)}&email=${encodeURIComponent(userEmail)}`;
+                console.log("Fetching data from:", apiUrl); // Add this for debugging
+
+                const response = await fetch(apiUrl, {
                     headers: {
                         'Content-Type': 'application/json',
                         // Include Authorization header if your API requires authentication
@@ -107,7 +109,7 @@ const DeliveryDetail = () => {
             // If the update is successful, re-fetch delivery details to show updated status
             setLoading(true); // Set loading to true while re-fetching
             const BACKEND_API_BASE_URL = 'https://server-ui-2.onrender.com';
-            // **UPDATED**: Change re-fetch call to use /api/data with delCode as a query parameter
+            // Construct the URL with delCode and email as query parameters for re-fetch
             const updatedResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?delCode=${encodeURIComponent(delCode)}&email=${encodeURIComponent(userEmail)}`);
             if (!updatedResponse.ok) {
                 throw new Error('Failed to re-fetch updated delivery details.');
