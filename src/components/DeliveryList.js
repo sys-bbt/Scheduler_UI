@@ -127,21 +127,25 @@ const DeliveryList = () => {
                     return;
                 }
 
-                const newDeliveries = deliveriesForList.map((delivery) => ({
-                    delCode: delivery.DelCode_w_o__,
-                    client: `${delivery.Client}`,
-                    // Populating 'initiated' for display
-                    initiated: formatTimestamp(delivery.Initiated_Timestamp), 
-                    // Storing raw initiated timestamp for sorting
-                    initiatedTimestampRaw: delivery.Initiated_Timestamp, 
-                    deadline: calculateDeadline(
-                        delivery.Planned_Delivery_Timestamp,
-                        delivery.Planned_Start_Timestamp
-                    ),
-                    tasksPlanned: delivery.Planned_Tasks || 0,
-                    tasksTotal: delivery.Total_Tasks || 0,
-                    createdAt: delivery.createdAt || delivery.Created_at,
-                }));
+                const newDeliveries = deliveriesForList.map((delivery) => {
+                    // *** NEW CONSOLE LOG FOR DEBUGGING ***
+                    console.log('DeliveryList: Raw DelCode_w_o__ from API:', delivery.DelCode_w_o__);
+                    return {
+                        delCode: (delivery.DelCode_w_o__?.value || delivery.DelCode_w_o__), // Safely access if it's an object or direct value
+                        client: `${delivery.Client}`,
+                        // Populating 'initiated' for display
+                        initiated: formatTimestamp(delivery.Initiated_Timestamp), 
+                        // Storing raw initiated timestamp for sorting
+                        initiatedTimestampRaw: delivery.Initiated_Timestamp, 
+                        deadline: calculateDeadline(
+                            delivery.Planned_Delivery_Timestamp,
+                            delivery.Planned_Start_Timestamp
+                        ),
+                        tasksPlanned: delivery.Planned_Tasks || 0,
+                        tasksTotal: delivery.Total_Tasks || 0,
+                        createdAt: delivery.createdAt || delivery.Created_at,
+                    };
+                });
 
                 setDeliveries((prev) => {
                     let combinedDeliveries;
@@ -375,6 +379,9 @@ const DeliveryList = () => {
                 {deliveries.map((delivery) => {
                     const progress =
                         delivery.tasksTotal === 0 ? 0 : (delivery.tasksPlanned / delivery.tasksTotal) * 100;
+
+                    // *** NEW CONSOLE LOG FOR DEBUGGING ***
+                    console.log(`DeliveryList: Rendering Link for delCode: ${delivery.delCode}`);
 
                     return (
                         <Col xs={12} key={delivery.delCode} className="mb-3">
