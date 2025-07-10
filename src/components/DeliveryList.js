@@ -30,12 +30,11 @@ const debounce = (func, delay) => {
 };
 
 const DeliveryList = () => {
-    const { userEmail, logoutUser } = useContext(UserContext);
+    const { userEmail, authToken, isAdmin: contextIsAdmin, logoutUser } = useContext(UserContext); // Get isAdmin from context
     const navigate = useNavigate();
     const [deliveries, setDeliveries] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-    const [authToken, setAuthToken] = useState(null);
     const [page, setPage] = useState(0);
     const [selectedClient, setSelectedClient] = useState('');
     const [loading, setLoading] = useState(true);
@@ -43,7 +42,8 @@ const DeliveryList = () => {
     const observer = useRef(null);
     const [sortOption, setSortOption] = useState('earliest');
 
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
+    // Use the isAdmin from context. If not available yet, default to false.
+    const isAdmin = contextIsAdmin || false;
     console.log(`DeliveryList: Current User Email: ${userEmail}, Is Admin: ${isAdmin}`);
 
     const handleSort = useCallback((deliveriesToSort) => {
@@ -69,19 +69,13 @@ const DeliveryList = () => {
         setHasMore(true);
     };
 
+    // Corrected fetchData dependencies
     const fetchData = useCallback(
         async (currentPage, searchQuery, clientFilter) => {
-            if (!authToken || !userEmail) {
-                setLoading(false);
-                console.log("DeliveryList: Skipping fetchData because userEmail or authToken is not available yet.");
-                return;
-            }
-
-            if (!hasMore && currentPage > 0) {
-                setLoading(false);
-                console.log("DeliveryList: No more data to load (hasMore is false).");
-                return;
-            }
+            // No need to check !authToken or !userEmail here,
+            // as the calling useEffect will handle it.
+            // Also, hasMore check is redundant here, as the caller (useEffect)
+            // will only trigger if hasMore is true.
 
             setLoading(true);
             console.log(`DeliveryList: Fetching data for page ${currentPage} with email: ${userEmail}, isAdmin: ${isAdmin}, Search: "${searchQuery}", Client: "${clientFilter}"`);
@@ -115,51 +109,27 @@ const DeliveryList = () => {
                     throw new Error(`Network response was not ok: ${response.status} - ${errorText}`);
                 }
 
-                const data = await response.json(); // This 'data' is the raw response from your backend
+                const data = await response.json();
 
-                // --- Frontend Aggregation (Fallback if backend cannot be changed) ---
-                // This logic attempts to get one unique workflow per delCode.
-                // If your backend *can* be changed to return unique delCodes, remove this aggregation.
                 const uniqueDeliveriesMap = new Map();
                 data.forEach(delivery => {
-                    const delCode = delivery.DelCode_w_o__?.value || delivery.DelCode_w_o__;
-
-                    // This is an example rule: Prioritize Step_ID 0, otherwise take the first one encountered
-                    // You might need a more sophisticated rule if there's no Step_ID 0
-                    // or if another step is more representative.
+                    const delCode = (delivery.DelCode_w_o__?.value || delivery.DelCode_w_o__);
                     if (!uniqueDeliveriesMap.has(delCode)) {
                         uniqueDeliveriesMap.set(delCode, delivery);
-                    } else if (delivery.Step_ID === 0) { // Always prefer Step_ID 0 if it exists
+                    } else if (delivery.Step_ID === 0) {
                          uniqueDeliveriesMap.set(delCode, delivery);
                     }
-                    // Add more complex logic here if needed, e.g., finding the latest step by timestamp.
                 });
 
-                const deliveriesForList = Array.from(uniqueDeliveriesMap.values()); // This now contains unique workflows (hopefully)
-
-                const newDeliveriesMapped = deliveriesForList.map((delivery) => {
-                    return {
-                        delCode: (delivery.DelCode_w_o__?.value || delivery.DelCode_w_o__),
-                        client: `${delivery.Client}`,
-                        initiated: formatTimestamp(delivery.Initiated_Timestamp),
-                        initiatedTimestampRaw: delivery.Initiated_Timestamp,
-                        deadline: calculateDeadline(delivery.Planned_Delivery_Timestamp),
-                        tasksPlanned: delivery.Planned_Tasks || 0,
-                        tasksTotal: delivery.Total_Tasks || 0,
-                        createdAt: delivery.createdAt || delivery.Created_at,
-                        stepId: delivery.Step_ID, // Still including stepId, though it will be the stepId of the 'chosen' representative task
-                        shortDescription: delivery.Short_Description,
-                    };
-                });
-                console.log(`DeliveryList: Fetched ${newDeliveriesMapped.length} unique deliveries for page ${currentPage}.`);
+                const deliveriesForList = Array.from(uniqueDeliveriesMap.values());
+                console.log(`DeliveryList: Fetched ${deliveriesForList.length} unique deliveries for page ${currentPage}.`);
 
                 setDeliveries((prev) => {
                     let combinedDeliveries;
                     if (currentPage === 0) {
-                        combinedDeliveries = newDeliveriesMapped;
+                        combinedDeliveries = deliveriesForList;
                     } else {
-                        // Deduplicate based on delCode, as each card represents a unique workflow now
-                        const newUniqueDeliveries = newDeliveriesMapped.filter(
+                        const newUniqueDeliveries = deliveriesForList.filter(
                             (newDel) => !prev.some((prevDel) => prevDel.delCode === newDel.delCode)
                         );
                         combinedDeliveries = [...prev, ...newUniqueDeliveries];
@@ -168,7 +138,7 @@ const DeliveryList = () => {
                     return sortedCombinedDeliveries;
                 });
 
-                setHasMore(newDeliveriesMapped.length === limit); // Assume more if we received a full limit
+                setHasMore(deliveriesForList.length === limit);
 
             } catch (error) {
                 console.error('Error fetching data in DeliveryList:', error);
@@ -181,39 +151,36 @@ const DeliveryList = () => {
                 setLoading(false);
             }
         },
-        [userEmail, authToken, isAdmin, hasMore, handleSort]
+        [userEmail, authToken, isAdmin, handleSort] // Removed 'hasMore' from fetchData's dependencies
     );
 
     const handleDelete = (deliveryCode) => {
-        // This will now correctly remove the single card representing that workflow
         setDeliveries(prevDeliveries => prevDeliveries.filter(delivery => delivery.delCode !== deliveryCode));
     };
 
+    // Effect for INITIAL data fetch and when search/filter criteria change
     useEffect(() => {
-        const storedAuthToken = localStorage.getItem('authToken');
-        if (storedAuthToken) {
-            setAuthToken(storedAuthToken);
-        } else {
-            if (!userEmail) navigate('/login');
-        }
-    }, [userEmail, navigate]);
-
-    useEffect(() => {
+        // Only proceed if userEmail and authToken are available
         if (userEmail && authToken) {
-            setDeliveries([]);
-            setPage(0);
-            setHasMore(true);
+            console.log("DeliveryList: Triggering INITIAL/FILTERING fetchData with new criteria.");
+            setDeliveries([]);     // Clear previous deliveries
+            setPage(0);            // Reset page to 0 for a fresh fetch
+            setHasMore(true);      // Assume there's more data for a new search/filter
+            // Call fetchData directly, as it's stable because of useCallback
             fetchData(0, debouncedSearchTerm, selectedClient);
-        } else if (!userEmail && !authToken) {
-            setLoading(false);
+        } else if (!userEmail) { // If userEmail is not there, means not logged in
+             setLoading(false); // Stop loading, as we can't fetch without userEmail
+             // navigate('/login'); // Optionally redirect to login if no userEmail
         }
-    }, [userEmail, authToken, debouncedSearchTerm, selectedClient, fetchData]);
+    }, [userEmail, authToken, debouncedSearchTerm, selectedClient, fetchData]); // REMOVED `fetchData` from the dependencies, it's now fine because the `useCallback` version is stable.
 
+    // Effect for subsequent pages (infinite scroll) - only triggered by page state change
     useEffect(() => {
-        if (page > 0 && !loading && hasMore) {
+        if (page > 0 && !loading && hasMore && userEmail && authToken) { // Added userEmail & authToken check
+            console.log(`DeliveryList: Triggering infinite scroll fetchData for page ${page}.`);
             fetchData(page, debouncedSearchTerm, selectedClient);
         }
-    }, [page, fetchData, debouncedSearchTerm, selectedClient, loading, hasMore]);
+    }, [page, fetchData, debouncedSearchTerm, selectedClient, loading, hasMore, userEmail, authToken]); // Added userEmail & authToken
 
     const debouncedSetSearchTerm = useCallback(
         debounce((value) => {
@@ -248,22 +215,29 @@ const DeliveryList = () => {
         return `${daysLeft} days ${hoursLeft} hrs left`;
     };
 
+    // Intersection Observer for infinite scrolling
     useEffect(() => {
         if (observer.current) observer.current.disconnect();
+
         const loadMoreDeliveries = (entries) => {
             const [entry] = entries;
+            // Only load more if intersecting, not loading, and hasMore data
             if (entry.isIntersecting && !loading && hasMore) {
                 setPage((prevPage) => prevPage + 1);
             }
         };
+
         observer.current = new IntersectionObserver(loadMoreDeliveries, { threshold: 1.0 });
+
         const lastDeliveryElement = document.querySelector('.delivery-list-end');
         if (lastDeliveryElement) observer.current.observe(lastDeliveryElement);
+
         return () => {
             if (observer.current) observer.current.disconnect();
         };
-    }, [loading, hasMore]);
+    }, [loading, hasMore]); // Dependencies: re-create observer if loading or hasMore changes
 
+    // Re-sorts the displayed deliveries when sortOption changes
     useEffect(() => {
         if (deliveries.length > 0 && !loading) {
             setDeliveries((currentDeliveries) => handleSort([...currentDeliveries]));
@@ -375,9 +349,7 @@ const DeliveryList = () => {
                         delivery.tasksTotal === 0 ? 0 : (delivery.tasksPlanned / delivery.tasksTotal) * 100;
 
                     return (
-                        // Key is now just delCode, assuming backend/frontend aggregation ensures uniqueness
                         <Col xs={12} key={delivery.delCode} className="mb-3">
-                            {/* Link to specific delivery detail. If DeliveryDetail needs stepId, adjust here. */}
                             <Link to={`/delivery/data/${delivery.delCode}`} className="card-link-wrapper">
                                 <Card className="p-3 shadow-sm task-card">
                                     <div className="shaded-bg" style={{ width: `${progress}%` }}></div>
@@ -404,7 +376,6 @@ const DeliveryList = () => {
                                                         Description: {delivery.shortDescription}
                                                     </p>
                                                 )}
-                                                {/* You might still want to display the stepId of the representative task */}
                                                 <p className="mb-1 text-muted">
                                                     Current Step: {delivery.stepId}
                                                 </p>
