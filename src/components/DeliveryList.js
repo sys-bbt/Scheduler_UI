@@ -187,7 +187,7 @@ const DeliveryList = () => {
                         combinedDeliveries = [...prev, ...newUniqueDeliveries];
                     }
                     const sortedCombinedDeliveries = handleSort(combinedDeliveries);
-                    setTotalFilteredDeliveries(sortedCombinedComments.length); // Update total count
+                    setTotalFilteredDeliveries(sortedCombinedDeliveries.length); // Update total count
                     return sortedCombinedDeliveries;
                 });
 
