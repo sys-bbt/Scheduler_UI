@@ -12,6 +12,8 @@ import { notification } from 'antd';
 
 const BACKEND_API_BASE_URL = 'https://server-ui-2.onrender.com';
 
+// This ADMIN_EMAILS_FRONTEND list should ideally be synced with your backend's admin list.
+// The isAdmin check is now primarily done via the context.
 const ADMIN_EMAILS_FRONTEND = [
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
@@ -30,7 +32,8 @@ const debounce = (func, delay) => {
 };
 
 const DeliveryList = () => {
-    const { userEmail, authToken, isAdmin: contextIsAdmin, logoutUser } = useContext(UserContext); // Get isAdmin from context
+    // Get authToken and isAdmin from UserContext
+    const { userEmail, authToken, isAdmin, logoutUser } = useContext(UserContext);
     const navigate = useNavigate();
     const [deliveries, setDeliveries] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
@@ -42,8 +45,7 @@ const DeliveryList = () => {
     const observer = useRef(null);
     const [sortOption, setSortOption] = useState('earliest');
 
-    // Use the isAdmin from context. If not available yet, default to false.
-    const isAdmin = contextIsAdmin || false;
+    // Use the isAdmin from context, which is now correctly managed in UserContext.js
     console.log(`DeliveryList: Current User Email: ${userEmail}, Is Admin: ${isAdmin}`);
 
     const handleSort = useCallback((deliveriesToSort) => {
@@ -69,13 +71,22 @@ const DeliveryList = () => {
         setHasMore(true);
     };
 
-    // Corrected fetchData dependencies
+    // Corrected fetchData dependencies and added console.logs for data inspection
     const fetchData = useCallback(
         async (currentPage, searchQuery, clientFilter) => {
-            // No need to check !authToken or !userEmail here,
-            // as the calling useEffect will handle it.
-            // Also, hasMore check is redundant here, as the caller (useEffect)
-            // will only trigger if hasMore is true.
+            // Check for authentication tokens before making the fetch call
+            if (!userEmail || !authToken) {
+                setLoading(false);
+                console.log("DeliveryList: Skipping fetchData because userEmail or authToken is not available.");
+                return;
+            }
+
+            // If no more data is expected and it's not the first page, stop
+            if (!hasMore && currentPage > 0) {
+                setLoading(false);
+                console.log("DeliveryList: No more data to load (hasMore is false) and not on first page.");
+                return;
+            }
 
             setLoading(true);
             console.log(`DeliveryList: Fetching data for page ${currentPage} with email: ${userEmail}, isAdmin: ${isAdmin}, Search: "${searchQuery}", Client: "${clientFilter}"`);
@@ -111,6 +122,26 @@ const DeliveryList = () => {
 
                 const data = await response.json();
 
+                // --- IMPORTANT DEBUGGING LOGS START ---
+                console.log("DEBUG: Raw data received from backend:", data);
+
+                if (data && data.length > 0) {
+                    const firstItem = data[0];
+                    console.log("DEBUG: First item's DelCode_w_o__:", firstItem.DelCode_w_o__);
+                    console.log("DEBUG: First item's Client:", firstItem.Client);
+                    console.log("DEBUG: First item's Initiated_Timestamp:", firstItem.Initiated_Timestamp);
+                    console.log("DEBUG: First item's Planned_Delivery_Timestamp:", firstItem.Planned_Delivery_Timestamp);
+                    console.log("DEBUG: First item's Planned_Tasks:", firstItem.Planned_Tasks);
+                    console.log("DEBUG: First item's Total_Tasks:", firstItem.Total_Tasks);
+                    console.log("DEBUG: First item's Step_ID:", firstItem.Step_ID);
+                    console.log("DEBUG: First item's Short_Description:", firstItem.Short_Description);
+                } else {
+                    console.log("DEBUG: No data received or data array is empty.");
+                }
+                // --- IMPORTANT DEBUGGING LOGS END ---
+
+
+                // Frontend aggregation logic (if backend doesn't return unique workflows)
                 const uniqueDeliveriesMap = new Map();
                 data.forEach(delivery => {
                     const delCode = (delivery.DelCode_w_o__?.value || delivery.DelCode_w_o__);
@@ -122,7 +153,7 @@ const DeliveryList = () => {
                 });
 
                 const deliveriesForList = Array.from(uniqueDeliveriesMap.values());
-                console.log(`DeliveryList: Fetched ${deliveriesForList.length} unique deliveries for page ${currentPage}.`);
+                console.log(`DeliveryList: Aggregated to ${deliveriesForList.length} unique deliveries for page ${currentPage}.`);
 
                 setDeliveries((prev) => {
                     let combinedDeliveries;
@@ -151,7 +182,7 @@ const DeliveryList = () => {
                 setLoading(false);
             }
         },
-        [userEmail, authToken, isAdmin, handleSort] // Removed 'hasMore' from fetchData's dependencies
+        [userEmail, authToken, isAdmin, handleSort, hasMore] // hasMore is a dependency for fetchData's logic, but handle its updates carefully in calling useEffect
     );
 
     const handleDelete = (deliveryCode) => {
@@ -166,13 +197,12 @@ const DeliveryList = () => {
             setDeliveries([]);     // Clear previous deliveries
             setPage(0);            // Reset page to 0 for a fresh fetch
             setHasMore(true);      // Assume there's more data for a new search/filter
-            // Call fetchData directly, as it's stable because of useCallback
             fetchData(0, debouncedSearchTerm, selectedClient);
-        } else if (!userEmail) { // If userEmail is not there, means not logged in
+        } else if (!userEmail && !authToken && !loading) { // If not logged in and not already loading
              setLoading(false); // Stop loading, as we can't fetch without userEmail
-             // navigate('/login'); // Optionally redirect to login if no userEmail
         }
-    }, [userEmail, authToken, debouncedSearchTerm, selectedClient, fetchData]); // REMOVED `fetchData` from the dependencies, it's now fine because the `useCallback` version is stable.
+    // IMPORTANT: Removed fetchData from dependencies to prevent infinite loop
+    }, [userEmail, authToken, debouncedSearchTerm, selectedClient]); // fetchData is stable due to useCallback
 
     // Effect for subsequent pages (infinite scroll) - only triggered by page state change
     useEffect(() => {
@@ -180,7 +210,7 @@ const DeliveryList = () => {
             console.log(`DeliveryList: Triggering infinite scroll fetchData for page ${page}.`);
             fetchData(page, debouncedSearchTerm, selectedClient);
         }
-    }, [page, fetchData, debouncedSearchTerm, selectedClient, loading, hasMore, userEmail, authToken]); // Added userEmail & authToken
+    }, [page, debouncedSearchTerm, selectedClient, loading, hasMore, userEmail, authToken, fetchData]); // fetchData is here because page changes, triggering a new fetch.
 
     const debouncedSetSearchTerm = useCallback(
         debounce((value) => {
@@ -221,7 +251,6 @@ const DeliveryList = () => {
 
         const loadMoreDeliveries = (entries) => {
             const [entry] = entries;
-            // Only load more if intersecting, not loading, and hasMore data
             if (entry.isIntersecting && !loading && hasMore) {
                 setPage((prevPage) => prevPage + 1);
             }
@@ -235,7 +264,7 @@ const DeliveryList = () => {
         return () => {
             if (observer.current) observer.current.disconnect();
         };
-    }, [loading, hasMore]); // Dependencies: re-create observer if loading or hasMore changes
+    }, [loading, hasMore]);
 
     // Re-sorts the displayed deliveries when sortOption changes
     useEffect(() => {
@@ -256,6 +285,7 @@ const DeliveryList = () => {
         navigate('/login');
     };
 
+    // Conditional Rendering for different states
     if (loading && deliveries.length === 0) {
         return (
             <Container className="text-center my-5">
