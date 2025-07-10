@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useContext } from 'react';
-import { useParams } from 'react-router-dom'; // <-- This is where delCode comes from
-import { UserContext } from './components/UserContext'; // Adjust path if needed
+import { useParams } from 'react-router-dom';
+import { UserContext } from '../components/UserContext'; // <-- CHANGE THIS LINE
 
 function Tasklist() {
     const { delCode } = useParams(); // Extract delCode from URL parameters
