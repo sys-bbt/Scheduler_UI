@@ -1,172 +1,86 @@
-// src/components/Tasklist.js
-import React, { useState, useEffect, useContext, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom'; // useParams to read URL params
-import { Container, Row, Col, Card, Button } from 'react-bootstrap';
-import { FaSpinner } from 'react-icons/fa';
-import { notification } from 'antd'; // For displaying notifications
-import { UserContext } from './UserContext'; // Import your UserContext
+import React, { useEffect, useState, useContext } from 'react';
+import { useParams } from 'react-router-dom'; // <-- This is where delCode comes from
+import { UserContext } from './components/UserContext'; // Adjust path if needed
 
-// Use process.env for backend URL, with a fallback
-const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
-
-const Tasklist = () => {
-    const { delCode } = useParams(); // Hook to get URL parameters
-    const navigate = useNavigate(); // Hook to navigate programmatically
-    const { userEmail, authToken } = useContext(UserContext); // Get user details from context
-
+function Tasklist() {
+    const { delCode } = useParams(); // Extract delCode from URL parameters
+    const { userEmail } = useContext(UserContext); // Get user email from context
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const fetchTasksForDelivery = useCallback(async () => {
-        if (!userEmail || !authToken || !delCode) {
-            setLoading(false);
-            if (!authToken) {
-                // If no auth token, redirect to login
-                notification.error({
-                    message: 'Authentication Required',
-                    description: 'Please log in to view tasks.',
-                });
-                navigate('/login');
-            } else if (!delCode) {
-                // If delCode is missing from URL, go back to delivery list
-                notification.warning({
-                    message: 'Missing Delivery Code',
-                    description: 'No delivery code provided to fetch tasks.',
-                });
-                navigate('/deliveries');
-            }
-            return;
-        }
-
-        setLoading(true);
-        setError(null);
-        console.log(`Tasklist: Attempting to fetch tasks for DelCode: ${delCode}`);
-
-        try {
-            const queryParams = new URLSearchParams({
-                email: userEmail,
-                delCode: delCode, // Pass the delCode as a query parameter
-                // You might need to add isAdmin here if your backend filtering depends on it
-                // isAdmin: true // or based on context
-            });
-
-            // IMPORTANT: Your backend's /api/data endpoint needs to be able to filter by delCode
-            // or you might need a new endpoint like /api/tasksByDelCode
-            const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?${queryParams.toString()}`, {
-                headers: {
-                    Authorization: `Bearer ${authToken}`,
-                    "Content-Type": "application/json",
-                },
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Network response was not ok: ${response.status} - ${errorText}`);
-            }
-
-            const data = await response.json();
-            console.log("Tasklist: Raw data received from backend:", data);
-
-            // Assuming data is an object where values are arrays, and you need to flatten
-            // Then filter by DelCode_w_o__ to get only relevant tasks if the backend sends more
-            const tasksArray = Object.values(data).flat();
-            const filteredTasks = tasksArray.filter(task => task.DelCode_w_o__ === delCode);
-            console.log(`Tasklist: Found ${filteredTasks.length} tasks for delivery code: ${delCode}.`);
-
-            // Map and format tasks for display
-            const formattedTasks = filteredTasks.map(task => ({
-                task_id: task.Key, // Assuming 'Key' is unique for tasks within a delivery
-                del_code: task.DelCode_w_o__,
-                step_id: task.Step_ID,
-                description: task.Task_Details, // Assuming this holds task description
-                // Add any other task-specific fields you want to display
-                debug_emails: task.debug_emails,
-                debug_responsibility: task.debug_responsibility,
-            }));
-
-            setTasks(formattedTasks);
-
-        } catch (err) {
-            console.error('Tasklist: Error fetching tasks:', err);
-            setError(err.message);
-            notification.error({
-                message: 'Task Fetch Error',
-                description: `Failed to load tasks: ${err.message}. Please try again.`,
-            });
-        } finally {
-            setLoading(false);
-        }
-    }, [delCode, userEmail, authToken, navigate]); // Dependencies for useCallback
+    // --- ADD THESE CONSOLE LOGS ---
+    console.log('Tasklist Component Loaded.');
+    console.log('Tasklist: delCode from useParams:', delCode);
+    console.log('Tasklist: userEmail from UserContext:', userEmail);
+    // --- END ADDITIONS ---
 
     useEffect(() => {
-        fetchTasksForDelivery();
-    }, [fetchTasksForDelivery]); // Call fetchTasksForDelivery when it changes (which is rare due to useCallback) or on mount
+        const fetchTasks = async () => {
+            // Ensure delCode and userEmail are available before fetching
+            if (!userEmail || !delCode) {
+                console.log('Tasklist: Skipping fetch - Missing userEmail or delCode.', { userEmail, delCode });
+                setLoading(false);
+                return;
+            }
 
-    if (loading) {
-        return (
-            <Container className="text-center my-5">
-                <FaSpinner className="spinner-icon" style={{ fontSize: '3rem', color: '#007bff', animation: 'spin 1s linear infinite' }} />
-                <p className="mt-3">Loading tasks for {delCode}...</p>
-            </Container>
-        );
-    }
+            setLoading(true);
+            setError(null);
+            try {
+                // Check if the user is an admin (client-side check for API call parameter)
+                const isAdmin = userEmail && ["neelam.p@brightbraintech.com", "meghna.j@brightbraintech.com", "zoya.a@brightbraintech.com", "shweta.g@brightbraintech.com", "hitesh.r@brightbraintech.com"].includes(userEmail);
 
-    if (error) {
-        return (
-            <Container className="text-center my-5">
-                <p className="text-danger">Error loading tasks: {error}</p>
-                <Button variant="secondary" onClick={() => navigate(-1)}>Go Back</Button>
-            </Container>
-        );
-    }
+                const baseUrl = process.env.NODE_ENV === 'production'
+                    ? 'https://server-ui-2.onrender.com'
+                    : 'http://localhost:3001';
 
-    if (tasks.length === 0) {
-        return (
-            <Container className="text-center my-5">
-                <p>No tasks found for delivery code: {delCode}.</p>
-                <Button variant="secondary" onClick={() => navigate(-1)}>Go Back to Deliveries</Button>
-            </Container>
-        );
-    }
+                // It's crucial to encode the delCode because it contains slashes '/'
+                const encodedDelCode = encodeURIComponent(delCode);
+
+                const apiUrl = `${baseUrl}/api/data?email=${encodeURIComponent(userEmail)}&delCode=${encodedDelCode}&isAdmin=${isAdmin}`;
+                console.log('Tasklist: Fetching from URL:', apiUrl); // <-- Add this log
+
+                const response = await fetch(apiUrl);
+
+                if (!response.ok) {
+                    const errorData = await response.json(); // Try to get more specific error from backend
+                    throw new Error(`HTTP error! status: ${response.status} - ${errorData.message || response.statusText}`);
+                }
+                const data = await response.json();
+                setTasks(data);
+                console.log('Tasklist: Fetched tasks:', data); // <-- Add this log
+            } catch (err) {
+                console.error("Tasklist: Error fetching tasks:", err);
+                setError('Failed to load tasks: ' + err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchTasks();
+    }, [delCode, userEmail]); // Re-run effect if delCode or userEmail changes
+
+    if (loading) return <div>Loading tasks...</div>;
+    if (error) return <div style={{color: 'red'}}>Error: {error}</div>;
+    if (tasks.length === 0) return <div>No tasks found for this delivery or you do not have permission to view them.</div>;
 
     return (
-        <Container className="my-4">
-            <Row className="mb-3 align-items-center">
-                <Col>
-                    <Button variant="secondary" onClick={() => navigate(-1)}>
-                        &larr; Back to Deliveries
-                    </Button>
-                </Col>
-                <Col className="text-center">
-                    <h2>Tasks for Delivery: <span style={{ wordBreak: 'break-all' }}>{delCode}</span></h2>
-                </Col>
-                <Col></Col> {/* For alignment */}
-            </Row>
-            <Row>
-                {tasks.map((task) => (
-                    <Col xs={12} md={6} lg={4} key={task.task_id} className="mb-3">
-                        <Card className="p-3 shadow-sm task-item-card">
-                            <Card.Body>
-                                <Card.Title>Task ID: {task.task_id}</Card.Title>
-                                <Card.Subtitle className="mb-2 text-muted">Step ID: {task.step_id}</Card.Subtitle>
-                                <Card.Text>
-                                    <strong>Description:</strong> {task.description || 'N/A'}
-                                </Card.Text>
-                                <Card.Text>
-                                    <strong>Responsible Email:</strong> {task.debug_emails || 'N/A'}
-                                </Card.Text>
-                                <Card.Text>
-                                    <strong>Responsibility:</strong> {task.debug_responsibility || 'N/A'}
-                                </Card.Text>
-                                {/* Add more task details as needed */}
-                            </Card.Body>
-                        </Card>
-                    </Col>
+        <div style={{ padding: '20px' }}>
+            <h1>Tasks for Delivery: {delCode}</h1>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+                {tasks.map(task => (
+                    <div key={task.Key} style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+                        <h2>{task.Task_Details}</h2>
+                        <p><strong>Step ID:</strong> {task.Step_ID}</p>
+                        <p><strong>Responsibility:</strong> {task.Responsibility}</p>
+                        <p><strong>Planned Start:</strong> {task.Planned_Start_Timestamp ? new Date(task.Planned_Start_Timestamp).toLocaleDateString() : 'N/A'}</p>
+                        <p><strong>Planned Delivery:</strong> {task.Planned_Delivery_Timestamp ? new Date(task.Planned_Delivery_Timestamp).toLocaleDateString() : 'N/A'}</p>
+                        {/* Add more task details as needed */}
+                    </div>
                 ))}
-            </Row>
-        </Container>
+            </div>
+        </div>
     );
-};
+}
 
 export default Tasklist;
