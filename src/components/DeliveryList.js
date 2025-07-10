@@ -434,3 +434,83 @@ const DeliveryList = () => {
                                         <div className="d-flex justify-content-between align-items-center">
                                             <div>
                                                 <div className="d-flex align-items-center mb-2">
+                                                    <FiCheckCircle style={{ marginRight: '8px', color: 'green' }} />
+                                                    <span
+                                                        className="font-weight-bold"
+                                                        style={{ fontSize: '1.5rem' }}
+                                                    >
+                                                        {delivery.tasksPlanned} of {delivery.tasksTotal} Planned
+                                                    </span>
+                                                    {isAdmin && <DeleteButton deliveryCode={delivery.delCode} onDelete={handleDelete} />}
+                                                </div>
+                                                {delivery.client && (
+                                                    <p className="mb-1 text-muted">
+                                                        Client: {delivery.client}
+                                                    </p>
+                                                )}
+                                                {delivery.shortDescription && (
+                                                    <p className="mb-1 text-muted">
+                                                        Description: {delivery.shortDescription}
+                                                    </p>
+                                                )}
+                                                <p className="mb-1 text-muted">
+                                                    Current Step: {delivery.stepId}
+                                                </p>
+                                                <div className="mb-2">
+                                                    <ProgressBar
+                                                        now={progress}
+                                                        variant={progress > 50 ? 'success' : progress > 20 ? 'warning' : 'danger'}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="mb-1 text-muted">
+                                                    <FiClock style={{ marginRight: '5px' }} /> {formatTimestamp(delivery.initiatedTimestampRaw)}
+                                                </p>
+                                                <p className="mb-0 text-danger">
+                                                    <FiFlag style={{ marginRight: '5px' }} /> {delivery.deadline}
+                                                </p>
+                                                <p
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const el = document.createElement('textarea');
+                                                        el.value = delivery.delCode;
+                                                        document.body.appendChild(el);
+                                                        el.select();
+                                                        document.execCommand('copy');
+                                                        document.body.removeChild(el);
+                                                    }}
+                                                    style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+                                                    title="Click to copy"
+                                                >
+                                                    {delivery.delCode}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </Card.Body>
+                                </Card>
+                            </Link>
+                        </Col>
+                    );
+                })}
+            </Row>
+
+            <div className="delivery-list-end"></div>
+
+            {loading && deliveries.length > 0 && hasMore && (
+                <div className="d-flex justify-content-center align-items-center my-3" style={{ height: '100px' }}>
+                    <FaSpinner
+                        className="spinner-icon"
+                        style={{ fontSize: '2rem', color: '#007bff', animation: 'spin 1s linear infinite' }}
+                    />
+                    <p className="ms-2">Loading more deliveries...</p>
+                </div>
+            )}
+            {!hasMore && deliveries.length > 0 && (
+                <p className="text-center my-3 text-muted">You've reached the end of the list.</p>
+            )}
+        </Container>
+    );
+};
+
+export default DeliveryList;
