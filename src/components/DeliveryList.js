@@ -187,7 +187,7 @@ const DeliveryList = () => {
                         combinedDeliveries = [...prev, ...newUniqueDeliveries];
                     }
                     const sortedCombinedDeliveries = handleSort(combinedDeliveries);
-                    setTotalFilteredDeliveries(sortedCombinedDeliveries.length); // Update total count
+                    setTotalFilteredDeliveries(sortedCombinedComments.length); // Update total count
                     return sortedCombinedDeliveries;
                 });
 
@@ -284,27 +284,44 @@ const DeliveryList = () => {
         return `${daysLeft} days ${hoursLeft} hrs left`;
     };
 
-    // Intersection Observer for infinite scrolling
+    // Intersection Observer for infinite scrolling (REFINED LOGIC)
     useEffect(() => {
-        if (observer.current) observer.current.disconnect();
+        if (observer.current) observer.current.disconnect(); // Disconnect previous observer instance
 
-        const loadMoreDeliveries = (entries) => {
-            const [entry] = entries;
-            // Only load more if intersecting, not loading, and hasMore data
-            if (entry.isIntersecting && !loading && hasMore) {
-                setPage((prevPage) => prevPage + 1);
+        // Create a new observer only if there's potentially more data to load
+        // and we're not currently loading
+        if (hasMore && !loading) {
+            const loadMoreDeliveries = (entries) => {
+                const [entry] = entries;
+                // Only load more if intersecting, not already loading, and there's more data
+                if (entry.isIntersecting && !loading && hasMore) {
+                    console.log("Intersection Observer: Element is intersecting, setting next page.");
+                    setPage((prevPage) => prevPage + 1);
+                }
+            };
+
+            observer.current = new IntersectionObserver(loadMoreDeliveries, { threshold: 1.0 });
+
+            const lastDeliveryElement = document.querySelector('.delivery-list-end');
+            if (lastDeliveryElement) {
+                console.log("Intersection Observer: Observing .delivery-list-end");
+                observer.current.observe(lastDeliveryElement);
+            } else {
+                console.log("Intersection Observer: .delivery-list-end element not found.");
+            }
+        } else {
+            console.log(`Intersection Observer: Not observing. hasMore: ${hasMore}, loading: ${loading}`);
+        }
+
+        // Cleanup function: disconnect observer when component unmounts or dependencies change
+        return () => {
+            if (observer.current) {
+                console.log("Intersection Observer: Disconnecting observer on cleanup.");
+                observer.current.disconnect();
             }
         };
-
-        observer.current = new IntersectionObserver(loadMoreDeliveries, { threshold: 1.0 });
-
-        const lastDeliveryElement = document.querySelector('.delivery-list-end');
-        if (lastDeliveryElement) observer.current.observe(lastDeliveryElement);
-
-        return () => {
-            if (observer.current) observer.current.disconnect();
-        };
     }, [loading, hasMore]); // Dependencies: re-create observer if loading or hasMore changes
+
 
     // Re-sorts the displayed deliveries when sortOption changes
     useEffect(() => {
