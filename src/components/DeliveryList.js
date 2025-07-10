@@ -8,12 +8,10 @@ import './DeliveryList.css';
 import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSelected';
 import SortDeliveriesByDate from './SortDeliveriesByDate';
 import DeleteButton from './DeleteButton';
-import { notification } from 'antd'; // Import notification from antd
+import { notification } from 'antd';
 
-// Updated Backend API URL to match other components
 const BACKEND_API_BASE_URL = 'https://server-ui-2.onrender.com';
 
-// Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
@@ -22,7 +20,6 @@ const ADMIN_EMAILS_FRONTEND = [
     "hitesh.r@brightbraintech.com"
 ];
 
-// Debounce utility function
 const debounce = (func, delay) => {
     let timeout;
     return function(...args) {
@@ -33,67 +30,70 @@ const debounce = (func, delay) => {
 };
 
 const DeliveryList = () => {
-    const { userEmail, logoutUser } = useContext(UserContext); // Using logoutUser from context
+    const { userEmail, logoutUser } = useContext(UserContext);
     const navigate = useNavigate();
     const [deliveries, setDeliveries] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(''); // New state for debounced search term
+    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
     const [authToken, setAuthToken] = useState(null);
     const [page, setPage] = useState(0);
     const [selectedClient, setSelectedClient] = useState('');
     const [loading, setLoading] = useState(true);
+    const [hasMore, setHasMore] = useState(true);
     const observer = useRef(null);
     const [sortOption, setSortOption] = useState('earliest');
-    const [totalFilteredDeliveries, setTotalFilteredDeliveries] = useState(0); // To store the total count from backend
 
-    // Determine isAdmin status for the current user
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
     console.log(`DeliveryList: Current User Email: ${userEmail}, Is Admin: ${isAdmin}`);
 
-    // Memoize handleSort to ensure stable function reference
     const handleSort = useCallback((deliveriesToSort) => {
-        return [...deliveriesToSort].sort((a, b) => { // Create a shallow copy to avoid direct mutation
-            // Now using initiatedTimestampRaw for sorting
+        return [...deliveriesToSort].sort((a, b) => {
             const dateA = new Date(a.initiatedTimestampRaw?.value || a.initiatedTimestampRaw);
             const dateB = new Date(b.initiatedTimestampRaw?.value || b.initiatedTimestampRaw);
-            
+
             const isValidDateA = !isNaN(dateA.getTime());
             const isValidDateB = !isNaN(dateB.getTime());
 
             if (!isValidDateA && !isValidDateB) return 0;
-            if (!isValidDateA) return 1; // Put invalid date at end
-            if (!isValidDateB) return -1; // Put invalid date at end
+            if (!isValidDateA) return 1;
+            if (!isValidDateB) return -1;
 
             return sortOption === 'earliest' ? dateA - dateB : dateB - dateA;
         });
-    }, [sortOption]); // Dependencies for useCallback: re-create when sortOption changes
+    }, [sortOption]);
 
     const handleClientSelect = (client) => {
         setSelectedClient(client);
-        setDeliveries([]); // Reset deliveries to fetch new filtered set
-        setPage(0); // Reset page for new filter
-        setTotalFilteredDeliveries(0); // Reset count
+        setDeliveries([]);
+        setPage(0);
+        setHasMore(true);
     };
 
-    // Modified fetchData to accept search and client parameters
     const fetchData = useCallback(
-        async (currentPage, searchQuery, clientFilter, isInitialLoad = false) => {
+        async (currentPage, searchQuery, clientFilter) => {
             if (!authToken || !userEmail) {
                 setLoading(false);
                 console.log("DeliveryList: Skipping fetchData because userEmail or authToken is not available yet.");
                 return;
             }
 
-            try {
-                setLoading(true);
-                console.log(`DeliveryList: Fetching data for page ${currentPage} with email: ${userEmail}, isAdmin: ${isAdmin}, Search: "${searchQuery}", Client: "${clientFilter}"`);
+            if (!hasMore && currentPage > 0) {
+                setLoading(false);
+                console.log("DeliveryList: No more data to load (hasMore is false).");
+                return;
+            }
 
-                // Construct query parameters
+            setLoading(true);
+            console.log(`DeliveryList: Fetching data for page ${currentPage} with email: ${userEmail}, isAdmin: ${isAdmin}, Search: "${searchQuery}", Client: "${clientFilter}"`);
+
+            const limit = 500;
+            const currentOffset = currentPage * limit;
+
+            try {
                 const queryParams = new URLSearchParams({
                     email: userEmail,
-                    offset: currentPage * 500, // Assuming a limit of 500 for infinite scroll
-                    limit: 500, // Hardcoded limit for fetching data in chunks
-                    isAdmin: isAdmin,
+                    offset: currentOffset,
+                    limit: limit,
                 });
 
                 if (searchQuery) {
@@ -115,120 +115,117 @@ const DeliveryList = () => {
                     throw new Error(`Network response was not ok: ${response.status} - ${errorText}`);
                 }
 
-                const data = await response.json();
-                
-                const tasksArray = Object.values(data).flat();
-                
-                const deliveriesForList = tasksArray.filter((delivery) => delivery.Step_ID === 0);
+                const data = await response.json(); // This 'data' is the raw response from your backend
 
-                if (deliveriesForList.length === 0 && currentPage !== 0 && !isInitialLoad) {
-                    console.log("No new deliveries to load, stopping further fetch.");
-                    setLoading(false); // Stop loading if no more data is available
-                    return;
-                }
+                // --- Frontend Aggregation (Fallback if backend cannot be changed) ---
+                // This logic attempts to get one unique workflow per delCode.
+                // If your backend *can* be changed to return unique delCodes, remove this aggregation.
+                const uniqueDeliveriesMap = new Map();
+                data.forEach(delivery => {
+                    const delCode = delivery.DelCode_w_o__?.value || delivery.DelCode_w_o__;
 
-                const newDeliveries = deliveriesForList.map((delivery) => {
-                    // *** NEW CONSOLE LOG FOR DEBUGGING ***
-                    console.log('DeliveryList: Raw DelCode_w_o__ from API:', delivery.DelCode_w_o__);
+                    // This is an example rule: Prioritize Step_ID 0, otherwise take the first one encountered
+                    // You might need a more sophisticated rule if there's no Step_ID 0
+                    // or if another step is more representative.
+                    if (!uniqueDeliveriesMap.has(delCode)) {
+                        uniqueDeliveriesMap.set(delCode, delivery);
+                    } else if (delivery.Step_ID === 0) { // Always prefer Step_ID 0 if it exists
+                         uniqueDeliveriesMap.set(delCode, delivery);
+                    }
+                    // Add more complex logic here if needed, e.g., finding the latest step by timestamp.
+                });
+
+                const deliveriesForList = Array.from(uniqueDeliveriesMap.values()); // This now contains unique workflows (hopefully)
+
+                const newDeliveriesMapped = deliveriesForList.map((delivery) => {
                     return {
-                        delCode: (delivery.DelCode_w_o__?.value || delivery.DelCode_w_o__), // Safely access if it's an object or direct value
+                        delCode: (delivery.DelCode_w_o__?.value || delivery.DelCode_w_o__),
                         client: `${delivery.Client}`,
-                        // Populating 'initiated' for display
-                        initiated: formatTimestamp(delivery.Initiated_Timestamp), 
-                        // Storing raw initiated timestamp for sorting
-                        initiatedTimestampRaw: delivery.Initiated_Timestamp, 
-                        deadline: calculateDeadline(
-                            delivery.Planned_Delivery_Timestamp,
-                            delivery.Planned_Start_Timestamp
-                        ),
+                        initiated: formatTimestamp(delivery.Initiated_Timestamp),
+                        initiatedTimestampRaw: delivery.Initiated_Timestamp,
+                        deadline: calculateDeadline(delivery.Planned_Delivery_Timestamp),
                         tasksPlanned: delivery.Planned_Tasks || 0,
                         tasksTotal: delivery.Total_Tasks || 0,
                         createdAt: delivery.createdAt || delivery.Created_at,
+                        stepId: delivery.Step_ID, // Still including stepId, though it will be the stepId of the 'chosen' representative task
+                        shortDescription: delivery.Short_Description,
                     };
                 });
+                console.log(`DeliveryList: Fetched ${newDeliveriesMapped.length} unique deliveries for page ${currentPage}.`);
 
                 setDeliveries((prev) => {
                     let combinedDeliveries;
                     if (currentPage === 0) {
-                        combinedDeliveries = newDeliveries;
+                        combinedDeliveries = newDeliveriesMapped;
                     } else {
-                        const newUniqueDeliveries = newDeliveries.filter(
+                        // Deduplicate based on delCode, as each card represents a unique workflow now
+                        const newUniqueDeliveries = newDeliveriesMapped.filter(
                             (newDel) => !prev.some((prevDel) => prevDel.delCode === newDel.delCode)
                         );
                         combinedDeliveries = [...prev, ...newUniqueDeliveries];
                     }
                     const sortedCombinedDeliveries = handleSort(combinedDeliveries);
-                    setTotalFilteredDeliveries(sortedCombinedDeliveries.length); // Update total count
                     return sortedCombinedDeliveries;
                 });
+
+                setHasMore(newDeliveriesMapped.length === limit); // Assume more if we received a full limit
+
             } catch (error) {
                 console.error('Error fetching data in DeliveryList:', error);
                 notification.error({
                     message: 'Data Fetch Error',
                     description: `Failed to load deliveries: ${error.message}. Please try again.`,
                 });
+                setHasMore(false);
             } finally {
                 setLoading(false);
             }
         },
-        [userEmail, authToken, isAdmin, handleSort] // Use memoized handleSort here
+        [userEmail, authToken, isAdmin, hasMore, handleSort]
     );
 
     const handleDelete = (deliveryCode) => {
+        // This will now correctly remove the single card representing that workflow
         setDeliveries(prevDeliveries => prevDeliveries.filter(delivery => delivery.delCode !== deliveryCode));
     };
 
     useEffect(() => {
-        console.log("DeliveryList: useEffect - attempting to load authToken from localStorage.");
         const storedAuthToken = localStorage.getItem('authToken');
         if (storedAuthToken) {
             setAuthToken(storedAuthToken);
-            console.log("DeliveryList: authToken loaded from localStorage.");
         } else {
-            console.log("DeliveryList: authToken not found in localStorage.");
+            if (!userEmail) navigate('/login');
         }
-    }, []);
+    }, [userEmail, navigate]);
 
-    // Effect to trigger data fetch when userEmail, authToken, debouncedSearchTerm, or selectedClient changes
     useEffect(() => {
         if (userEmail && authToken) {
-            console.log("DeliveryList: Triggering fetchData with new search/filter criteria.");
-            setDeliveries([]); // Clear previous deliveries
-            setPage(0); // Reset page to 0 for a fresh fetch
-            // Pass the current debouncedSearchTerm and selectedClient to fetchData
-            fetchData(0, debouncedSearchTerm, selectedClient, true);
-        } else {
-            console.log("DeliveryList: userEmail or authToken not yet available for initial fetch.");
             setDeliveries([]);
+            setPage(0);
+            setHasMore(true);
+            fetchData(0, debouncedSearchTerm, selectedClient);
+        } else if (!userEmail && !authToken) {
             setLoading(false);
         }
-    }, [fetchData, userEmail, authToken, debouncedSearchTerm, selectedClient]); // Dependencies added
+    }, [userEmail, authToken, debouncedSearchTerm, selectedClient, fetchData]);
 
-    // NEW useEffect: Re-sorts the displayed deliveries when sortOption changes
-    // This handles cases where data is already loaded and user just changes the sort order.
     useEffect(() => {
-        if (deliveries.length > 0 && !loading) {
-            // Create a shallow copy to ensure React detects a state change and re-renders
-            setDeliveries((currentDeliveries) => handleSort([...currentDeliveries]));
+        if (page > 0 && !loading && hasMore) {
+            fetchData(page, debouncedSearchTerm, selectedClient);
         }
-    }, [sortOption, deliveries.length, loading, handleSort]);
+    }, [page, fetchData, debouncedSearchTerm, selectedClient, loading, hasMore]);
 
-
-    // Debounce the searchTerm update
     const debouncedSetSearchTerm = useCallback(
         debounce((value) => {
             setDebouncedSearchTerm(value);
-            setDeliveries([]); // Reset deliveries to fetch new search results
-            setPage(0); // Reset page for new search
-            setTotalFilteredDeliveries(0); // Reset count
-        }, 500), // 500ms debounce delay
+        }, 500),
         []
     );
 
     const handleSearchChange = (event) => {
         const value = event.target.value;
-        setSearchTerm(value); // Update instant search term for input field
-        debouncedSetSearchTerm(value); // Update debounced search term
+        setSearchTerm(value);
+        debouncedSetSearchTerm(value);
     };
 
     const formatTimestamp = (timestamp) => {
@@ -237,33 +234,25 @@ const DeliveryList = () => {
         return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
     };
 
-    const calculateDeadline = (deliveryTimestamp) => { // Removed startTimestamp parameter
+    const calculateDeadline = (deliveryTimestamp) => {
         if (!deliveryTimestamp) return 'No deadline';
-
         const deliveryTime = new Date(deliveryTimestamp?.value || deliveryTimestamp);
-        const currentTime = new Date(); // Use current date and time
-
+        const currentTime = new Date();
         if (isNaN(deliveryTime.getTime()) || isNaN(currentTime.getTime())) return 'Invalid deadline';
-
-        const timeDiff = deliveryTime - currentTime; // Difference from current time
-
+        const timeDiff = deliveryTime - currentTime;
         if (timeDiff <= 0) {
-            return 'Past Deadline'; // Or '0 days 0 hrs left' if you prefer
+            return 'Past Deadline';
         }
-
         const daysLeft = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
         const hoursLeft = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutesLeft = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60)); // Optionally add minutes
-
-        // You can choose the level of detail: days/hours, or days/hours/minutes
         return `${daysLeft} days ${hoursLeft} hrs left`;
-        // return `${daysLeft} days ${hoursLeft} hrs ${minutesLeft} mins left`; // Example with minutes
     };
+
     useEffect(() => {
         if (observer.current) observer.current.disconnect();
         const loadMoreDeliveries = (entries) => {
             const [entry] = entries;
-            if (entry.isIntersecting && !loading && deliveries.length > 0) {
+            if (entry.isIntersecting && !loading && hasMore) {
                 setPage((prevPage) => prevPage + 1);
             }
         };
@@ -273,14 +262,13 @@ const DeliveryList = () => {
         return () => {
             if (observer.current) observer.current.disconnect();
         };
-    }, [loading, deliveries.length]); 
+    }, [loading, hasMore]);
 
-    // Only fetch data when page changes (for infinite scroll)
     useEffect(() => {
-        if (page > 0) {
-            fetchData(page, debouncedSearchTerm, selectedClient);
+        if (deliveries.length > 0 && !loading) {
+            setDeliveries((currentDeliveries) => handleSort([...currentDeliveries]));
         }
-    }, [page, fetchData, debouncedSearchTerm, selectedClient]);
+    }, [sortOption, loading, handleSort]);
 
     const uniqueClients = [...new Set(deliveries.map((delivery) => delivery.client))]
         .filter(client => client)
@@ -290,12 +278,11 @@ const DeliveryList = () => {
         .map(client => client.charAt(0).toUpperCase() + client.slice(1));
 
     const handleLogout = () => {
-        logoutUser(); // Call logoutUser from UserContext
+        logoutUser();
         navigate('/login');
     };
 
-    // --- Conditional Rendering for different states ---
-    if (loading && deliveries.length === 0 && !debouncedSearchTerm && !selectedClient && page === 0) {
+    if (loading && deliveries.length === 0) {
         return (
             <Container className="text-center my-5">
                 <FaSpinner
@@ -322,7 +309,14 @@ const DeliveryList = () => {
         return (
             <Container className="text-center my-5">
                 <p>No deliveries match your current search/filter criteria.</p>
-                <Button variant="outline-secondary" onClick={() => { setSearchTerm(''); setDebouncedSearchTerm(''); setSelectedClient(''); setDeliveries([]); setPage(0); setTotalFilteredDeliveries(0);}}>
+                <Button variant="outline-secondary" onClick={() => {
+                    setSearchTerm('');
+                    setDebouncedSearchTerm('');
+                    setSelectedClient('');
+                    setDeliveries([]);
+                    setPage(0);
+                    setHasMore(true);
+                }}>
                     Clear Search/Filters
                 </Button>
                 <Button variant="outline-danger" onClick={handleLogout} className="ml-2">
@@ -373,18 +367,17 @@ const DeliveryList = () => {
                 </Col>
             </Row>
 
-            <p>You have {deliveries.length} active deliveries</p>
+            <p>You have {deliveries.length} active deliveries (showing unique workflows)</p>
 
             <Row>
                 {deliveries.map((delivery) => {
                     const progress =
                         delivery.tasksTotal === 0 ? 0 : (delivery.tasksPlanned / delivery.tasksTotal) * 100;
 
-                    // *** NEW CONSOLE LOG FOR DEBUGGING ***
-                    console.log(`DeliveryList: Rendering Link for delCode: ${delivery.delCode}`);
-
                     return (
+                        // Key is now just delCode, assuming backend/frontend aggregation ensures uniqueness
                         <Col xs={12} key={delivery.delCode} className="mb-3">
+                            {/* Link to specific delivery detail. If DeliveryDetail needs stepId, adjust here. */}
                             <Link to={`/delivery/data/${delivery.delCode}`} className="card-link-wrapper">
                                 <Card className="p-3 shadow-sm task-card">
                                     <div className="shaded-bg" style={{ width: `${progress}%` }}></div>
@@ -406,6 +399,15 @@ const DeliveryList = () => {
                                                         Client: {delivery.client}
                                                     </p>
                                                 )}
+                                                {delivery.shortDescription && (
+                                                    <p className="mb-1 text-muted">
+                                                        Description: {delivery.shortDescription}
+                                                    </p>
+                                                )}
+                                                {/* You might still want to display the stepId of the representative task */}
+                                                <p className="mb-1 text-muted">
+                                                    Current Step: {delivery.stepId}
+                                                </p>
                                                 <div className="mb-2">
                                                     <ProgressBar
                                                         now={progress}
@@ -415,7 +417,7 @@ const DeliveryList = () => {
                                             </div>
                                             <div className="text-right">
                                                 <p className="mb-1 text-muted">
-                                                    <FiClock style={{ marginRight: '5px' }} /> {formatTimestamp(delivery.initiatedTimestampRaw)} {/* Displaying initiated timestamp */}
+                                                    <FiClock style={{ marginRight: '5px' }} /> {formatTimestamp(delivery.initiatedTimestampRaw)}
                                                 </p>
                                                 <p className="mb-0 text-danger">
                                                     <FiFlag style={{ marginRight: '5px' }} /> {delivery.deadline}
@@ -447,13 +449,17 @@ const DeliveryList = () => {
 
             <div className="delivery-list-end"></div>
 
-            {loading && (
-                <div className="d-flex justify-content-center align-items-center" style={{ height: '100px' }}>
+            {loading && deliveries.length > 0 && hasMore && (
+                <div className="d-flex justify-content-center align-items-center my-3" style={{ height: '100px' }}>
                     <FaSpinner
                         className="spinner-icon"
-                        style={{ fontSize: '2rem', color: '#007bff', animation: 'spin 10s linear infinite' }}
+                        style={{ fontSize: '2rem', color: '#007bff', animation: 'spin 1s linear infinite' }}
                     />
+                    <p className="ms-2">Loading more deliveries...</p>
                 </div>
+            )}
+            {!hasMore && deliveries.length > 0 && (
+                <p className="text-center my-3 text-muted">You've reached the end of the list.</p>
             )}
         </Container>
     );
