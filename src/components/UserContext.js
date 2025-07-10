@@ -10,36 +10,44 @@ export const UserProvider = ({ children }) => {
     // Initialize state from localStorage on component mount
     const [userEmail, setUserEmail] = useState(localStorage.getItem('userEmail') || null);
     const [userName, setUserName] = useState(localStorage.getItem('userName') || null);
-    // FIX 1: Add authToken to state and initialize from localStorage
+    // FIXED: Add authToken to state and initialize from localStorage
     const [authToken, setAuthToken] = useState(localStorage.getItem('authToken') || null);
+    // Assume isAdmin is also retrieved or derived, as it's used in DeliveryList
+    const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true' || false);
 
-    // FIX 2: Modify loginUser to accept and set the authToken
-    const loginUser = (email, name, token) => { // Added 'token' parameter
-        console.log("UserProvider: loginUser called with email:", email, "token:", token ? token.substring(0, 30) + "..." : "null");
+
+    // FIXED: Modify loginUser to accept and set the authToken and isAdmin status
+    const loginUser = (email, name, token, adminStatus) => {
+        console.log("UserProvider: loginUser called with email:", email, "token:", token ? token.substring(0, 30) + "..." : "null", "isAdmin:", adminStatus);
         setUserEmail(email);
         setUserName(name);
         setAuthToken(token); // Set authToken in context state
+        setIsAdmin(adminStatus); // Set isAdmin status
         localStorage.setItem('userEmail', email);
         localStorage.setItem('userName', name);
         localStorage.setItem('authToken', token); // Store authToken in localStorage
+        localStorage.setItem('isAdmin', adminStatus); // Store isAdmin in localStorage
     };
 
-    // FIX 3: Clear authToken from context state during logout
+    // FIXED: Clear authToken and isAdmin from context state during logout
     const logoutUser = () => {
         console.log("UserProvider: logoutUser called.");
         setUserEmail(null);
         setUserName(null);
         setAuthToken(null); // Clear authToken from context state
+        setIsAdmin(false); // Clear isAdmin state
         localStorage.removeItem('userEmail');
         localStorage.removeItem('userName');
         localStorage.removeItem('authToken'); // Also remove from localStorage
+        localStorage.removeItem('isAdmin'); // Remove isAdmin from localStorage
     };
 
-    // FIX 4: Include authToken in the context value
+    // FIXED: Include authToken and isAdmin in the context value
     const contextValue = {
         userEmail,
         userName,
         authToken, // ADDED: Provide authToken to consumers
+        isAdmin,   // ADDED: Provide isAdmin to consumers
         loginUser,
         logoutUser,
     };
@@ -56,7 +64,7 @@ export const LoginComponent = () => {
     // Get loginUser from context
     const { loginUser } = React.useContext(UserContext);
 
-    const handleGoogleSuccess = (credentialResponse) => {
+    const handleGoogleSuccess = async (credentialResponse) => { // Made async to potentially fetch admin status
         console.log("LoginComponent: Raw credentialResponse:", credentialResponse);
         console.log("LoginComponent: credentialResponse.credential:", credentialResponse.credential);
 
@@ -69,11 +77,16 @@ export const LoginComponent = () => {
             const authToken = credentialResponse.credential; // The ID token from Google
 
             if (email) {
-                // FIX 5: Pass the authToken to loginUser
-                loginUser(email, name, authToken); // This function now handles setting state and localStorage
+                // Determine isAdmin status.
+                // IMPORTANT: This is a placeholder. You should ideally fetch the isAdmin status
+                // from your backend after successful authentication, as backend holds the true source.
+                // For now, it checks against the frontend list.
+                const isAdminStatus = ["neelam.p@brightbraintech.com", "meghna.j@brightbraintech.com", "zoya.a@brightbraintech.com", "shweta.g@brightbraintech.com", "hitesh.r@brightbraintech.com"].includes(email);
+
+                // FIXED: Pass the authToken and isAdminStatus to loginUser
+                loginUser(email, name, authToken, isAdminStatus); // This function now handles setting state and localStorage
 
                 // Force a page reload to re-initialize DeliveryList with the new context values
-                // This is a common pattern for authentication flows that set global state like this.
                 window.location.href = '/';
             } else {
                 console.error("Email not found in Google credential response.");
