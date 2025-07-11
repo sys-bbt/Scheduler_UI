@@ -1,7 +1,8 @@
+// DeliveryList.js
 import React, { useEffect, useState, useContext } from 'react';
-import { UserContext } from './UserContext'; // Correct: From src/components/ to src/components/UserContext.js
+import { UserContext } from './UserContext'; // Correct: UserContext is in the same folder as DeliveryList
 import { Link } from 'react-router-dom';
-import './DeliveryList.css';
+import './DeliveryList.css'; // Assuming this CSS file exists in the same folder
 
 function DeliveryList() {
     const { userEmail } = useContext(UserContext);
@@ -10,15 +11,14 @@ function DeliveryList() {
     const [error, setError] = useState(null);
     const [offset, setOffset] = useState(0);
     const [hasMore, setHasMore] = useState(true);
-    const limit = 500; // Number of items to fetch per request
+    const limit = 500;
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedClient, setSelectedClient] = useState('');
     const [allClients, setAllClients] = useState([]);
-    const [sortOrder, setSortOrder] = useState('Earliest Initiated'); // New state for sort order
+    const [sortOrder, setSortOrder] = useState('Earliest Initiated');
 
     console.log('DeliveryList: Current User Email:', userEmail, ', Is Admin:', userEmail && ["neelam.p@brightbraintech.com", "meghna.j@brightbraintech.com", "zoya.a@brightbraintech.com", "shweta.g@brightbraintech.com", "hitesh.r@brightbraintech.com"].includes(userEmail));
 
-    // Function to fetch clients
     const fetchClients = async () => {
         try {
             const baseUrl = process.env.NODE_ENV === 'production'
@@ -29,14 +29,12 @@ function DeliveryList() {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const data = await response.json();
-            setAllClients(['', ...data]); // Add empty option for 'All Clients'
+            setAllClients(['', ...data]);
         } catch (err) {
             console.error("Error fetching clients:", err);
-            // Optionally set an error state for clients here if you want to display it
         }
     };
 
-    // Refactored data fetching function
     const fetchData = async (currentOffset, newSearchTerm = searchTerm, newSelectedClient = selectedClient, append = false) => {
         if (!userEmail) {
             console.log('DeliveryList: userEmail not yet available for initial fetch.');
@@ -83,7 +81,7 @@ function DeliveryList() {
                 setDeliveries(data);
             }
 
-            setHasMore(data.length === limit); // If we get less than 'limit', there are no more pages
+            setHasMore(data.length === limit);
             console.log(`DeliveryList: Fetched ${data.length} deliveries.`);
             if (data.length === 0 && !append) {
                 console.log('No new deliveries to load, stopping further fetch.');
@@ -91,21 +89,19 @@ function DeliveryList() {
         } catch (err) {
             console.error("DeliveryList: Error fetching data:", err);
             setError('Failed to load deliveries. Please try again.');
-            setHasMore(false); // Stop trying to load more on error
+            setHasMore(false);
         } finally {
             setLoading(false);
         }
     };
 
-    // Initial fetch on component mount or userEmail change
     useEffect(() => {
-        fetchClients(); // Fetch clients when component mounts
-        setOffset(0); // Reset offset
-        setDeliveries([]); // Clear existing deliveries
-        fetchData(0, '', '', false); // Initial fetch, not appending
-    }, [userEmail]); // Dependency on userEmail to re-fetch when user context changes
+        fetchClients();
+        setOffset(0);
+        setDeliveries([]);
+        fetchData(0, '', '', false);
+    }, [userEmail]);
 
-    // Handle load more
     const handleLoadMore = () => {
         if (!loading && hasMore) {
             const newOffset = offset + limit;
@@ -114,26 +110,21 @@ function DeliveryList() {
         }
     };
 
-    // Handle search or filter change
     const handleSearchOrFilter = () => {
-        setOffset(0); // Reset offset for new search/filter
-        setDeliveries([]); // Clear current deliveries
-        fetchData(0, searchTerm, selectedClient, false); // Fetch new data, not appending
+        setOffset(0);
+        setDeliveries([]);
+        fetchData(0, searchTerm, selectedClient, false);
     };
 
-    // Filter deliveries based on Step_ID = 0 (Workflow)
     const workflowDeliveries = deliveries.filter(delivery => delivery.Step_ID === 0);
-    
-    // Sort logic
+
     const sortedDeliveries = [...workflowDeliveries].sort((a, b) => {
-        // Assuming 'Created_at' or similar timestamp field exists for sorting
-        // Adjust field names based on your BigQuery schema
         if (sortOrder === 'Earliest Initiated') {
             return new Date(a.Created_at) - new Date(b.Created_at);
         } else if (sortOrder === 'Latest Initiated') {
             return new Date(b.Created_at) - new Date(a.Created_at);
         }
-        return 0; // No sort
+        return 0;
     });
 
     return (
@@ -142,7 +133,7 @@ function DeliveryList() {
                 <h1>List of Deliveries</h1>
                 <div className="header-right">
                     <span className="logged-in-as">Logged in as: {userEmail}</span>
-                    <button className="logout-button">Logout</button> {/* Add logout functionality */}
+                    <button className="logout-button">Logout</button>
                 </div>
             </header>
 
@@ -210,7 +201,7 @@ function DeliveryList() {
                         // Use Link to navigate to the Tasklist page
                         <Link
                             key={delivery.Key} // Ensure Key is unique for each delivery
-                            to={`/delivery/data/${encodeURIComponent(delivery.DelCode_w_o__)}`}
+                            to={`/delivery/data/${encodeURIComponent(delivery.DelCode_w_o__)}`} // CRITICAL: encodeURIComponent for slashes
                             className="delivery-card"
                         >
                             <div className="status-indicator">
