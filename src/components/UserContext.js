@@ -1,3 +1,4 @@
+// src/components/UserContext.js
 import React, { createContext, useState, useEffect } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode'; // Make sure you have installed 'jwt-decode' (npm install jwt-decode)
@@ -58,7 +59,7 @@ export const LoginComponent = () => {
 
             if (email) {
                 loginUser(email, name);
-                
+
                 // Ensure authToken is a string before storing
                 if (typeof authToken === 'string' && authToken.length > 0) {
                     console.log("LoginComponent: Storing authToken in localStorage:", authToken.substring(0, 50) + "..."); // Log first 50 chars
@@ -66,7 +67,7 @@ export const LoginComponent = () => {
                 } else {
                     console.warn("LoginComponent: authToken is not a valid string. Not storing.");
                 }
-                
+
                 window.location.href = '/'; // Force a page reload
             } else {
                 console.error("Email not found in Google credential response.");
