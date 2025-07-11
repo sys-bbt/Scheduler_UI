@@ -1,12 +1,13 @@
-// src/component/DeliveryList.js
+// src/components/DeliveryList.js
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { Container, Row, Col, Card, ProgressBar, Form } from 'react-bootstrap';
 import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
 import { FaSpinner } from 'react-icons/fa';
-import { GoogleLogin } from '@react-oauth/google'; // Keep this
-import { jwtDecode } from 'jwt-decode'; // Keep this
-import { UserContext } from './UserContext'; // Keep this
+// REMOVED these imports as LoginComponent from UserContext will handle GoogleLogin
+// import { GoogleLogin } from '@react-oauth/google';
+// import { jwtDecode } from 'jwt-decode';
+import { UserContext, LoginComponent } from './UserContext'; // <-- IMPORT LoginComponent here
 import './DeliveryList.css';
 import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSelected';
 import SortDeliveriesByDate from './SortDeliveriesByDate';
@@ -21,10 +22,9 @@ const ADMIN_EMAILS = [
 ];
 
 const DeliveryList = () => {
-    const { userEmail, setUserEmail } = useContext(UserContext);
+    const { userEmail } = useContext(UserContext); // Only need userEmail here
     const [deliveries, setDeliveries] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [authToken, setAuthToken] = useState(null);
     const [page, setPage] = useState(0);
     const [selectedClient, setSelectedClient] = useState('');
     const [loading, setLoading] = useState(false);
@@ -34,10 +34,10 @@ const DeliveryList = () => {
 
     const isAdmin = ADMIN_EMAILS.includes(userEmail); // Determine admin status
 
-    const handleSort = (deliveriesToSort) => { // Renamed parameter to avoid confusion with component's 'deliveries' state
+    const handleSort = (deliveriesToSort) => {
         return deliveriesToSort.sort((a, b) => {
-            const dateA = new Date(a.Initiated_Timestamp); // Use Initiated_Timestamp for sorting
-            const dateB = new Date(b.Initiated_Timestamp); // Use Initiated_Timestamp for sorting
+            const dateA = new Date(a.Initiated_Timestamp);
+            const dateB = new Date(b.Initiated_Timestamp);
 
             if (sortOption === 'earliest') {
                 return dateA - dateB;
@@ -48,7 +48,7 @@ const DeliveryList = () => {
     };
 
     const fetchDeliveries = useCallback(async (pageNumber, currentDeliveries = []) => {
-        if (!userEmail) {
+        if (!userEmail) { // Crucial: Don't fetch if email isn't available
             console.warn("User email not available, skipping data fetch for DeliveryList.");
             setLoading(false);
             return;
@@ -73,16 +73,12 @@ const DeliveryList = () => {
             // Filter out duplicate deliveries (assuming DelCode_w_o__ is unique for top-level entries)
             // Ensure only Step_ID = 0 are added for new fetches, unless we are on subsequent pages
             const newUniqueDeliveries = data.filter(newItem => {
-                // If page is 0, only include Step_ID = 0
                 if (pageNumber === 0) {
                     return newItem.Step_ID === 0 && !currentDeliveries.some(existingItem => existingItem.DelCode_w_o__ === newItem.DelCode_w_o__);
                 }
-                // For subsequent pages, allow all results returned by backend (backend handles the Step_ID logic for those pages)
                 return !currentDeliveries.some(existingItem => existingItem.DelCode_w_o__ === newItem.DelCode_w_o__);
             });
 
-            // If we're fetching the first page (or a new search/filter), replace existing deliveries
-            // Otherwise, append new deliveries
             if (pageNumber === 0) {
                 setDeliveries(handleSort(newUniqueDeliveries));
             } else {
@@ -94,18 +90,15 @@ const DeliveryList = () => {
             console.error('Error fetching deliveries:', error);
             setLoading(false);
         }
-    }, [searchTerm, selectedClient, userEmail, sortOption]); // Added userEmail and sortOption to dependencies
+    }, [searchTerm, selectedClient, userEmail, sortOption]);
 
     useEffect(() => {
-        // Reset deliveries and page when search term or client filter changes
-        setDeliveries([]);
-        setPage(0);
-        // fetchDeliveries will be called by the next useEffect due to dependencies
+        setDeliveries([]); // Clear existing deliveries
+        setPage(0); // Reset page to 0 for new search/filter
     }, [searchTerm, selectedClient]);
 
     useEffect(() => {
-        // Fetch data when page changes or userEmail becomes available for the first time
-        if (userEmail) {
+        if (userEmail) { // Only fetch if userEmail is available
             fetchDeliveries(page);
         }
     }, [page, fetchDeliveries, userEmail]);
@@ -122,13 +115,6 @@ const DeliveryList = () => {
         if (node) observer.current.observe(node);
     }, [loading]);
 
-    const handleCredentialResponse = (response) => {
-        const decoded = jwtDecode(response.credential);
-        console.log(decoded);
-        setUserEmail(decoded.email);
-        setAuthToken(response.credential);
-    };
-
     const handleDeleteDelivery = (deletedDeliveryCode) => {
         setDeliveries(prevDeliveries =>
             prevDeliveries.filter(delivery => delivery.DelCode_w_o__ !== deletedDeliveryCode)
@@ -140,12 +126,8 @@ const DeliveryList = () => {
     if (!userEmail) {
         return (
             <Container className="d-flex flex-column align-items-center justify-content-center" style={{ minHeight: '100vh' }}>
-                <h2>Please sign in with Google to view deliveries</h2>
-                <GoogleLogin
-                    onSuccess={handleCredentialResponse}
-                    onError={() => console.log('Login Failed')}
-                    useOneTap
-                />
+                {/* Render LoginComponent from UserContext when user is not logged in */}
+                <LoginComponent /> {/* <-- RENDER LoginComponent here */}
             </Container>
         );
     }
@@ -177,9 +159,8 @@ const DeliveryList = () => {
                 <>
                     <Row>
                         {handleSort(deliveries).map((delivery, index) => {
-                            // Calculate progress based on actual and planned hours
                             const actualHours = parseFloat(delivery.Task_Duration_In_Minutes) || 0;
-                            const plannedHours = parseFloat(delivery.Planned_Hours) || 1; // Avoid division by zero
+                            const plannedHours = parseFloat(delivery.Planned_Hours) || 1;
                             const progress = (actualHours / plannedHours) * 100;
 
                             const isLastDelivery = deliveries.length === index + 1;
@@ -192,7 +173,7 @@ const DeliveryList = () => {
                                             <Card.Body>
                                                 <div className="d-flex justify-content-between align-items-center mb-2">
                                                     <Card.Title className="mb-0">{delivery.Client}</Card.Title>
-                                                    {isAdmin && ( // Only render delete button if user is admin
+                                                    {isAdmin && (
                                                         <DeleteButton deliveryCode={delivery.DelCode_w_o__} onDelete={handleDeleteDelivery} isAdmin={isAdmin} />
                                                     )}
                                                 </div>
@@ -218,7 +199,7 @@ const DeliveryList = () => {
                                                     <p
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            navigator.clipboard.writeText(delivery.DelCode_w_o__); // Use DelCode_w_o__
+                                                            navigator.clipboard.writeText(delivery.DelCode_w_o__);
                                                         }}
                                                         style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
                                                         title="Click to copy"
