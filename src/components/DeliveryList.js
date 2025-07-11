@@ -1,8 +1,7 @@
-// DeliveryList.js
 import React, { useEffect, useState, useContext } from 'react';
-import { UserContext } from './UserContext'; // Adjust path if needed
-import { Link } from 'react-router-dom'; // Import Link
-import './DeliveryList.css'; // Assuming you have a CSS file
+import { UserContext } from './UserContext'; // Correct: From src/components/ to src/components/UserContext.js
+import { Link } from 'react-router-dom';
+import './DeliveryList.css';
 
 function DeliveryList() {
     const { userEmail } = useContext(UserContext);
