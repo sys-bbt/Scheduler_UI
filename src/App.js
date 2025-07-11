@@ -2,43 +2,42 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom';
 
-// Correct imports based on files in 'src/components/'
-// Removed: import Login from './components/Login';
-// Removed: import AuthenticatedRoute from './components/AuthenticatedRoute';
-import GoogleAuth from './components/GoogleAuth'; // Use GoogleAuth for authentication
+// Correct imports based on files confirmed to be in 'src/components/'
+// AuthenticatedRoute.js and Login.js are NOT present, so we remove their imports.
+import GoogleAuth from './components/GoogleAuth'; // Using GoogleAuth for authentication
 import DeliveryList from './components/DeliveryList';
 import Tasklist from './components/Tasklist';
 
-// A simple wrapper that conditionally renders content based on authentication status.
-// This replaces AuthenticatedRoute if you don't have that file.
-// If your GoogleAuth component itself handles routing/redirection upon login,
-// you might structure this differently. For now, this assumes GoogleAuth
-// provides the user context and renders its children when authenticated.
+// A simple AuthWrapper that will render nested routes if a user is "authenticated".
+// In a real app, this would check a token or user state from UserContext.
+// For now, it just renders the Outlet, assuming GoogleAuth handles actual access control.
 function AuthWrapper() {
-    // You would typically get user authentication status from context here (e.g., UserContext)
-    // For now, let's assume if GoogleAuth renders, it handles the context.
-    return <Outlet />; // Outlet renders the nested routes
+    // You might eventually check a user token or state from UserContext here
+    // Example: const { userEmail } = useContext(UserContext);
+    // if (!userEmail) {
+    //     return <Navigate to="/login" replace />;
+    // }
+    return <Outlet />; // Renders the nested routes
 }
-
 
 function App() {
     return (
         <Router>
             <Routes>
-                {/* Route for GoogleAuth (your login/authentication page) */}
-                {/* Assuming GoogleAuth handles its own state (e.g., redirects to '/' on success) */}
+                {/* Route for GoogleAuth - this should be your initial login/auth page */}
+                {/* GoogleAuth.js should handle redirecting to '/' on successful login */}
                 <Route path="/login" element={<GoogleAuth />} />
 
-                {/* Authenticated Routes - using AuthWrapper if AuthenticatedRoute.js is gone */}
-                {/* If GoogleAuth always needs to be present to provide context, you might wrap the whole app in it */}
+                {/* Routes that require authentication */}
+                {/* We wrap them in AuthWrapper to simulate protection. */}
                 <Route element={<AuthWrapper />}>
-                    {/* Route for the main Delivery List page */}
+                    {/* Default route to the DeliveryList */}
                     <Route path="/" element={<DeliveryList />} />
-                    {/* Route for the Tasklist page with a dynamic parameter */}
+                    {/* Route for displaying tasks of a specific delivery */}
                     <Route path="/delivery/data/:delCode" element={<Tasklist />} />
                 </Route>
 
-                {/* Catch-all for undefined routes (optional) */}
+                {/* Catch-all route for any undefined paths */}
                 <Route path="*" element={<div>404 Not Found</div>} />
             </Routes>
         </Router>
