@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, useContext } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { Container, Card, ListGroup, Row, Col, Spinner, Button } from 'react-bootstrap'; // <-- Add Button here
+// IMPORT CHANGE: Added 'Button' here
+import { Container, Card, ListGroup, Row, Col, Spinner, Button } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
 import { FaPause, FaPlay, FaStop, FaCalendarAlt } from 'react-icons/fa';
@@ -10,11 +11,12 @@ import FormComponent from './FormComponent';
 import { UserContext } from './UserContext';
 import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
-import { notification } from 'antd'; // Correct: Import notification from antd
+import { notification } from 'antd'; // Make sure 'antd' is installed in your frontend project
 
 const DeliveryDetail = () => {
     const location = useLocation();
-    const delCode = location.pathname.substring(location.pathname.lastIndexOf("/data/") + 11);
+    // Adjusted substring index if needed; ensure it correctly extracts the delCode
+    const delCode = location.pathname.substring(location.pathname.lastIndexOf("/data/") + 6); // Often +6 for "/data/"
     const { userEmail } = useContext(UserContext);
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -53,10 +55,10 @@ const DeliveryDetail = () => {
         }
     }, [delCode, userEmail]);
 
-    // MODIFY: handleFormSubmit now accepts both formData and the relevant task object
-    const handleFormSubmit = async (formData, taskToUpdate) => { // <-- Add taskToUpdate parameter
+    // CHANGE: handleFormSubmit now accepts both formData and the relevant task object
+    const handleFormSubmit = async (formData, taskToUpdate) => { // <-- Added taskToUpdate parameter
         console.log("Form Data Submitted:", formData);
-        console.log("Task to Update:", taskToUpdate); // Log the task being updated
+        console.log("Task to Update (in handleFormSubmit):", taskToUpdate); // For debugging
 
         // Map internal form data keys to BigQuery column names
         const bigQueryData = {
@@ -68,11 +70,11 @@ const DeliveryDetail = () => {
             Delivery_Slot: formData.deliverySlot,
             Task_Durations_By_Day: formData.hours,
             Number_of_Days: formData.numberOfDays,
-            // Use taskToUpdate for these properties
-            Step_ID: taskToUpdate.Step_ID, // <-- Use taskToUpdate here
-            Client: taskToUpdate.Client,     // <-- Use taskToUpdate here
-            Project: taskToUpdate.Project,   // <-- Use taskToUpdate here
-            Key: taskToUpdate.Key,           // <-- Use taskToUpdate here
+            // CHANGE: Use taskToUpdate for these properties
+            Step_ID: taskToUpdate.Step_ID,
+            Client: taskToUpdate.Client,
+            Project: taskToUpdate.Project,
+            Key: taskToUpdate.Key,
         };
 
         try {
@@ -96,6 +98,7 @@ const DeliveryDetail = () => {
                 description: result.message,
             });
 
+            // Re-fetch delivery details to update the UI
             setLoading(true);
             const updatedResponse = await fetch(`https://server-ui-2.onrender.com/api/data/${delCode}?email=${userEmail}`);
             if (!updatedResponse.ok) {
@@ -128,7 +131,8 @@ const DeliveryDetail = () => {
         onDropdownOverlayClick(key, type);
     };
 
-    const parentTasks = tasks.filter(task => task.Step_ID === 0); // This line is fine, `task` is defined here
+    // Filter tasks to show only top-level (Step_ID 0) and children
+    const parentTasks = tasks.filter(task => task.Step_ID === 0);
 
     if (loading) {
         return (
@@ -205,7 +209,8 @@ const DeliveryDetail = () => {
                                                     }
                                                     animation="slide-up"
                                                 >
-                                                    <Button variant="outline-secondary" size="sm">...</Button> {/* <-- This Button is now defined */}
+                                                    {/* CHANGE: This Button is now defined due to import */}
+                                                    <Button variant="outline-secondary" size="sm">...</Button>
                                                 </Dropdown>
                                             </div>
                                             <div className="task-meta">
@@ -238,7 +243,8 @@ const DeliveryDetail = () => {
                                                 <div className="mt-3">
                                                     <h6>{actionType} Task: {task.Task_Details}</h6>
                                                     <FormComponent
-                                                        onSubmit={(formData) => handleFormSubmit(formData, task)} // <-- Pass `task` here
+                                                        // CHANGE: Pass `task` as the second argument to handleFormSubmit
+                                                        onSubmit={(formData) => handleFormSubmit(formData, task)}
                                                         task={task}
                                                     />
                                                 </div>
