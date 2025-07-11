@@ -1,10 +1,10 @@
 // App.js
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import Login from './components/Login'; // Assuming you have a Login component
+import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom';
+import Login from './components/Login';
 import DeliveryList from './components/DeliveryList';
-import Tasklist from './components/Tasklist'; // Make sure this import path is correct
-import AuthenticatedRoute from './components/AuthenticatedRoute'; // Your authentication wrapper
+import Tasklist from './components/Tasklist'; // Ensure this import path is correct
+import AuthenticatedRoute from './components/AuthenticatedRoute'; // Assuming AuthenticatedRoute exists
 
 function App() {
     return (
@@ -14,10 +14,12 @@ function App() {
                 <Route path="/login" element={<Login />} />
 
                 {/* Authenticated Routes */}
+                {/* AuthenticatedRoute uses an <Outlet /> to render nested routes */}
                 <Route element={<AuthenticatedRoute />}>
                     {/* Route for the main Delivery List page */}
                     <Route path="/" element={<DeliveryList />} />
                     {/* Route for the Tasklist page with a dynamic parameter */}
+                    {/* The :delCode part captures the dynamic value from the URL */}
                     <Route path="/delivery/data/:delCode" element={<Tasklist />} />
                     {/* Add other authenticated routes here if any */}
                 </Route>
