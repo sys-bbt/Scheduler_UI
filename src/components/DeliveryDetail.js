@@ -1,29 +1,33 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Button, ProgressBar, Spinner, ListGroup, Badge, Alert } from 'react-bootstrap';
-import { UserContext } from './UserContext';
+import { UserContext } from './UserContext'; // CORRECTED PATH: UserContext is in the same folder
 import { notification } from 'antd';
 import { FiClock, FiCheckCircle, FiFlag, FiLayers, FiAlertCircle, FiInfo } from 'react-icons/fi';
 import './DeliveryDetail.css'; // Make sure this CSS file exists for styling
 
-const BACKEND_API_BASE_URL = 'https://server-ui-2.onrender.com';
+const BACKEND_API_BASE_URL = process.env.NODE_ENV === 'production'
+    ? 'https://server-ui-2.onrender.com'
+    : 'http://localhost:3001';
 
 const DeliveryDetail = () => {
     console.log('DeliveryDetail component is attempting to render'); // Debugging line
-    const { delCode } = useParams();
+    const { delCode } = useParams(); // Extract delCode from URL parameters
     console.log('delCode from useParams:', delCode); // Debugging line - This should now show a value!
 
-    const { userEmail, logoutUser } = useContext(UserContext);
+    const { userEmail, logoutUser } = useContext(UserContext); // Assuming logoutUser is provided by UserContext
     const navigate = useNavigate();
-    const [deliveryData, setDeliveryData] = useState(null);
+    const [deliveryData, setDeliveryData] = useState(null); // Stores main delivery info (Step_ID = 0)
+    const [tasks, setTasks] = useState([]); // Stores all tasks for this delCode
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [authToken, setAuthToken] = useState(null);
+    const [authToken, setAuthToken] = useState(null); // Assuming auth token is managed outside context for now
 
     // Function to format timestamps
     const formatTimestamp = (timestamp) => {
         if (!timestamp) return 'N/A';
-        const date = new Date(timestamp?.value || timestamp); // Handles objects with .value or direct string/number
+        // BigQuery Timestamps often come as objects with a 'value' property
+        const date = new Date(timestamp?.value || timestamp);
         return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleString();
     };
 
@@ -55,7 +59,7 @@ const DeliveryDetail = () => {
         }
     };
 
-    // Determine isAdmin status on the frontend
+    // Determine isAdmin status on the frontend (consistent with other files)
     const ADMIN_EMAILS_FRONTEND = [
         "neelam.p@brightbraintech.com",
         "meghna.j@brightbraintech.com",
@@ -65,6 +69,7 @@ const DeliveryDetail = () => {
     ];
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
+    // Effect to check for auth token on component mount
     useEffect(() => {
         const storedAuthToken = localStorage.getItem('authToken');
         if (storedAuthToken) {
@@ -75,14 +80,16 @@ const DeliveryDetail = () => {
                 message: 'Authentication Required',
                 description: 'Please log in to view delivery details.',
             });
-            navigate('/login');
+            navigate('/login'); // Redirect to login if no token
         }
-    }, [navigate]);
+    }, [navigate]); // Dependency array: run once on mount
 
+    // Effect to fetch delivery details and tasks
     useEffect(() => {
         const fetchDeliveryDetails = async () => {
-            if (!authToken || !delCode) {
-                console.log("DeliveryDetail: Skipping fetch because authToken or delCode is missing.");
+            // Ensure auth token, user email, and delCode are available before fetching
+            if (!authToken || !userEmail || !delCode) {
+                console.log("DeliveryDetail: Skipping fetch because authToken, userEmail, or delCode is missing.", { authToken: !!authToken, userEmail: !!userEmail, delCode: !!delCode });
                 setLoading(false);
                 if (!delCode) {
                     setError("Delivery code is missing from the URL. Cannot fetch details.");
@@ -95,14 +102,18 @@ const DeliveryDetail = () => {
             console.log(`DeliveryDetail: Attempting to fetch details for delCode: ${delCode} with email: ${userEmail}, isAdmin: ${isAdmin}`);
 
             try {
+                // Encode delCode as it might contain slashes
+                const encodedDelCode = encodeURIComponent(delCode);
+
                 const queryParams = new URLSearchParams({
                     email: userEmail,
                     isAdmin: isAdmin,
-                    delCode: delCode // Pass delCode to the backend
+                    delCode: encodedDelCode // Pass encoded delCode to the backend
                 });
 
                 const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?${queryParams.toString()}`, {
                     headers: {
+                        // Assuming your backend uses this for auth, otherwise it might be unnecessary
                         'Authorization': `Bearer ${authToken}`,
                         'Content-Type': 'application/json',
                     },
@@ -113,59 +124,66 @@ const DeliveryDetail = () => {
                     throw new Error(errorBody.error || `HTTP error! status: ${response.status}`);
                 }
 
-                const result = await response.json();
+                const result = await response.json(); // Backend now returns an array directly for this delCode
 
-                // Assuming the backend returns an object where keys are delCodes and values are arrays of tasks
-                // We need to find the specific delivery data for the requested delCode
-                const deliveryTasks = result[delCode];
-
-                if (!deliveryTasks || deliveryTasks.length === 0) {
-                    setError(`No details found for delivery code: ${delCode}. It might not exist or you don't have access.`);
+                if (!result || result.length === 0) {
+                    setError(`No details or tasks found for delivery code: ${delCode}. It might not exist or you don't have access.`);
                     setDeliveryData(null);
+                    setTasks([]);
                     notification.info({
                         message: 'No Data',
-                        description: `No details found for delivery code: ${delCode}.`,
+                        description: `No details or tasks found for delivery code: ${delCode}.`,
                     });
                     return;
                 }
 
-                // Filter for Step_ID === 0 for main delivery info (if applicable, or just take first element)
-                const mainDeliveryInfo = deliveryTasks.find(task => task.Step_ID === 0) || deliveryTasks[0];
+                // Filter for Step_ID === 0 for main delivery info
+                const mainDeliveryInfo = result.find(task => task.Step_ID === 0);
 
                 if (!mainDeliveryInfo) {
-                    setError(`Could not find main delivery info for ${delCode}.`);
+                    // If Step_ID 0 is missing, but other tasks exist, use the first task for general info
+                    // Or set an error if a main info entry is crucial and absent.
+                    // For now, let's set an error if the primary workflow step (ID 0) is missing.
+                    setError(`Could not find the main workflow entry (Step ID 0) for ${delCode}.`);
                     setDeliveryData(null);
+                    setTasks([]);
                     return;
                 }
 
-                // Calculate total and planned tasks from all tasks for this delCode
-                const totalTasks = deliveryTasks.length;
-                const plannedTasks = deliveryTasks.filter(task => task.is_planned_on_google_calendar).length;
+                // Prepare tasks for display
+                const formattedTasks = result.map(task => ({
+                    stepId: task.Step_ID,
+                    taskName: task.Task_Details || task.Short_Description, // Use Task_Details or Short_Description
+                    responsibility: task.Responsibility,
+                    durationMinutes: task.Duration_In_Minutes, // Assuming this field
+                    isPlanned: task.is_planned_on_google_calendar, // Assuming this field
+                    actualStart: formatTimestamp(task.Actual_Start_Timestamp),
+                    actualEnd: formatTimestamp(task.Actual_End_Timestamp),
+                    plannedStart: formatTimestamp(task.Planned_Start_Timestamp),
+                    plannedEnd: formatTimestamp(task.Planned_Delivery_Timestamp), // Changed from Planned_End_Timestamp
+                    status: task.Status, // Assuming status field
+                    notes: task.Notes // Assuming notes field
+                }));
 
+                // Calculate total and planned tasks
+                const totalTasksCount = formattedTasks.length;
+                const plannedTasksCount = formattedTasks.filter(task => task.isPlanned).length;
 
                 setDeliveryData({
                     delCode: mainDeliveryInfo.DelCode_w_o__,
                     client: mainDeliveryInfo.Client,
-                    initiated: formatTimestamp(mainDeliveryInfo.Initiated_Timestamp),
-                    initiatedTimestampRaw: mainDeliveryInfo.Initiated_Timestamp, // Keep raw for deadline calc
+                    shortDescription: mainDeliveryInfo.Short_Description,
+                    initiated: formatTimestamp(mainDeliveryInfo.Created_at), // Assuming Created_at is initiation
+                    initiatedTimestampRaw: mainDeliveryInfo.Created_at,
                     deadline: calculateDeadline(mainDeliveryInfo.Planned_Delivery_Timestamp),
                     plannedDeliveryTimestamp: mainDeliveryInfo.Planned_Delivery_Timestamp,
-                    totalTasks: totalTasks,
-                    plannedTasks: plannedTasks,
-                    tasks: deliveryTasks.map(task => ({
-                        stepId: task.Step_ID,
-                        taskName: task.Task_Name,
-                        responsibility: task.Responsibility,
-                        durationMinutes: task.Duration_In_Minutes,
-                        isPlanned: task.is_planned_on_google_calendar,
-                        actualStart: formatTimestamp(task.Actual_Start_Timestamp),
-                        actualEnd: formatTimestamp(task.Actual_End_Timestamp),
-                        plannedStart: formatTimestamp(task.Planned_Start_Timestamp),
-                        plannedEnd: formatTimestamp(task.Planned_End_Timestamp),
-                        status: task.Status, // Assuming status field
-                        notes: task.Notes // Assuming notes field
-                    })),
+                    totalTasks: totalTasksCount,
+                    plannedTasks: plannedTasksCount,
+                    // No 'tasks' array directly in deliveryData to avoid redundancy.
+                    // 'tasks' state variable holds all tasks.
                 });
+                setTasks(formattedTasks); // Set the separate tasks state
+
             } catch (err) {
                 console.error("Error fetching delivery details:", err);
                 setError(`Failed to load details: ${err.message}. Please try again.`);
@@ -178,10 +196,13 @@ const DeliveryDetail = () => {
             }
         };
 
-        if (authToken && delCode) {
+        // Fetch only if delCode is present and authToken/userEmail are confirmed
+        if (delCode && authToken && userEmail) {
             fetchDeliveryDetails();
+        } else {
+            setLoading(false); // If prerequisites aren't met, stop loading
         }
-    }, [authToken, delCode, userEmail, isAdmin, navigate]);
+    }, [authToken, delCode, userEmail, isAdmin, navigate]); // Dependencies for useEffect
 
 
     if (loading) {
@@ -202,12 +223,13 @@ const DeliveryDetail = () => {
                     <FiAlertCircle style={{ marginRight: '10px' }} />
                     {error}
                 </Alert>
-                <Button variant="primary" onClick={() => navigate('/deliveries')}>
+                <Button variant="primary" onClick={() => navigate('/')}> {/* CORRECTED: navigate to '/' */}
                     Back to Deliveries List
                 </Button>
-                <Button variant="outline-danger" onClick={logoutUser} className="ml-2">
+                {/* Assuming logoutUser is handled by GoogleAuth or UserContext directly */}
+                {userEmail && <Button variant="outline-danger" onClick={logoutUser} className="ml-2">
                     Logout
-                </Button>
+                </Button>}
             </Container>
         );
     }
@@ -216,16 +238,17 @@ const DeliveryDetail = () => {
         return (
             <Container className="text-center my-5">
                 <p>No data available for this delivery code.</p>
-                <Button variant="primary" onClick={() => navigate('/deliveries')}>
+                <Button variant="primary" onClick={() => navigate('/')}> {/* CORRECTED: navigate to '/' */}
                     Back to Deliveries List
                 </Button>
-                <Button variant="outline-danger" onClick={logoutUser} className="ml-2">
+                {userEmail && <Button variant="outline-danger" onClick={logoutUser} className="ml-2">
                     Logout
-                </Button>
+                </Button>}
             </Container>
         );
     }
 
+    // Calculate progress based on plannedTasks and totalTasks from deliveryData
     const progress = deliveryData.totalTasks === 0 ? 0 : (deliveryData.plannedTasks / deliveryData.totalTasks) * 100;
 
     return (
@@ -236,12 +259,12 @@ const DeliveryDetail = () => {
                     <p className="text-muted">Client: {deliveryData.client}</p>
                 </Col>
                 <Col xs="auto" className="text-right">
-                    <Button variant="secondary" onClick={() => navigate('/deliveries')} className="mr-2">
+                    <Button variant="secondary" onClick={() => navigate('/')} className="mr-2"> {/* CORRECTED: navigate to '/' */}
                         Back to List
                     </Button>
-                    <Button variant="outline-danger" onClick={logoutUser}>
+                    {userEmail && <Button variant="outline-danger" onClick={logoutUser}>
                         Logout
-                    </Button>
+                    </Button>}
                 </Col>
             </Row>
 
@@ -265,20 +288,21 @@ const DeliveryDetail = () => {
             </Card>
 
             <h2 className="mb-3">Tasks Breakdown <FiLayers style={{ marginLeft: '5px' }} /></h2>
-            {deliveryData.tasks && deliveryData.tasks.length > 0 ? (
+            {tasks && tasks.length > 0 ? (
                 <ListGroup className="tasks-list">
-                    {deliveryData.tasks.map((task, index) => (
+                    {tasks.map((task, index) => (
                         <ListGroup.Item key={index} className="task-item shadow-sm mb-3">
                             <Row className="align-items-center">
                                 <Col md={8}>
                                     <h5 className="mb-1">Task {task.stepId}: {task.taskName}</h5>
-                                    <p className="mb-1 text-muted">Responsibility: <Badge variant="info">{task.responsibility}</Badge></p>
+                                    <p className="mb-1 text-muted">Responsibility: <Badge bg="info">{task.responsibility}</Badge></p>
                                     <p className="mb-1 text-muted">Duration: {task.durationMinutes} minutes</p>
-                                    <p className="mb-1 text-muted">Planned: {task.isPlanned ? <Badge variant="success">Yes</Badge> : <Badge variant="warning">No</Badge>}</p>
+                                    <p className="mb-1 text-muted">Planned: {task.isPlanned ? <Badge bg="success">Yes</Badge> : <Badge bg="warning">No</Badge>}</p>
                                     {task.notes && <p className="mb-0 text-info small"><FiInfo /> Notes: {task.notes}</p>}
                                 </Col>
                                 <Col md={4} className="text-md-right">
-                                    <p className="mb-1"><strong>Status:</strong> <Badge variant={task.status === 'Completed' ? 'success' : task.status === 'In Progress' ? 'primary' : 'secondary'}>{task.status || 'N/A'}</Badge></p>
+                                    {/* Using 'bg' prop for Bootstrap 5+ for Badge variants */}
+                                    <p className="mb-1"><strong>Status:</strong> <Badge bg={task.status === 'Completed' ? 'success' : task.status === 'In Progress' ? 'primary' : 'secondary'}>{task.status || 'N/A'}</Badge></p>
                                     {task.plannedStart !== 'N/A' && <p className="mb-1 text-muted">Planned Start: {task.plannedStart}</p>}
                                     {task.plannedEnd !== 'N/A' && <p className="mb-1 text-muted">Planned End: {task.plannedEnd}</p>}
                                     {task.actualStart !== 'N/A' && <p className="mb-1 text-muted">Actual Start: {task.actualStart}</p>}
