@@ -2,30 +2,27 @@
 
 import React, { useEffect, useState, useContext } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { Container, Card, ListGroup, Row, Col, Spinner } from 'react-bootstrap';
+import { Container, Card, ListGroup, Row, Col, Spinner, Button } from 'react-bootstrap'; // <-- Add Button here
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
 import { FaPause, FaPlay, FaStop, FaCalendarAlt } from 'react-icons/fa';
-import FormComponent from './FormComponent'; // Ensure your form component is imported
+import FormComponent from './FormComponent';
 import { UserContext } from './UserContext';
 import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
-
-// ADD THIS LINE: Import notification from 'antd'
-import { notification } from 'antd'; // Make sure 'antd' is installed in your frontend project
+import { notification } from 'antd'; // Correct: Import notification from antd
 
 const DeliveryDetail = () => {
     const location = useLocation();
-    const delCode = location.pathname.substring(location.pathname.lastIndexOf("/data/") + 11); // Adjust to your actual path
+    const delCode = location.pathname.substring(location.pathname.lastIndexOf("/data/") + 11);
     const { userEmail } = useContext(UserContext);
     const [delivery, setDelivery] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [activeTaskKey, setActiveTaskKey] = useState(null); // To track which task is active for scheduling/other actions
-    const [actionType, setActionType] = useState(''); // To differentiate between actions like 'schedule', 'reschedule'
-    const [tasks, setTasks] = useState([]); // State to manage tasks
+    const [activeTaskKey, setActiveTaskKey] = useState(null);
+    const [actionType, setActionType] = useState('');
+    const [tasks, setTasks] = useState([]);
 
-    // Fetching delivery details from the server
     useEffect(() => {
         const fetchDeliveryDetails = async () => {
             if (!userEmail) {
@@ -34,7 +31,7 @@ const DeliveryDetail = () => {
                 return;
             }
             try {
-                setLoading(true); // Set loading state to true
+                setLoading(true);
 
                 const response = await fetch(`https://server-ui-2.onrender.com/api/data/${delCode}?email=${userEmail}`);
                 if (!response.ok) {
@@ -42,38 +39,40 @@ const DeliveryDetail = () => {
                 }
                 const data = await response.json();
                 setDelivery(data.delivery);
-                setTasks(data.tasks); // Assuming API returns tasks related to the delivery
+                setTasks(data.tasks);
             } catch (err) {
                 console.error("Error fetching delivery details:", err);
                 setError(err.message);
             } finally {
-                setLoading(false); // Always set loading to false
+                setLoading(false);
             }
         };
 
-        if (delCode && userEmail) { // Only fetch if delCode and userEmail are available
+        if (delCode && userEmail) {
             fetchDeliveryDetails();
         }
     }, [delCode, userEmail]);
 
-    const handleFormSubmit = async (formData) => {
+    // MODIFY: handleFormSubmit now accepts both formData and the relevant task object
+    const handleFormSubmit = async (formData, taskToUpdate) => { // <-- Add taskToUpdate parameter
         console.log("Form Data Submitted:", formData);
+        console.log("Task to Update:", taskToUpdate); // Log the task being updated
 
         // Map internal form data keys to BigQuery column names
         const bigQueryData = {
             DelCode_w_o__: delCode,
-            Task_Details: formData.name, // Task_Details from form
-            Responsibility: formData.personResponsible, // Person Responsible
+            Task_Details: formData.name,
+            Responsibility: formData.personResponsible,
             Planned_Start_Timestamp: formData.startDate ? formData.startDate.format('YYYY-MM-DD') : null,
             Planned_Delivery_Timestamp: formData.endDate ? formData.endDate.format('YYYY-MM-DD') : null,
-            Delivery_Slot: formData.deliverySlot, // Delivery Slot (1pm, 4pm, 7pm)
-            // Add Task_Durations_By_Day if needed for the backend schema
-            Task_Durations_By_Day: formData.hours, // This will be an object { 'YYYY-MM-DD': minutes }
-            Number_of_Days: formData.numberOfDays, // Number of days slider value
-            Step_ID: task.Step_ID, // Use the current task's Step_ID
-            Client: task.Client,
-            Project: task.Project,
-            Key: task.Key, // Crucial for updating existing records
+            Delivery_Slot: formData.deliverySlot,
+            Task_Durations_By_Day: formData.hours,
+            Number_of_Days: formData.numberOfDays,
+            // Use taskToUpdate for these properties
+            Step_ID: taskToUpdate.Step_ID, // <-- Use taskToUpdate here
+            Client: taskToUpdate.Client,     // <-- Use taskToUpdate here
+            Project: taskToUpdate.Project,   // <-- Use taskToUpdate here
+            Key: taskToUpdate.Key,           // <-- Use taskToUpdate here
         };
 
         try {
@@ -92,12 +91,11 @@ const DeliveryDetail = () => {
             }
 
             const result = await response.json();
-            notification.success({ // Use notification.success
+            notification.success({
                 message: 'Success',
                 description: result.message,
             });
 
-            // Re-fetch delivery details to update the UI
             setLoading(true);
             const updatedResponse = await fetch(`https://server-ui-2.onrender.com/api/data/${delCode}?email=${userEmail}`);
             if (!updatedResponse.ok) {
@@ -108,12 +106,12 @@ const DeliveryDetail = () => {
             setTasks(updatedData.tasks);
             setLoading(false);
 
-            setActiveTaskKey(null); // Close the form
-            setActionType(''); // Reset action type
+            setActiveTaskKey(null);
+            setActionType('');
 
         } catch (error) {
             console.error('Error submitting form:', error);
-            notification.error({ // Use notification.error
+            notification.error({
                 message: 'Error',
                 description: error.message || 'An error occurred while updating the task.',
             });
@@ -122,7 +120,7 @@ const DeliveryDetail = () => {
 
     const onDropdownOverlayClick = (key, type) => {
         setActiveTaskKey(key);
-        setActionType(type); // 'schedule' or 'reschedule'
+        setActionType(type);
     };
 
     const onMenuItemClick = (info) => {
@@ -130,9 +128,7 @@ const DeliveryDetail = () => {
         onDropdownOverlayClick(key, type);
     };
 
-    // Filter tasks to show only top-level (Step_ID 0) and children
-    // Assuming tasks are sorted or can be sorted to show parent-child relationships correctly
-    const parentTasks = tasks.filter(task => task.Step_ID === 0);
+    const parentTasks = tasks.filter(task => task.Step_ID === 0); // This line is fine, `task` is defined here
 
     if (loading) {
         return (
@@ -182,7 +178,7 @@ const DeliveryDetail = () => {
             <h2 className="mb-3">Tasks</h2>
             <Row>
                 {tasks.length > 0 ? (
-                    tasks.map((task) => (
+                    tasks.map((task) => ( // `task` is defined in this map callback scope
                         <Col md={6} lg={4} className="mb-4" key={task.Key}>
                             <Dropdown
                                 trigger={['click']}
@@ -209,7 +205,7 @@ const DeliveryDetail = () => {
                                                     }
                                                     animation="slide-up"
                                                 >
-                                                    <Button variant="outline-secondary" size="sm">...</Button>
+                                                    <Button variant="outline-secondary" size="sm">...</Button> {/* <-- This Button is now defined */}
                                                 </Dropdown>
                                             </div>
                                             <div className="task-meta">
@@ -242,7 +238,7 @@ const DeliveryDetail = () => {
                                                 <div className="mt-3">
                                                     <h6>{actionType} Task: {task.Task_Details}</h6>
                                                     <FormComponent
-                                                        onSubmit={handleFormSubmit}
+                                                        onSubmit={(formData) => handleFormSubmit(formData, task)} // <-- Pass `task` here
                                                         task={task}
                                                     />
                                                 </div>
