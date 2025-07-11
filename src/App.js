@@ -1,10 +1,11 @@
 // App.js
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Outlet } from 'react-router-dom';
-import Login from './components/Login';
-import DeliveryList from './components/DeliveryList';
-import Tasklist from './components/Tasklist'; // Ensure this import path is correct
-import AuthenticatedRoute from './components/AuthenticatedRoute'; // Assuming AuthenticatedRoute exists
+import Login from './components/Login'; // Correct: From src/ to src/components/Login.js
+import DeliveryList from './components/DeliveryList'; // Correct
+import Tasklist from './components/Tasklist'; // Correct
+import AuthenticatedRoute from './components/AuthenticatedRoute'; // Correct
+
 
 function App() {
     return (
