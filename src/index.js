@@ -1,15 +1,15 @@
-// index.js or main.jsx
+// index.js (or main.jsx)
 import React from 'react';
-import ReactDOM from 'react-dom/client'; // For React 18+
+import ReactDOM from 'react-dom/client';
 import App from './App';
-import { UserProvider } from './components/UserContext'; // Import UserProvider
+import { UserProvider } from './components/UserContext'; // Ensure this path is correct
+// import 'bootstrap/dist/css/bootstrap.min.css'; // If you're using Bootstrap
 
-// Ensure your root element exists, e.g., <div id="root"></div> in index.html
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
 root.render(
     <React.StrictMode>
-        <UserProvider> {/* Wrap your entire App with UserProvider */}
+        <UserProvider> {/* This is crucial */}
             <App />
         </UserProvider>
     </React.StrictMode>
