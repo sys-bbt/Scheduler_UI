@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 export const UserContext = createContext(null);
 
 export const UserProvider = ({ children }) => {
-    // These states are defined directly within the provider, not consumed via useContext
+    // Define state directly here. DO NOT use useContext(UserContext) here.
     const [userEmail, setUserEmail] = useState(null);
     const navigate = useNavigate();
 
@@ -25,7 +25,6 @@ export const UserProvider = ({ children }) => {
     };
 
     return (
-        // Provide the userEmail state and its setter function to the context consumers
         <UserContext.Provider value={{ userEmail, setUserEmail, logoutUser }}>
             {children}
         </UserContext.Provider>
