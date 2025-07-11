@@ -1,14 +1,15 @@
-// App.js
+// src/App.js
 import React, { useContext } from 'react';
 import { BrowserRouter as Router, Routes, Route, Outlet, Navigate } from 'react-router-dom';
 
-// Correct imports based on files confirmed to be in 'src/components/'
+// Correct imports for components located in 'src/components/'
 import GoogleAuth from './components/GoogleAuth';
 import DeliveryList from './components/DeliveryList';
 import Tasklist from './components/Tasklist';
+import DeliveryDetail from './components/DeliveryDetail'; // Assuming you might use this for a dedicated detail page
 import { UserContext } from './components/UserContext'; // Import UserContext
 
-// --- UPDATED AUTH WRAPPER ---
+// --- AuthWrapper Component for Route Protection ---
 // This component checks if the user is authenticated and redirects to /login if not.
 function AuthWrapper() {
     const { userEmail } = useContext(UserContext); // Get userEmail from context
@@ -25,7 +26,7 @@ function AuthWrapper() {
     console.log("AuthWrapper: User authenticated, rendering Outlet.");
     return <Outlet />;
 }
-// --- END UPDATED AUTH WRAPPER ---
+// --- End AuthWrapper Component ---
 
 
 function App() {
@@ -43,8 +44,9 @@ function App() {
                     {/* Default route for the main application (Delivery List) */}
                     <Route path="/" element={<DeliveryList />} />
                     {/* Route for displaying tasks of a specific delivery */}
-                    {/* The :delCode part is a URL parameter that Tasklist.js will read */}
+                    {/* The :delCode part is a URL parameter that Tasklist.js and DeliveryDetail.js will read */}
                     <Route path="/delivery/data/:delCode" element={<Tasklist />} />
+                    <Route path="/delivery/details/:delCode" element={<DeliveryDetail />} /> {/* Added a specific route for DeliveryDetail */}
                     {/* Add any other authenticated routes here if needed */}
                 </Route>
 
