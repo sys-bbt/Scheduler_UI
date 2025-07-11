@@ -1,6 +1,7 @@
+// Tasklist.js
 import React, { useEffect, useState, useContext } from 'react';
 import { useParams } from 'react-router-dom';
-import { UserContext } from '../components/UserContext'; // <-- CHANGE THIS LINE
+import { UserContext } from './UserContext'; // THIS IS THE MOST LIKELY CORRECT PATH
 
 function Tasklist() {
     const { delCode } = useParams(); // Extract delCode from URL parameters
@@ -9,7 +10,7 @@ function Tasklist() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // --- ADD THESE CONSOLE LOGS ---
+    // --- ADDED CONSOLE LOGS FOR DEBUGGING ---
     console.log('Tasklist Component Loaded.');
     console.log('Tasklist: delCode from useParams:', delCode);
     console.log('Tasklist: userEmail from UserContext:', userEmail);
@@ -21,6 +22,10 @@ function Tasklist() {
             if (!userEmail || !delCode) {
                 console.log('Tasklist: Skipping fetch - Missing userEmail or delCode.', { userEmail, delCode });
                 setLoading(false);
+                // Display a message if delCode is missing but userEmail is present
+                if (!delCode && userEmail) {
+                    setError('Delivery code not found in URL. Please navigate from the delivery list.');
+                }
                 return;
             }
 
