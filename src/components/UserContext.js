@@ -1,4 +1,4 @@
-// UserContext.js
+// src/component/UserContext.js
 import React, { createContext, useState } from 'react';
 
 // Create the UserContext
