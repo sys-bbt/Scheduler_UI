@@ -1,4 +1,4 @@
-// components/GoogleAuth.js
+// src/components/GoogleAuth.js
 import React, { useContext, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UserContext } from './UserContext'; // Assuming UserContext is in the same folder
@@ -11,7 +11,7 @@ const GoogleAuth = () => {
     // IMPORTANT: Replace with your actual Google Client ID
     // You should load this from an environment variable (e.g., process.env.REACT_APP_GOOGLE_CLIENT_ID)
     // For local testing, you can hardcode it temporarily, but secure it for production.
-    const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
+    const GOOGLE_CLIENT_ID = process.env.REACT_APP_GOOGLE_CLIENT_ID || 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com'; // Use environment variable
 
     useEffect(() => {
         // If user is already logged in (e.g., from a refresh with UserContext loading from localStorage)
@@ -26,20 +26,21 @@ const GoogleAuth = () => {
             // Check if gapi is available
             if (window.gapi) {
                 window.gapi.load('auth2', () => {
+                    // Initialize GoogleAuth2 if not already initialized
                     if (!window.gapi.auth2.getAuthInstance()) {
                         window.gapi.auth2.init({
                             client_id: GOOGLE_CLIENT_ID,
                             scope: 'email profile', // Request access to user's email and basic profile
                         }).then(() => {
                             console.log("GoogleAuth: GoogleAuth2 initialized successfully.");
-                            // Render the Google Sign-In button
+                            // Render the Google Sign-In button after initialization
                             renderGoogleSignInButton();
                         }).catch(error => {
                             console.error("GoogleAuth: Error initializing GoogleAuth2:", error);
                         });
                     } else {
                         console.log("GoogleAuth: GoogleAuth2 already initialized.");
-                        renderGoogleSignInButton();
+                        renderGoogleSignInButton(); // Render button if already initialized
                     }
                 });
             } else {
@@ -75,34 +76,35 @@ const GoogleAuth = () => {
 
             const email = profile.getEmail();
             console.log("User Email:", email);
-            console.log("ID Token:", id_token); // This token can be sent to your backend for verification
+            // console.log("ID Token:", id_token); // For debugging, avoid logging sensitive tokens in production
 
             setUserEmail(email); // Update UserContext
-            localStorage.setItem('userEmail', email); // Persist email
-            localStorage.setItem('authToken', id_token); // Persist auth token (ID token here)
+            localStorage.setItem('userEmail', email); // Persist email in localStorage
+            localStorage.setItem('authToken', id_token); // Persist auth token (ID token) in localStorage
 
-            navigate('/'); // Redirect to the main app page
+            navigate('/'); // Redirect to the main app page (DeliveryList)
         };
 
         const onFailure = (error) => {
             console.error("GoogleAuth: Google Sign-In Failed:", error);
             // Handle error, e.g., show a message to the user
+            alert("Google Sign-In Failed. Please try again. Check console for details.");
         };
 
-        loadGoogleAPI(); // Start loading the Google API
+        loadGoogleAPI(); // Initiate loading of the Google API
 
-    }, [userEmail, setUserEmail, navigate]); // Dependencies for useEffect
+    }, [userEmail, setUserEmail, navigate, GOOGLE_CLIENT_ID]); // Dependencies for useEffect
 
     return (
         <div style={{ padding: '50px', textAlign: 'center' }}>
             <h1>Welcome to the Scheduler</h1>
             <p>Please sign in to continue.</p>
-            {/* This is where the Google Sign-In button will be rendered by the Google API */}
+            {/* This div is where the Google Sign-In button will be rendered by the Google API */}
             <div ref={googleButtonRef} className="g-signin2" data-onsuccess="onSignIn"></div>
-            {/* The data-onsuccess needs to point to a global function or handled via gapi.signin2.render */}
+            {/* The data-onsuccess needs to point to a global function or handled via gapi.signin2.render as above */}
             <p style={{ marginTop: '20px', color: '#888' }}>
-                Note: Ensure you replace `YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com`
-                with your actual Google Client ID from Google Cloud Console.
+                Note: Ensure `REACT_APP_GOOGLE_CLIENT_ID` is set in your environment variables,
+                or replace the placeholder with your actual Google Client ID.
             </p>
         </div>
     );
