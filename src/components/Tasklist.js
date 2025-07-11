@@ -1,11 +1,11 @@
 // Tasklist.js
 import React, { useEffect, useState, useContext } from 'react';
 import { useParams } from 'react-router-dom';
-import { UserContext } from './UserContext'; // Correct: From src/components/ to src/components/UserContext.js
+import { UserContext } from './UserContext'; // Correct: UserContext is in the same folder as Tasklist
 
 function Tasklist() {
-    const { delCode } = useParams(); // Extract delCode from URL parameters
-    const { userEmail } = useContext(UserContext); // Get user email from context
+    const { delCode } = useParams();
+    const { userEmail } = useContext(UserContext);
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -18,11 +18,9 @@ function Tasklist() {
 
     useEffect(() => {
         const fetchTasks = async () => {
-            // Ensure delCode and userEmail are available before fetching
             if (!userEmail || !delCode) {
                 console.log('Tasklist: Skipping fetch - Missing userEmail or delCode.', { userEmail, delCode });
                 setLoading(false);
-                // Display a message if delCode is missing but userEmail is present
                 if (!delCode && userEmail) {
                     setError('Delivery code not found in URL. Please navigate from the delivery list.');
                 }
@@ -32,28 +30,26 @@ function Tasklist() {
             setLoading(true);
             setError(null);
             try {
-                // Check if the user is an admin (client-side check for API call parameter)
                 const isAdmin = userEmail && ["neelam.p@brightbraintech.com", "meghna.j@brightbraintech.com", "zoya.a@brightbraintech.com", "shweta.g@brightbraintech.com", "hitesh.r@brightbraintech.com"].includes(userEmail);
 
                 const baseUrl = process.env.NODE_ENV === 'production'
                     ? 'https://server-ui-2.onrender.com'
                     : 'http://localhost:3001';
 
-                // It's crucial to encode the delCode because it contains slashes '/'
-                const encodedDelCode = encodeURIComponent(delCode);
+                const encodedDelCode = encodeURIComponent(delCode); // CRITICAL: Encode the delCode for the URL
 
                 const apiUrl = `${baseUrl}/api/data?email=${encodeURIComponent(userEmail)}&delCode=${encodedDelCode}&isAdmin=${isAdmin}`;
-                console.log('Tasklist: Fetching from URL:', apiUrl); // <-- Add this log
+                console.log('Tasklist: Fetching from URL:', apiUrl);
 
                 const response = await fetch(apiUrl);
 
                 if (!response.ok) {
-                    const errorData = await response.json(); // Try to get more specific error from backend
+                    const errorData = await response.json();
                     throw new Error(`HTTP error! status: ${response.status} - ${errorData.message || response.statusText}`);
                 }
                 const data = await response.json();
                 setTasks(data);
-                console.log('Tasklist: Fetched tasks:', data); // <-- Add this log
+                console.log('Tasklist: Fetched tasks:', data);
             } catch (err) {
                 console.error("Tasklist: Error fetching tasks:", err);
                 setError('Failed to load tasks: ' + err.message);
@@ -63,10 +59,11 @@ function Tasklist() {
         };
 
         fetchTasks();
-    }, [delCode, userEmail]); // Re-run effect if delCode or userEmail changes
+    }, [delCode, userEmail]);
 
     if (loading) return <div>Loading tasks...</div>;
     if (error) return <div style={{color: 'red'}}>Error: {error}</div>;
+    // This message is shown if no tasks are returned by the backend or user has no permission
     if (tasks.length === 0) return <div>No tasks found for this delivery or you do not have permission to view them.</div>;
 
     return (
