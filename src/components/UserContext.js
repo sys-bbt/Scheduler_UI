@@ -1,10 +1,12 @@
 // components/UserContext.js
 import React, { createContext, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate for logout redirection
 
 export const UserContext = createContext(null);
 
 export const UserProvider = ({ children }) => {
-    const [userEmail, setUserEmail] = useState(null); // Or get from localStorage initially
+    const [userEmail, setUserEmail] = useState(null);
+    const navigate = useNavigate(); // Hook for navigation
 
     useEffect(() => {
         // Attempt to load user email from localStorage on initial load
@@ -12,16 +14,17 @@ export const UserProvider = ({ children }) => {
         if (storedEmail) {
             setUserEmail(storedEmail);
         }
-    }, []);
+    }, []); // Empty dependency array means this runs once on mount
 
     const logoutUser = () => {
+        console.log("Logging out user...");
         setUserEmail(null);
         localStorage.removeItem('userEmail');
         localStorage.removeItem('authToken'); // Clear auth token on logout
-        // Optionally redirect to login page after logout
+        // Redirect to login page after logout
+        navigate('/login');
     };
 
-    // Provide userEmail and setUserEmail to consumers
     return (
         <UserContext.Provider value={{ userEmail, setUserEmail, logoutUser }}>
             {children}
