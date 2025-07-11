@@ -1,6 +1,6 @@
-// DeliveryList.js
+// src/components/DeliveryList.js
 import React, { useEffect, useState, useContext } from 'react';
-import { UserContext } from './UserContext'; // Correct: UserContext is in the same folder as DeliveryList
+import { UserContext } from './UserContext'; // Correct: UserContext is in the same folder
 import { Link } from 'react-router-dom';
 import './DeliveryList.css'; // Assuming this CSS file exists in the same folder
 
@@ -22,14 +22,14 @@ function DeliveryList() {
     const fetchClients = async () => {
         try {
             const baseUrl = process.env.NODE_ENV === 'production'
-                ? 'https://server-ui-2.onrender.com'
+                ? 'https://server-ui-2.onrender.com' // Your Render backend URL
                 : 'http://localhost:3001';
             const response = await fetch(`${baseUrl}/api/persons`);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const data = await response.json();
-            setAllClients(['', ...data]);
+            setAllClients(['', ...data]); // Add empty string for "All Clients" option
         } catch (err) {
             console.error("Error fetching clients:", err);
         }
@@ -37,7 +37,7 @@ function DeliveryList() {
 
     const fetchData = async (currentOffset, newSearchTerm = searchTerm, newSelectedClient = selectedClient, append = false) => {
         if (!userEmail) {
-            console.log('DeliveryList: userEmail not yet available for initial fetch.');
+            console.log('DeliveryList: userEmail not yet available for initial fetch. Waiting for authentication.');
             setLoading(false);
             return;
         }
@@ -49,7 +49,7 @@ function DeliveryList() {
 
         try {
             const baseUrl = process.env.NODE_ENV === 'production'
-                ? 'https://server-ui-2.onrender.com'
+                ? 'https://server-ui-2.onrender.com' // Your Render backend URL
                 : 'http://localhost:3001';
 
             let url = `${baseUrl}/api/data?email=${encodeURIComponent(userEmail)}&offset=${currentOffset}&limit=${limit}&isAdmin=${isAdmin}`;
@@ -72,16 +72,17 @@ function DeliveryList() {
 
             if (append) {
                 setDeliveries(prevDeliveries => {
+                    // Filter out duplicates if any, based on a unique key like 'Key' or 'DelCode_w_o__'
                     const newDeliveries = data.filter(newItem =>
                         !prevDeliveries.some(existingItem => existingItem.Key === newItem.Key)
                     );
                     return [...prevDeliveries, ...newDeliveries];
                 });
             } else {
-                setDeliveries(data);
+                setDeliveries(data); // Replace deliveries if not appending
             }
 
-            setHasMore(data.length === limit);
+            setHasMore(data.length === limit); // If fetched data is less than limit, assume no more pages
             console.log(`DeliveryList: Fetched ${data.length} deliveries.`);
             if (data.length === 0 && !append) {
                 console.log('No new deliveries to load, stopping further fetch.');
@@ -89,40 +90,51 @@ function DeliveryList() {
         } catch (err) {
             console.error("DeliveryList: Error fetching data:", err);
             setError('Failed to load deliveries. Please try again.');
-            setHasMore(false);
+            setHasMore(false); // Stop trying to load more on error
         } finally {
             setLoading(false);
         }
     };
 
+    // Initial data fetch and client list fetch
     useEffect(() => {
         fetchClients();
+        // Reset offset and deliveries when userEmail changes (e.g., on login)
         setOffset(0);
         setDeliveries([]);
         fetchData(0, '', '', false);
-    }, [userEmail]);
+    }, [userEmail]); // Re-run effect when userEmail changes
 
     const handleLoadMore = () => {
         if (!loading && hasMore) {
             const newOffset = offset + limit;
             setOffset(newOffset);
-            fetchData(newOffset, searchTerm, selectedClient, true);
+            fetchData(newOffset, searchTerm, selectedClient, true); // Append new data
         }
     };
 
     const handleSearchOrFilter = () => {
-        setOffset(0);
-        setDeliveries([]);
-        fetchData(0, searchTerm, selectedClient, false);
+        setOffset(0); // Reset offset on new search/filter
+        setDeliveries([]); // Clear existing deliveries
+        fetchData(0, searchTerm, selectedClient, false); // Fetch new data, not appending
     };
 
-    const workflowDeliveries = deliveries.filter(delivery => delivery.Step_ID === 0);
+    // Filter deliveries to show only unique workflows (Step_ID = 0)
+    // The backend query for the main list already returns Step_ID = 0 entries,
+    // so this client-side filter might be redundant if the backend is always accurate.
+    // However, if the backend sends more, this would ensure uniqueness.
+    // const workflowDeliveries = deliveries.filter(delivery => delivery.Step_ID === 0);
+    const workflowDeliveries = deliveries; // Assuming backend already filters to Step_ID = 0
 
     const sortedDeliveries = [...workflowDeliveries].sort((a, b) => {
+        // Ensure Created_at exists before attempting to sort
+        const dateA = a.Created_at ? new Date(a.Created_at) : new Date(0);
+        const dateB = b.Created_at ? new Date(b.Created_at) : new Date(0);
+
         if (sortOrder === 'Earliest Initiated') {
-            return new Date(a.Created_at) - new Date(b.Created_at);
+            return dateA.getTime() - dateB.getTime();
         } else if (sortOrder === 'Latest Initiated') {
-            return new Date(b.Created_at) - new Date(a.Created_at);
+            return dateB.getTime() - dateA.getTime();
         }
         return 0;
     });
@@ -133,6 +145,7 @@ function DeliveryList() {
                 <h1>List of Deliveries</h1>
                 <div className="header-right">
                     <span className="logged-in-as">Logged in as: {userEmail}</span>
+                    {/* Assuming logoutUser is available from UserContext */}
                     <button className="logout-button">Logout</button>
                 </div>
             </header>
@@ -187,7 +200,7 @@ function DeliveryList() {
                 {error && <div className="error-message">Error: {error}</div>}
 
                 {!loading && !error && sortedDeliveries.length === 0 && (
-                    <div className="no-deliveries-message">No active deliveries (showing unique workflows).</div>
+                    <div className="no-deliveries-message">No active deliveries found for your criteria.</div>
                 )}
 
                 {!loading && !error && sortedDeliveries.length > 0 && (
@@ -198,10 +211,11 @@ function DeliveryList() {
 
                 <div className="deliveries-grid">
                     {sortedDeliveries.map(delivery => (
-                        // Use Link to navigate to the Tasklist page
+                        // Use Link to navigate to the Tasklist page or DeliveryDetail page
                         <Link
-                            key={delivery.Key} // Ensure Key is unique for each delivery
-                            to={`/delivery/data/${encodeURIComponent(delivery.DelCode_w_o__)}`} // CRITICAL: encodeURIComponent for slashes
+                            key={delivery.Key || delivery.DelCode_w_o__} // Use a robust unique key
+                            to={`/delivery/data/${encodeURIComponent(delivery.DelCode_w_o__)}`} // Link to Tasklist
+                            // OR to={`/delivery/details/${encodeURIComponent(delivery.DelCode_w_o__)}`} // Link to DeliveryDetail
                             className="delivery-card"
                         >
                             <div className="status-indicator">
