@@ -1,21 +1,22 @@
+// src/components/DeliveryDetail.js
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Button, ProgressBar, Spinner, ListGroup, Badge, Alert } from 'react-bootstrap';
-import { UserContext } from './UserContext'; // CORRECTED PATH: UserContext is in the same folder
+import { UserContext } from './UserContext'; // Correct: UserContext is in the same folder
 import { notification } from 'antd';
 import { FiClock, FiCheckCircle, FiFlag, FiLayers, FiAlertCircle, FiInfo } from 'react-icons/fi';
 import './DeliveryDetail.css'; // Make sure this CSS file exists for styling
 
 const BACKEND_API_BASE_URL = process.env.NODE_ENV === 'production'
-    ? 'https://server-ui-2.onrender.com'
+    ? 'https://server-ui-2.onrender.com' // Your Render backend URL
     : 'http://localhost:3001';
 
 const DeliveryDetail = () => {
-    console.log('DeliveryDetail component is attempting to render'); // Debugging line
+    console.log('DeliveryDetail component is attempting to render');
     const { delCode } = useParams(); // Extract delCode from URL parameters
-    console.log('delCode from useParams:', delCode); // Debugging line - This should now show a value!
+    console.log('delCode from useParams:', delCode);
 
-    const { userEmail, logoutUser } = useContext(UserContext); // Assuming logoutUser is provided by UserContext
+    const { userEmail, logoutUser } = useContext(UserContext);
     const navigate = useNavigate();
     const [deliveryData, setDeliveryData] = useState(null); // Stores main delivery info (Step_ID = 0)
     const [tasks, setTasks] = useState([]); // Stores all tasks for this delCode
@@ -26,7 +27,7 @@ const DeliveryDetail = () => {
     // Function to format timestamps
     const formatTimestamp = (timestamp) => {
         if (!timestamp) return 'N/A';
-        // BigQuery Timestamps often come as objects with a 'value' property
+        // BigQuery Timestamps often come as objects with a 'value' property, or direct string/number
         const date = new Date(timestamp?.value || timestamp);
         return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleString();
     };
@@ -82,7 +83,7 @@ const DeliveryDetail = () => {
             });
             navigate('/login'); // Redirect to login if no token
         }
-    }, [navigate]); // Dependency array: run once on mount
+    }, [navigate]);
 
     // Effect to fetch delivery details and tasks
     useEffect(() => {
@@ -124,7 +125,7 @@ const DeliveryDetail = () => {
                     throw new Error(errorBody.error || `HTTP error! status: ${response.status}`);
                 }
 
-                const result = await response.json(); // Backend now returns an array directly for this delCode
+                const result = await response.json(); // Backend should return an array directly for this delCode
 
                 if (!result || result.length === 0) {
                     setError(`No details or tasks found for delivery code: ${delCode}. It might not exist or you don't have access.`);
@@ -141,9 +142,8 @@ const DeliveryDetail = () => {
                 const mainDeliveryInfo = result.find(task => task.Step_ID === 0);
 
                 if (!mainDeliveryInfo) {
-                    // If Step_ID 0 is missing, but other tasks exist, use the first task for general info
-                    // Or set an error if a main info entry is crucial and absent.
-                    // For now, let's set an error if the primary workflow step (ID 0) is missing.
+                    // If Step_ID 0 is missing, but other tasks exist, you might want to use the first task
+                    // or set an error if the primary workflow step (ID 0) is crucial and absent.
                     setError(`Could not find the main workflow entry (Step ID 0) for ${delCode}.`);
                     setDeliveryData(null);
                     setTasks([]);
@@ -155,14 +155,14 @@ const DeliveryDetail = () => {
                     stepId: task.Step_ID,
                     taskName: task.Task_Details || task.Short_Description, // Use Task_Details or Short_Description
                     responsibility: task.Responsibility,
-                    durationMinutes: task.Duration_In_Minutes, // Assuming this field
-                    isPlanned: task.is_planned_on_google_calendar, // Assuming this field
+                    durationMinutes: task.Duration_In_Minutes,
+                    isPlanned: task.is_planned_on_google_calendar,
                     actualStart: formatTimestamp(task.Actual_Start_Timestamp),
                     actualEnd: formatTimestamp(task.Actual_End_Timestamp),
                     plannedStart: formatTimestamp(task.Planned_Start_Timestamp),
                     plannedEnd: formatTimestamp(task.Planned_Delivery_Timestamp), // Changed from Planned_End_Timestamp
-                    status: task.Status, // Assuming status field
-                    notes: task.Notes // Assuming notes field
+                    status: task.Status,
+                    notes: task.Notes
                 }));
 
                 // Calculate total and planned tasks
@@ -179,8 +179,6 @@ const DeliveryDetail = () => {
                     plannedDeliveryTimestamp: mainDeliveryInfo.Planned_Delivery_Timestamp,
                     totalTasks: totalTasksCount,
                     plannedTasks: plannedTasksCount,
-                    // No 'tasks' array directly in deliveryData to avoid redundancy.
-                    // 'tasks' state variable holds all tasks.
                 });
                 setTasks(formattedTasks); // Set the separate tasks state
 
@@ -223,10 +221,9 @@ const DeliveryDetail = () => {
                     <FiAlertCircle style={{ marginRight: '10px' }} />
                     {error}
                 </Alert>
-                <Button variant="primary" onClick={() => navigate('/')}> {/* CORRECTED: navigate to '/' */}
+                <Button variant="primary" onClick={() => navigate('/')}> {/* Corrected: navigate to '/' */}
                     Back to Deliveries List
                 </Button>
-                {/* Assuming logoutUser is handled by GoogleAuth or UserContext directly */}
                 {userEmail && <Button variant="outline-danger" onClick={logoutUser} className="ml-2">
                     Logout
                 </Button>}
@@ -238,7 +235,7 @@ const DeliveryDetail = () => {
         return (
             <Container className="text-center my-5">
                 <p>No data available for this delivery code.</p>
-                <Button variant="primary" onClick={() => navigate('/')}> {/* CORRECTED: navigate to '/' */}
+                <Button variant="primary" onClick={() => navigate('/')}> {/* Corrected: navigate to '/' */}
                     Back to Deliveries List
                 </Button>
                 {userEmail && <Button variant="outline-danger" onClick={logoutUser} className="ml-2">
@@ -257,9 +254,10 @@ const DeliveryDetail = () => {
                 <Col>
                     <h1 className="mb-0">Delivery: {deliveryData.delCode}</h1>
                     <p className="text-muted">Client: {deliveryData.client}</p>
+                    <p className="mb-0 text-muted">{deliveryData.shortDescription}</p>
                 </Col>
                 <Col xs="auto" className="text-right">
-                    <Button variant="secondary" onClick={() => navigate('/')} className="mr-2"> {/* CORRECTED: navigate to '/' */}
+                    <Button variant="secondary" onClick={() => navigate('/')} className="mr-2"> {/* Corrected: navigate to '/' */}
                         Back to List
                     </Button>
                     {userEmail && <Button variant="outline-danger" onClick={logoutUser}>
@@ -291,7 +289,7 @@ const DeliveryDetail = () => {
             {tasks && tasks.length > 0 ? (
                 <ListGroup className="tasks-list">
                     {tasks.map((task, index) => (
-                        <ListGroup.Item key={index} className="task-item shadow-sm mb-3">
+                        <ListGroup.Item key={task.Key || index} className="task-item shadow-sm mb-3">
                             <Row className="align-items-center">
                                 <Col md={8}>
                                     <h5 className="mb-1">Task {task.stepId}: {task.taskName}</h5>
