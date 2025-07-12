@@ -452,7 +452,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             placeholder="Select start date"
                             style={{ width: '100%' }}
                             disabledDate={disabledDateRange} // Updated to use disabledDateRange
-                            open={true} // Keep calendar open for debugging
+                            // Removed: open={true} // This was keeping the calendar open
                         />
                     </Form.Item>
                 </Col>
