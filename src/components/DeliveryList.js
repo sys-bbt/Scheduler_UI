@@ -71,21 +71,23 @@ const DeliveryList = () => {
       const uniqueClients = [...new Set(data.map(delivery => delivery.Client))].filter(Boolean);
       setClients(uniqueClients);
 
-      // Sort the data based on Initiated_Timestamp
+      // Sort the data based on Initiated_Timestamp or Key
       const sortedData = [...data].sort((a, b) => {
-        // Ensure that Initiated_Timestamp is parsed correctly.
-        // If it's a BigQuery TIMESTAMP type, it might come as a string like "2023-07-20 10:30:00 UTC".
-        // moment() handles this well. If it's null/undefined, use Created_at as fallback.
-        const dateA = moment(a.Initiated_Timestamp || a.Created_at);
-        const dateB = moment(b.Initiated_Timestamp || b.Created_at);
+        if (sortOption === 'latest') {
+            // Sort by Key in descending order for "latest"
+            // Assuming Key can be directly compared (e.g., numeric or lexicographically ordered string)
+            return String(b.Key).localeCompare(String(a.Key));
+        } else { // 'earliest'
+            // Sort by Initiated_Timestamp for "earliest"
+            const dateA = moment(a.Initiated_Timestamp || a.Created_at);
+            const dateB = moment(b.Initiated_Timestamp || b.Created_at);
 
-        // Check if dates are valid before comparing
-        if (!dateA.isValid() || !dateB.isValid()) {
-            console.warn("Invalid date found during sorting. Falling back to original order for affected items.", a, b);
-            return 0; // Maintain original order if dates are invalid
+            if (!dateA.isValid() || !dateB.isValid()) {
+                console.warn("Invalid date found during sorting. Falling back to original order for affected items.", a, b);
+                return 0;
+            }
+            return dateA.diff(dateB);
         }
-
-        return sortOption === 'earliest' ? dateA.diff(dateB) : dateB.diff(dateA);
       });
 
       setDeliveries(sortedData);
