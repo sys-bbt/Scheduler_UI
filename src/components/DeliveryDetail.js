@@ -28,194 +28,137 @@ const ADMIN_EMAILS_FRONTEND = [
 const DeliveryDetail = () => {
     const location = useLocation();
     const delCodeMatch = location.pathname.match(/\/delivery\/data\/(.*)/);
-    const delCode = delCodeMatch ? delCodeMatch[1] : null;
+    const deliveryCode = delCodeMatch ? decodeURIComponent(delCodeMatch[1]) : null;
 
-    const { userEmail } = useContext(UserContext);
-    console.log('DeliveryDetail: userEmail from Context:', userEmail);
-    console.log('DeliveryDetail: Extracted delCode from URL:', delCode);
-
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
-    console.log(`DeliveryDetail: Current User Email: ${userEmail}, Is Admin: ${isAdmin}`);
-
-    const [delivery, setDelivery] = useState(null);
+    const [deliveryDetails, setDeliveryDetails] = useState(null);
+    const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [activeTaskKey, setActiveTaskKey] = useState(null);
-    const [actionType, setActionType] = useState('');
-    const [tasks, setTasks] = useState([]);
+    const [actionType, setActionType] = useState(null); // 'edit', 'pause', 'play', 'stop'
 
-    useEffect(() => {
-        const fetchDeliveryDetails = async () => {
-            if (!delCode || !userEmail) {
+    const { userEmail } = useContext(UserContext); // Get userEmail from context
+    const isAdmin = ADMIN_EMAELS_FRONTEND.includes(userEmail);
+
+
+    const fetchDeliveryDetails = async () => {
+        if (!deliveryCode) {
+            setError("Delivery code not found in URL.");
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+        try {
+            // UPDATED API ENDPOINT: Fetch all tasks for this workflow
+            const response = await fetch(`${BACKEND_API_BASE_URL}/api/workflow-details/${encodeURIComponent(deliveryCode)}`);
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `Failed to fetch workflow details for ${deliveryCode}.`);
+            }
+            const data = await response.json();
+            
+            if (data.length === 0) {
+                setError(`Workflow with code "${deliveryCode}" not found or has no tasks.`);
                 setLoading(false);
-                if (!delCode) setError('Delivery Code not found in URL.');
-                if (!userEmail) setError('User email not available. Please log in.');
                 return;
             }
 
-            try {
-                setLoading(true);
+            // Assuming the first item with Step_ID=0 is the main workflow detail
+            const mainDeliveryDetail = data.find(task => task.Step_ID === 0);
+            setDeliveryDetails(mainDeliveryDetail || data[0]); // Fallback if no Step_ID=0
 
-                const deliveryResponse = await fetch(`${BACKEND_API_BASE_URL}/api/data?email=${userEmail}&delCode=${delCode}&isAdmin=${isAdmin}`);
-                if (!deliveryResponse.ok) {
-                    const errorText = await deliveryResponse.text();
-                    throw new Error(`HTTP error! status: ${deliveryResponse.status}, message: ${errorText}`);
-                }
-                const deliveryData = await deliveryResponse.json();
+            // Filter out completed tasks if not admin
+            const filteredTasks = isAdmin
+                ? data
+                : data.filter(task => task.Current_Status !== COMPLETED_TASK_STATUS || task.Emails?.includes(userEmail) || task.Emails?.includes("systems@brightbraintech.com"));
 
-                const durationResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
-                if (!durationResponse.ok) {
-                    const errorText = await durationResponse.text();
-                    throw new Error(`HTTP error! status: ${durationResponse.status}, message: ${errorText}`);
-                }
-                const durationData = await durationResponse.json();
-
-                if (deliveryData.hasOwnProperty(delCode)) {
-                    const fetchedTasks = deliveryData[delCode]
-                       .filter((task) => task.Step_ID !== 0 && task.Current_Status !== COMPLETED_TASK_STATUS)
-                        .map((task) => {
-                            const taskDurationInMinutes = durationData[task.Key]?.totalDuration || 0;
-                            const hours = Math.floor(taskDurationInMinutes / 60);
-                            const minutes = taskDurationInMinutes % 60;
-                            const formattedDuration = `${hours}h ${minutes}m`;
-
-                            return {
-                                ...task,
-                                scheduled: !!task.Planned_Delivery_Timestamp && (typeof task.Planned_Delivery_Timestamp === 'string' ? task.Planned_Delivery_Timestamp !== "NULL" : task.Planned_Delivery_Timestamp.value !== null),
-                                personResponsible: task.Responsibility || 'Unassigned',
-                                totalTime: taskDurationInMinutes,
-                                formattedDuration,
-                                isPlaying: false,
-                            };
-                        });
-                    setDelivery(deliveryData[delCode]);
-                    setTasks(fetchedTasks);
-                    console.log('Fetched tasks for delivery:', fetchedTasks);
-                } else {
-                    setError(`Delivery with code "${delCode}" not found in fetched data.`);
-                }
-            } catch (err) {
-                console.error('Error fetching delivery details:', err);
-                setError(`Failed to fetch delivery details: ${err.message}`);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchDeliveryDetails();
-    }, [delCode, userEmail, isAdmin]);
-
-
-    const handleTaskClick = (task) => {
-        if (!task.scheduled) {
-            setActionType('Schedule');
-            setActiveTaskKey(task.Key);
-        }
-    };
-
-    const handleMenuClick = (task, { key }) => {
-        if (key === 'reschedule') {
-            setActionType('Reschedule');
-        } else if (key === 'reassign') {
-            setActionType('Reassign');
-        }
-        setActiveTaskKey(task.Key);
-    };
-
-    const handleFormSubmit = async (formData) => { // Made async to await API call
-        console.log("Form submitted data:", formData);
-        
-        let newPlannedTasksCount = 0;
-        let totalTasksCount = 0;
-
-        const updatedTasks = tasks.map((task) => {
-            if (task.Key === activeTaskKey) {
-                // This is the task that was just scheduled/updated
-                const updatedTask = {
-                    ...task,
-                    scheduled: true, // Mark as scheduled
-                    personResponsible: formData.personResponsible || task.personResponsible,
-                    totalTime: formData.totalTime || task.totalTime,
-                    formattedDuration: `${Math.floor((formData.totalTime || 0) / 60)}h ${ (formData.totalTime || 0) % 60}m`,
-                    Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp || task.Planned_Delivery_Timestamp,
-                    Current_Status: formData.Current_Status || task.Current_Status || 'Scheduled',
-                };
-                return updatedTask;
-            }
-            return task;
-        });
-
-        // Calculate new planned and total tasks from the updatedTasks array
-        // planned tasks are those that have a Planned_Delivery_Timestamp
-        newPlannedTasksCount = updatedTasks.filter(task => 
-            !!task.Planned_Delivery_Timestamp && 
-            (typeof task.Planned_Delivery_Timestamp === 'string' ? task.Planned_Delivery_Timestamp !== "NULL" : task.Planned_Delivery_Timestamp.value !== null)
-        ).length;
-        
-        // Total tasks are all tasks in this detail view (excluding Step_ID=0, and not completed)
-        totalTasksCount = updatedTasks.length; 
-
-        // Update local state first
-        setTasks(updatedTasks);
-        setActiveTaskKey(null);
-
-        // --- NEW: Call backend to update Planned_Tasks and Total_Tasks for the main delivery ---
-        try {
-            console.log(`DeliveryDetail: Updating delivery counts for ${delCode}. Planned: ${newPlannedTasksCount}, Total: ${totalTasksCount}`);
-            const response = await fetch(`${BACKEND_API_BASE_URL}/api/delivery_counts/${delCode}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    newPlannedTasks: newPlannedTasksCount,
-                    newTotalTasks: totalTasksCount 
-                }),
+            // Sort tasks: Step_ID=0 first, then by Step_ID ascending
+            const sortedTasks = filteredTasks.sort((a, b) => {
+                if (a.Step_ID === 0) return -1;
+                if (b.Step_ID === 0) return 1;
+                return a.Step_ID - b.Step_ID;
             });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Failed to update delivery counts: ${response.status} - ${errorText}`);
-            }
-            console.log('Delivery counts updated successfully on backend.');
-        } catch (error) {
-            console.error('Error updating delivery counts on backend:', error);
-            // Optionally, show an error message to the user
+            setTasks(sortedTasks);
+
+        } catch (err) {
+            console.error("Error fetching delivery details:", err);
+            setError(err.message);
+        } finally {
+            setLoading(false);
         }
-        // --- END NEW ---
     };
 
-    const toggleTimer = (taskKey) => {
-        const updatedTasks = tasks.map((task) => {
-            if (task.Key === taskKey) {
-                return { ...task, isPlaying: !task.isPlaying };
-            }
-            return task;
-        });
-        setTasks(updatedTasks);
+    useEffect(() => {
+        fetchDeliveryDetails();
+    }, [deliveryCode, userEmail, isAdmin]); // Re-fetch if deliveryCode or userEmail/isAdmin changes
+
+
+    const handleFormSubmit = (updatedTaskData) => {
+        // Find the task by key and update its properties
+        setTasks(prevTasks =>
+            prevTasks.map(task =>
+                task.Key === updatedTaskData.Key
+                    ? { ...task, ...updatedTaskData }
+                    : task
+            )
+        );
+        setActiveTaskKey(null); // Close the form after submission
+        setActionType(null); // Clear action type
+        fetchDeliveryDetails(); // Re-fetch all details to ensure consistency
     };
 
-    const formatTimestamp = (timestamp) => {
-        if (!timestamp) return 'No start time';
-        const date = new Date(timestamp?.value || timestamp);
-        if (timestamp && typeof timestamp === 'object' && timestamp.value) {
-            return new Date(timestamp.value).toLocaleString();
+    const handleActionClick = (taskKey, type) => {
+        setActiveTaskKey(taskKey);
+        setActionType(type);
+    };
+
+    const onVisibleChange = (visible) => {
+        if (!visible) {
+            setActiveTaskKey(null); // Close form if dropdown closes
+            setActionType(null);
         }
-        return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
     };
 
-    const taskMenu = (task) => (
-        <Menu onClick={(info) => handleMenuClick(task, info)}>
-            <MenuItem key="reschedule">Reschedule Task</MenuItem>
-            <MenuItem key="reassign">Reassign Task</MenuItem>
+    const renderMenu = (task) => (
+        <Menu>
+            <MenuItem key="edit" onClick={() => handleActionClick(task.Key, 'edit')}>
+                Edit
+            </MenuItem>
+            {/* Add more actions here if needed, e.g., Pause, Play, Stop */}
+            {/* Conditional rendering based on task status */}
+            {task.Current_Status === 'Running' && (
+                <MenuItem key="pause" onClick={() => handleActionClick(task.Key, 'pause')}>
+                    <FaPause style={{ marginRight: '5px' }} /> Pause
+                </MenuItem>
+            )}
+            {task.Current_Status === 'Paused' && (
+                <MenuItem key="play" onClick={() => handleActionClick(task.Key, 'play')}>
+                    <FaPlay style={{ marginRight: '5px' }} /> Play
+                </MenuItem>
+            )}
+            {task.Current_Status !== 'Completed' && ( // Assuming 'Completed' tasks cannot be stopped
+                <MenuItem key="stop" onClick={() => handleActionClick(task.Key, 'stop')}>
+                    <FaStop style={{ marginRight: '5px' }} /> Stop
+                </MenuItem>
+            )}
+            {/* Example: Mark as Completed */}
+            {task.Current_Status !== 'Completed' && (
+                <MenuItem key="complete" onClick={() => handleActionClick(task.Key, 'complete')}>
+                    <FiCheckCircle style={{ marginRight: '5px' }} /> Mark as Completed
+                </MenuItem>
+            )}
         </Menu>
     );
 
     if (loading) {
         return (
-            <Container className="text-center my-5">
+            <Container className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
                 <Spinner animation="border" role="status">
-                    <span className="sr-only">Loading...</span>
+                    <span className="visually-hidden">Loading...</span>
                 </Spinner>
             </Container>
         );
@@ -223,108 +166,75 @@ const DeliveryDetail = () => {
 
     if (error) {
         return (
-            <Container className="text-center my-5">
+            <Container className="mt-5 text-center">
+                <h2>Error Loading Workflow Details</h2>
                 <p className="text-danger">{error}</p>
-                <Link to="/">Back to Deliveries</Link>
+                <Link to="/" className="btn btn-primary mt-3">Back to Deliveries</Link>
             </Container>
         );
     }
 
-    if (!delivery || delivery.length === 0) {
+    if (!deliveryDetails) {
         return (
-            <Container className="text-center my-5">
-                <p>No delivery data found for code: {delCode}</p>
-                <Link to="/">Back to Deliveries</Link>
+            <Container className="mt-5 text-center">
+                <h2>No Workflow Details Found</h2>
+                <p>The requested workflow could not be found.</p>
+                <Link to="/" className="btn btn-primary mt-3">Back to Deliveries</Link>
             </Container>
         );
     }
-
-    const client = delivery[0]?.Client || 'Unknown Client';
-    const shortDescription = delivery[0]?.Short_Description || 'No description available';
-    const plannedStart = delivery[0]?.Planned_Start_Timestamp?.value ? new Date(delivery[0].Planned_Start_Timestamp.value).toLocaleString() : 'N/A';
-    const plannedDelivery = delivery[0]?.Planned_Delivery_Timestamp?.value ? new Date(delivery[0].Planned_Delivery_Timestamp.value).toLocaleString() : 'N/A';
 
     return (
-        <Container>
-            <h1 className="my-4">Delivery Details for {client}</h1>
+        <Container className="delivery-detail-container mt-4">
+            <h2 className="mb-4">Workflow: {deliveryDetails.Delivery_code}</h2>
+            <p><strong>Client:</strong> {deliveryDetails.Client}</p>
+            <p><strong>Description:</strong> {deliveryDetails.Short_Description}</p>
+            <p><strong>Planned Start:</strong> {deliveryDetails.Planned_Start_Timestamp ? moment(deliveryDetails.Planned_Start_Timestamp).format('YYYY-MM-DD') : 'N/A'}</p>
+            <p><strong>Planned Delivery:</strong> {deliveryDetails.Planned_Delivery_Timestamp ? moment(deliveryDetails.Planned_Delivery_Timestamp).format('YYYY-MM-DD') : 'N/A'}</p>
+            <p><strong>Overall Status:</strong> {deliveryDetails.Current_Status}</p>
 
-            <Card className="mb-4">
-                <Card.Body>
-                    <Card.Title>{shortDescription}</Card.Title>
-                    <Card.Subtitle className="mb-2 text-muted">
-                        Start Time: {plannedStart}
-                    </Card.Subtitle>
-                    <Card.Subtitle className="mb-2 text-muted">
-                        Delivery Deadline: {plannedDelivery}
-                    </Card.Subtitle>
-                </Card.Body>
-            </Card>
-
-            <h3>Tasks</h3>
-            <Row>
+            <h3 className="mt-5 mb-3">Tasks in this Workflow:</h3>
+            <Row xs={1} md={2} lg={3} className="g-4">
                 {tasks.length > 0 ? (
-                    tasks.map((task, index) => {
-                        const displayDuration = task.totalTime || task.formattedDuration || '0m';
+                    tasks.map((task) => {
+                        const isTaskCompleted = task.Current_Status === COMPLETED_TASK_STATUS;
+                        const isTaskAssignedToCurrentUser = task.Emails?.includes(userEmail);
+                        const isTaskAssignedToSystem = task.Emails?.includes("systems@brightbraintech.com");
+
+                        // Determine if the task should be shown based on admin status and assignment
+                        const shouldShowTask = isAdmin || isTaskAssignedToCurrentUser || isTaskAssignedToSystem;
+
+                        if (!shouldShowTask) {
+                            return null; // Skip rendering if not visible to the current user
+                        }
 
                         return (
-                            <Col xs={12} key={task.Key || index}>
-                                <Dropdown trigger={['contextMenu']} overlay={taskMenu(task)}>
-                                    <div
-                                        className="task-card"
-                                        onClick={() => handleTaskClick(task)}
-                                        style={{ cursor: task.scheduled ? 'pointer' : 'pointer' }}
-                                    >
-                                        <Card className="mb-3">
+                            <Col key={task.Key}>
+                                <Dropdown
+                                    overlay={renderMenu(task)}
+                                    trigger={['click']}
+                                    onVisibleChange={onVisibleChange}
+                                >
+                                    <div className="d-flex justify-content-center">
+                                        <Card
+                                            className={`task-card ${isTaskCompleted ? 'task-completed' : ''} ${task.Key === activeTaskKey ? 'active-task' : ''}`}
+                                            style={{ width: '100%', cursor: 'pointer' }}
+                                        >
                                             <Card.Body>
-                                                <div className="d-flex align-items-center">
-                                                    <div className="timer-controls" style={{ marginRight: '10px' }}>
-                                                        {!task.scheduled ? (
-                                                            <FaCalendarAlt
-                                                                onClick={() => handleTaskClick(task)}
-                                                                style={{ cursor: 'pointer' }}
-                                                            />
-                                                        ) : (
-                                                            <>
-                                                                {task.isPlaying ? (
-                                                                    <FaPause
-                                                                        onClick={() => toggleTimer(task.Key)}
-                                                                        style={{ cursor: 'pointer' }}
-                                                                    />
-                                                                ) : (
-                                                                    <FaPlay
-                                                                        onClick={() => toggleTimer(task.Key)}
-                                                                        style={{ cursor: 'pointer' }}
-                                                                    />
-                                                                )}
-                                                                <FaStop
-                                                                    onClick={() => toggleTimer(task.Key)}
-                                                                    style={{ cursor: 'pointer', marginLeft: '5px' }}
-                                                                />
-                                                            </>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="flex-grow-1 text-center">
-                                                        <h5 className="mb-1">{task.Task_Details}</h5>
-                                                        <span className="text-muted">{task.personResponsible}</span>
-                                                    </div>
-
-                                                    <span>{displayDuration}</span>
-                                                </div>
-
-                                                <div className="task-status mt-2">
-                                                    <p className="mb-1">
-                                                        Status: {task.scheduled ? 'Scheduled' : 'Unscheduled'}
-                                                        {task.Current_Status && task.Current_Status !== COMPLETED_TASK_STATUS && ` (${task.Current_Status})`}
-                                                    </p>
-                                                    {task.scheduled && task.Planned_Delivery_Timestamp && (
-                                                        <p className="mb-1">
-                                                            Delivery Deadline: {formatTimestamp(task.Planned_Delivery_Timestamp)}
+                                                <Card.Title>{task.Task_Details}</Card.Title>
+                                                <Card.Text>
+                                                    <strong>Step ID:</strong> {task.Step_ID}<br />
+                                                    <strong>Responsibility:</strong> {task.Responsibility}<br />
+                                                    <strong>Status:</strong> {task.Current_Status}
+                                                </Card.Text>
+                                                <div className="d-flex justify-content-between align-items-center mt-3">
+                                                    {task.Planned_Start_Timestamp && (
+                                                        <p className="text-muted mb-0">
+                                                            <FaCalendarAlt style={{ marginRight: '5px' }} />
+                                                            Start: {moment(task.Planned_Start_Timestamp).format('YYYY-MM-DD')}
                                                         </p>
                                                     )}
-                                                    {task.isPlaying ? (
-                                                        <p className="text-success">On time for going live</p>
-                                                    ) : (
+                                                    {task.Current_Status === 'Paused' && (
                                                         <p className="text-muted">Paused</p>
                                                     )}
                                                 </div>
