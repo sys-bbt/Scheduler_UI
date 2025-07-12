@@ -40,7 +40,7 @@ const DeliveryDetail = () => {
     const [actionType, setActionType] = useState(null); // 'edit', 'pause', 'play', 'stop'
 
     const { userEmail } = useContext(UserContext); // Get userEmail from context
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail); // Corrected spelling here
+    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
 
     const fetchDeliveryDetails = async () => {
@@ -72,13 +72,9 @@ const DeliveryDetail = () => {
             const mainDeliveryDetail = data.find(task => task.Step_ID === 0);
             setDeliveryDetails(mainDeliveryDetail || data[0]); // Fallback if no Step_ID=0
 
-            // Filter out completed tasks if not admin
-            const filteredTasks = isAdmin
-                ? data
-                : data.filter(task => task.Current_Status !== COMPLETED_TASK_STATUS || task.Emails?.includes(userEmail) || task.Emails?.includes("systems@brightbraintech.com"));
-
-            // Sort tasks: Step_ID=0 first, then by Step_ID ascending
-            const sortedTasks = filteredTasks.sort((a, b) => {
+            // Removed frontend filtering for tasks.
+            // All tasks received from the /api/workflow-details/:deliveryCode endpoint will be displayed.
+            const sortedTasks = data.sort((a, b) => {
                 if (a.Step_ID === 0) return -1;
                 if (b.Step_ID === 0) return 1;
                 return a.Step_ID - b.Step_ID;
@@ -199,16 +195,9 @@ const DeliveryDetail = () => {
             <Row xs={1} md={2} lg={3} className="g-4">
                 {tasks.length > 0 ? (
                     tasks.map((task) => {
+                        // Removed the shouldShowTask filtering logic here.
+                        // All tasks received from the backend for this workflow will be displayed.
                         const isTaskCompleted = task.Current_Status === COMPLETED_TASK_STATUS;
-                        const isTaskAssignedToCurrentUser = task.Emails?.includes(userEmail);
-                        const isTaskAssignedToSystem = task.Emails?.includes("systems@brightbraintech.com");
-
-                        // Determine if the task should be shown based on admin status and assignment
-                        const shouldShowTask = isAdmin || isTaskAssignedToCurrentUser || isTaskAssignedToSystem;
-
-                        if (!shouldShowTask) {
-                            return null; // Skip rendering if not visible to the current user
-                        }
 
                         return (
                             <Col key={task.Key}>
