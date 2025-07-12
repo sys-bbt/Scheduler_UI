@@ -79,17 +79,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [form] = Form.useForm();
     const [sliderCount, setSliderCount] = useState(0);
     const [hours, setHours] = useState({});
-    const [startDate, setStartDate] = useState(() =>
-        task?.Planned_Start_Timestamp
-            ? moment(task.Planned_Start_Timestamp)
-            : moment() // Changed: Default to today's date if no planned start timestamp
-    );
-
-    const [endDate, setEndDate] = useState(() =>
-        task?.Planned_Delivery_Timestamp
-            ? moment(task.Planned_Delivery_Timestamp)
-            : null
-    );
+    // Initialize startDate and endDate based on task or null, not moment()
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
 
     const [personResponsible, setPersonResponsible] = useState('');
     const [numberOfDays, setNumberOfDays] = useState(0);
@@ -107,7 +99,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         return entry ? entry[0] : null;
     }, []);
 
-    // --- EFFECT HOOK 1: FETCH TASK DATA AND EXISTING SCHEDULES ---
+    // --- EFFECT HOOK 1: FETCH TASK DATA AND INITIALIZE FORM FIELDS ---
     useEffect(() => {
         const fetchTaskAndScheduleData = async () => {
             try {
@@ -116,7 +108,23 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         name: task.Task_Details || '',
                     });
 
-                    // Use full backend URL for API call
+                    // Set initial start and end dates from task if available
+                    const initialStartDate = task.Planned_Start_Timestamp ? moment(task.Planned_Start_Timestamp) : null;
+                    const initialEndDate = task.Planned_Delivery_Timestamp ? moment(task.Planned_Delivery_Timestamp) : null;
+
+                    setStartDate(initialStartDate);
+                    setEndDate(initialEndDate);
+
+                    if (initialStartDate && initialEndDate) {
+                        const daysDiff = initialEndDate.diff(initialStartDate, 'days') + 1;
+                        setNumberOfDays(daysDiff);
+                        setSliderCount(daysDiff);
+                    } else {
+                        setNumberOfDays(0);
+                        setSliderCount(0);
+                    }
+
+                    // Fetch per-key-per-day data
                     const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
                     if (!response.ok) {
                         const errorText = await response.text();
@@ -127,62 +135,23 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     const taskData = data[task.Key];
                     if (taskData) {
                         const taskEntries = taskData.entries;
-
-                        const totalMinutes = taskData.totalDuration || 0;
                         const initialHours = {};
-                        if (taskEntries && taskEntries.length > 0) {
+
+                        if (taskEntries && taskEntries.length > 0 && initialStartDate) {
                             taskEntries.forEach((entry) => {
                                 if (entry.Duration !== undefined && entry.Day !== undefined) {
                                     const dayMoment = moment(entry.Day.value);
-                                    if (dayMoment.isValid() && startDate && dayMoment.isSameOrAfter(startDate, 'day')) {
-                                        const dayIndex = dayMoment.diff(startDate, 'days');
+                                    if (dayMoment.isValid() && dayMoment.isSameOrAfter(initialStartDate, 'day')) {
+                                        const dayIndex = dayMoment.diff(initialStartDate, 'days');
                                         initialHours[dayIndex] = entry.Duration;
                                     }
                                 }
                             });
                         }
-                        // Fallback if taskEntries didn't set initial hours but total duration exists
-                        if (Object.keys(initialHours).length === 0 && totalMinutes > 0 && startDate) {
-                            initialHours[0] = totalMinutes;
-                        }
                         setHours(initialHours);
-
-
-                        const validDays = taskEntries
-                            .map((entry) => entry.Day?.value)
-                            .filter((date) => date);
-
-                        if (validDays.length > 0) {
-                            const start = moment.min(validDays.map((d) => moment(d)));
-                            const end = moment.max(validDays.map((d) => moment(d)));
-
-                            setStartDate(start);
-                            setEndDate(end);
-
-                            const daysDiff = end.diff(start, 'days') + 1;
-                            setNumberOfDays(daysDiff);
-                            setSliderCount(daysDiff);
-                        } else if (task?.Planned_Start_Timestamp && task?.Planned_Delivery_Timestamp) {
-                            const start = moment(task.Planned_Start_Timestamp);
-                            const end = moment(task.Planned_Delivery_Timestamp);
-                            const daysDiff = end.diff(start, 'days') + 1;
-                            setStartDate(start);
-                            setEndDate(end);
-                            setNumberOfDays(daysDiff);
-                            setSliderCount(daysDiff);
-                        }
-                    } else if (task?.Planned_Start_Timestamp && task?.Planned_Delivery_Timestamp) {
-                        const start = moment(task.Planned_Start_Timestamp);
-                        const end = moment(task.Planned_Delivery_Timestamp);
-                        const daysDiff = end.diff(start, 'days') + 1;
-                        setStartDate(start);
-                        setEndDate(end);
-                        setNumberOfDays(daysDiff);
-                        setSliderCount(daysDiff);
                     }
 
-
-                    // Use full backend URL for API call
+                    // Fetch per-person-per-day data
                     const perPersonResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-person-per-day`);
                     if (!perPersonResponse.ok) {
                         const errorText = await perPersonResponse.text();
@@ -199,7 +168,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         }
                         schedules[Responsibility][date] = Duration_In_Minutes;
                     });
-
                     setExistingSchedules(schedules);
                 }
             } catch (error) {
@@ -212,7 +180,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         };
 
         fetchTaskAndScheduleData();
-    }, [task, form]); // Removed startDate from dependencies
+    }, [task, form]); // Dependencies ensure this runs when task or form changes
 
     // --- EFFECT HOOK 2: SET INITIAL PERSON RESPONSIBLE AND CONTROL EDITABILITY ---
     useEffect(() => {
@@ -245,11 +213,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     const handleStartDateChange = (date) => {
         setStartDate(date);
-        if (numberOfDays && date) {
+        if (date && numberOfDays > 0) {
             calculateEndDate(date, numberOfDays);
         } else {
             setEndDate(null);
             setSliderCount(0);
+            setHours({}); // Clear hours when startDate or numberOfDays is invalid
         }
     };
 
@@ -258,17 +227,17 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         const days = e.target.value;
         const numericDays = parseInt(days, 10) || 0;
         setNumberOfDays(numericDays);
-        if (startDate && numericDays > 0) { // startDate will now always be a moment object (either from task or today)
+        if (startDate && numericDays > 0) {
             calculateEndDate(startDate, numericDays);
         } else {
             setEndDate(null);
             setSliderCount(0);
+            setHours({}); // Clear hours when startDate or numberOfDays is invalid
         }
     };
 
     const calculateEndDate = (start, days) => {
         if (start && days > 0) {
-            // End date should be 'days - 1' from start date, as 'days' includes the start day itself
             const calculatedEndDate = moment(start).add(days - 1, 'days');
             setEndDate(calculatedEndDate);
             setSliderCount(days);
@@ -483,6 +452,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             placeholder="Select start date"
                             style={{ width: '100%' }}
                             disabledDate={disabledDateRange} // Updated to use disabledDateRange
+                            open={true} // Keep calendar open for debugging
                         />
                     </Form.Item>
                 </Col>
