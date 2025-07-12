@@ -15,7 +15,7 @@ const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localh
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
+   
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -73,10 +73,19 @@ const DeliveryList = () => {
 
       // Sort the data based on Initiated_Timestamp
       const sortedData = [...data].sort((a, b) => {
-        // Assuming Initiated_Timestamp is a valid date string or timestamp field
-        const dateA = new Date(a.Initiated_Timestamp || a.Created_at); // Fallback to Created_at if Initiated_Timestamp is missing
-        const dateB = new Date(b.Initiated_Timestamp || b.Created_at);
-        return sortOption === 'earliest' ? dateA - dateB : dateB - dateA;
+        // Ensure that Initiated_Timestamp is parsed correctly.
+        // If it's a BigQuery TIMESTAMP type, it might come as a string like "2023-07-20 10:30:00 UTC".
+        // moment() handles this well. If it's null/undefined, use Created_at as fallback.
+        const dateA = moment(a.Initiated_Timestamp || a.Created_at);
+        const dateB = moment(b.Initiated_Timestamp || b.Created_at);
+
+        // Check if dates are valid before comparing
+        if (!dateA.isValid() || !dateB.isValid()) {
+            console.warn("Invalid date found during sorting. Falling back to original order for affected items.", a, b);
+            return 0; // Maintain original order if dates are invalid
+        }
+
+        return sortOption === 'earliest' ? dateA.diff(dateB) : dateB.diff(dateA);
       });
 
       setDeliveries(sortedData);
@@ -173,7 +182,7 @@ const DeliveryList = () => {
         </Col>
       </Row>
 
-      <Row xs={1} md={2} lg={3} className="g-4">
+      <Row xs={1} md={1} lg={1} className="g-4"> {/* Changed Col sizing to display one card per row */}
         {deliveries.length > 0 ? (
           deliveries.map((delivery) => {
             // Calculate progress based on Scheduled Tasks vs Total Tasks
