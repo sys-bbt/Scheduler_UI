@@ -9,12 +9,13 @@ import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSe
 import SortDeliveriesByDate from './SortDeliveriesByDate';
 import DeleteButton from './DeleteButton';
 import { notification } from 'antd'; // Import notification from antd
+import moment from 'moment'; // Import moment for date formatting
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-   "systems@brightbraintech.com",
+   
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -70,10 +71,11 @@ const DeliveryList = () => {
       const uniqueClients = [...new Set(data.map(delivery => delivery.Client))].filter(Boolean);
       setClients(uniqueClients);
 
-      // Sort the data
+      // Sort the data based on Initiated_Timestamp
       const sortedData = [...data].sort((a, b) => {
-        const dateA = new Date(a.Created_at);
-        const dateB = new Date(b.Created_at);
+        // Assuming Initiated_Timestamp is a valid date string or timestamp field
+        const dateA = new Date(a.Initiated_Timestamp || a.Created_at); // Fallback to Created_at if Initiated_Timestamp is missing
+        const dateB = new Date(b.Initiated_Timestamp || b.Created_at);
         return sortOption === 'earliest' ? dateA - dateB : dateB - dateA;
       });
 
@@ -174,15 +176,29 @@ const DeliveryList = () => {
       <Row xs={1} md={2} lg={3} className="g-4">
         {deliveries.length > 0 ? (
           deliveries.map((delivery) => {
-            const progress = delivery.Total_Tasks > 0
-              ? (delivery.Completed_Tasks / delivery.Total_Tasks) * 100
-              : 0;
-            const isCompleted = progress === 100;
+            // Calculate progress based on Scheduled Tasks vs Total Tasks
+            // IMPORTANT: 'Planned_Tasks' is assumed to be a field from your BigQuery data (Step_ID = 0 entry).
+            // If this field is not available or named differently, you will need to adjust this.
+            // If 'Planned_Tasks' needs to be derived (e.g., counting tasks with Planned_Start_Timestamp),
+            // this calculation should ideally happen in the backend's /api/data endpoint for accuracy.
+            const scheduledTasks = delivery.Planned_Tasks !== undefined ? delivery.Planned_Tasks : delivery.Completed_Tasks; // Fallback to Completed_Tasks if Planned_Tasks isn't provided
+            const totalTasks = delivery.Total_Tasks || 1; // Avoid division by zero
+
+            const progress = (scheduledTasks / totalTasks) * 100;
+
+            let progressBarVariant = "primary";
+            if (progress === 100) {
+                progressBarVariant = "success";
+            } else if (progress >= 50) { // Half or more planned
+                progressBarVariant = "warning";
+            } else { // Less than half planned
+                progressBarVariant = "danger";
+            }
 
             return (
               <Col key={delivery.Key}>
                 <Link to={`/delivery/data/${encodeURIComponent(delivery.DelCode_w_o__)}`} className="text-decoration-none">
-                  <Card className={`delivery-card h-100 ${isCompleted ? 'border-success' : ''}`}>
+                  <Card className={`delivery-card h-100`}> {/* Removed isCompleted class as variant handles color */}
                     <Card.Body>
                       <div className="d-flex justify-content-between align-items-start">
                         <div>
@@ -200,9 +216,9 @@ const DeliveryList = () => {
                       </div>
                       <ProgressBar
                         now={progress}
-                        label={`${Math.round(progress)}%`}
+                        label={`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`} {/* Updated label */}
                         className="my-3"
-                        variant={isCompleted ? "success" : "primary"}
+                        variant={progressBarVariant} // Dynamic variant
                       />
                       <div className="d-flex justify-content-between align-items-center">
                         <p className="mb-0 text-primary">
@@ -213,8 +229,9 @@ const DeliveryList = () => {
                         </p>
                       </div>
                       <div className="d-flex justify-content-between align-items-center mt-2">
+                        {/* Display Deadline date */}
                         <p className="mb-0 text-danger">
-                          <FiFlag style={{ marginRight: '5px' }} /> {delivery.deadline}
+                          <FiFlag style={{ marginRight: '5px' }} /> Deadline: {delivery.Planned_Delivery_Timestamp ? moment(delivery.Planned_Delivery_Timestamp).format('YYYY-MM-DD') : 'N/A'}
                         </p>
                         <p
                           onClick={(e) => {
@@ -229,7 +246,7 @@ const DeliveryList = () => {
                           style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
                           title="Click to copy"
                         >
-                          {delivery.delCode}
+                          {delivery.DelCode_w_o__} {/* Corrected to DelCode_w_o__ */}
                         </p>
                       </div>
                     </Card.Body>
