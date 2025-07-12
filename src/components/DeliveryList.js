@@ -15,7 +15,7 @@ const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localh
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-   
+   "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -74,9 +74,11 @@ const DeliveryList = () => {
       // Sort the data based on Initiated_Timestamp or Key
       const sortedData = [...data].sort((a, b) => {
         if (sortOption === 'latest') {
-            // Sort by Key in descending order for "latest"
-            // Assuming Key can be directly compared (e.g., numeric or lexicographically ordered string)
-            return String(b.Key).localeCompare(String(a.Key));
+            // Sort by Key in descending order (numerically) for "latest"
+            // Convert Key to a number for proper numerical comparison
+            const keyA = Number(a.Key);
+            const keyB = Number(b.Key);
+            return keyB - keyA; // Descending order
         } else { // 'earliest'
             // Sort by Initiated_Timestamp for "earliest"
             const dateA = moment(a.Initiated_Timestamp || a.Created_at);
