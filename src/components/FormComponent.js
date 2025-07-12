@@ -447,10 +447,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         480: '8 h',
     };
 
-    // Function to disable dates before today
-    const disabledPastDates = (current) => {
+    // Function to disable dates outside the allowed range (past dates and beyond 2 months from today)
+    const disabledDateRange = (current) => {
         // Can not select days before today
-        return current && current < moment().startOf('day');
+        const isPastDate = current && current < moment().startOf('day');
+        // Can not select days more than 2 months from today (end of the month)
+        const isFutureDateBeyondLimit = current && current > moment().add(2, 'months').endOf('month');
+        return isPastDate || isFutureDateBeyondLimit;
     };
 
     // Define personsToDisplay based on user role
@@ -479,7 +482,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             value={startDate}
                             placeholder="Select start date"
                             style={{ width: '100%' }}
-                            disabledDate={disabledPastDates} // Added disabledDate prop
+                            disabledDate={disabledDateRange} // Updated to use disabledDateRange
                         />
                     </Form.Item>
                 </Col>
