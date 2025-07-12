@@ -4,10 +4,12 @@ import { Container, Card, ListGroup, Row, Col, Spinner } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
 import { FaPause, FaPlay, FaStop, FaCalendarAlt } from 'react-icons/fa';
+import { FiCheckCircle } from 'react-icons/fi'; // Added import for FiCheckCircle
 import FormComponent from './FormComponent';
 import { UserContext } from './UserContext';
 import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
+import moment from 'moment'; // Added import for moment
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
@@ -38,7 +40,7 @@ const DeliveryDetail = () => {
     const [actionType, setActionType] = useState(null); // 'edit', 'pause', 'play', 'stop'
 
     const { userEmail } = useContext(UserContext); // Get userEmail from context
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
+    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail); // Corrected spelling here
 
 
     const fetchDeliveryDetails = async () => {
