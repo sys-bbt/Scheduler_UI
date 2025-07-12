@@ -7,7 +7,6 @@ const { Option } = Select;
 
 // Define the emails of users who can see and edit the full list
 const ADMIN_EMAILS = [
-    
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -50,7 +49,7 @@ const ALL_AVAILABLE_PERSONS_HARDCODED = [
 "Manish Hodlur",
 "Megha Vyas",
 "Meghna Jalali",
-"Nasir Ali  Shaikh", 
+"Nasir Ali Shaikh",
 "Neelam Purohit",
 "Neha Saraogi",
 "Nikhil Surve",
@@ -213,7 +212,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         };
 
         fetchTaskAndScheduleData();
-    }, [task, form, startDate]);
+    }, [task, form, startDate]); // Added startDate to dependencies to ensure initial hours are correctly set relative to it
 
     // --- EFFECT HOOK 2: SET INITIAL PERSON RESPONSIBLE AND CONTROL EDITABILITY ---
     useEffect(() => {
@@ -269,6 +268,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     const calculateEndDate = (start, days) => {
         if (start && days > 0) {
+            // End date should be 'days - 1' from start date, as 'days' includes the start day itself
             const calculatedEndDate = moment(start).add(days - 1, 'days');
             setEndDate(calculatedEndDate);
             setSliderCount(days);
@@ -500,7 +500,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             </Row>
 
             {Array.from({ length: sliderCount }).map((_, index) => (
-                <Form.Item key={index} label={`Hours for Day ${index + 1} (${startDate ? moment(startDate).add(index, 'days').format('YYYY-MM-DD') : 'N/A'})`}>
+                <Form.Item
+                    key={index}
+                    label={`Hours for ${startDate ? moment(startDate).add(index, 'days').format('DD/MM/YYYY') : `Day ${index + 1}`}`}
+                >
                     <Row gutter={20}>
                         <Col xs={20}>
                             <Slider
