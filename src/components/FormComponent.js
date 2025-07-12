@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { Form, Button, Spinner, Alert } from 'react-bootstrap';
 import Select from 'react-select';
 import moment from 'moment';
@@ -8,7 +8,7 @@ const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localh
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-   
+    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -29,8 +29,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         Frequency___Timeline: '',
         Client: '',
         Short_Description: '',
-        Planned_Start_Timestamp: null,
-        Planned_Delivery_Timestamp: null,
+        Planned_Start_Timestamp: '', // Changed to empty string for date input
+        Planned_Delivery_Timestamp: '', // Changed to empty string for date input
         Responsibility: '',
         Current_Status: '',
         Email: '',
@@ -43,15 +43,30 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         Updated_at: null,
         Time_Left_For_Next_Task_dd_hh_mm_ss: '',
         Card_Corner_Status: '',
-        Number_of_Days: 0, // Number of days for task duration
-        Daily_Hours_Planned: 0 // Hours planned per day for this task
+        Number_of_Days: 0,
     });
+    const [dailyHours, setDailyHours] = useState({}); // Stores hours for each day: { 'YYYY-MM-DD': hours }
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
-    const [persons, setPersons] = useState([]); // State for people mapping
+    const [persons, setPersons] = useState([]);
     const [loadingPersons, setLoadingPersons] = useState(true);
     const [personError, setPersonError] = useState(null);
+
+    // Function to generate daily sliders data based on start date and number of days
+    const generateDailySliders = useCallback((startDateStr, numDays) => {
+        const newDailyHours = {};
+        const startDate = moment(startDateStr);
+
+        if (startDate.isValid() && numDays > 0) {
+            for (let i = 0; i < numDays; i++) {
+                const date = startDate.clone().add(i, 'days').format('YYYY-MM-DD');
+                // Preserve existing hours if available, otherwise default to 0
+                newDailyHours[date] = dailyHours[date] !== undefined ? dailyHours[date] : 0;
+            }
+        }
+        setDailyHours(newDailyHours);
+    }, [dailyHours]); // Dependency on dailyHours to preserve existing values
 
     useEffect(() => {
         if (task) {
@@ -64,7 +79,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Frequency___Timeline: task.Frequency___Timeline || '',
                 Client: task.Client || '',
                 Short_Description: task.Short_Description || '',
-                // Ensure timestamps are moment objects for date pickers if needed, or null
                 Planned_Start_Timestamp: task.Planned_Start_Timestamp ? moment(task.Planned_Start_Timestamp).format('YYYY-MM-DD') : '',
                 Planned_Delivery_Timestamp: task.Planned_Delivery_Timestamp ? moment(task.Planned_Delivery_Timestamp).format('YYYY-MM-DD') : '',
                 Responsibility: task.Responsibility || '',
@@ -80,10 +94,42 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss || '',
                 Card_Corner_Status: task.Card_Corner_Status || '',
                 Number_of_Days: task.Number_of_Days || 0,
-                Daily_Hours_Planned: task.Daily_Hours_Planned || 0 // Renamed field
             });
+
+            // Fetch existing daily hours for this task if available
+            const fetchDailyHours = async () => {
+                try {
+                    const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day-by-key?key=${encodeURIComponent(task.Key)}`);
+                    if (!response.ok) {
+                        // If no data found, it's not an error, just means no existing daily hours
+                        if (response.status === 404) return;
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Failed to fetch existing daily hours.');
+                    }
+                    const data = await response.json();
+                    const existingDailyHours = {};
+                    if (data && data.entries) {
+                        data.entries.forEach(entry => {
+                            existingDailyHours[moment(entry.Day).format('YYYY-MM-DD')] = entry.Duration;
+                        });
+                    }
+                    setDailyHours(existingDailyHours);
+                } catch (err) {
+                    console.error("Error fetching existing daily hours:", err);
+                    // Do not set a critical error, just log it
+                }
+            };
+            if (task.Key) { // Only fetch if task key exists
+                fetchDailyHours();
+            }
         }
-    }, [task]);
+    }, [task, generateDailySliders]); // Added generateDailySliders to dependencies
+
+    // Effect to regenerate daily sliders when start date or number of days changes
+    useEffect(() => {
+        generateDailySliders(formData.Planned_Start_Timestamp, formData.Number_of_Days);
+    }, [formData.Planned_Start_Timestamp, formData.Number_of_Days, generateDailySliders]);
+
 
     // Fetch people mapping data
     useEffect(() => {
@@ -126,12 +172,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
             // If Planned_Start_Timestamp changes, recalculate Planned_Delivery_Timestamp
             if (name === 'Planned_Start_Timestamp' && updatedData.Number_of_Days > 0) {
-                const startDate = moment(value); // Use the new start date value
+                const startDate = moment(value);
                 if (startDate.isValid()) {
                     const endDate = startDate.add(updatedData.Number_of_Days, 'days');
                     updatedData.Planned_Delivery_Timestamp = endDate.format('YYYY-MM-DD');
                 } else {
-                    updatedData.Planned_Delivery_Timestamp = ''; // Clear if start date is invalid
+                    updatedData.Planned_Delivery_Timestamp = '';
                 }
             }
             return updatedData;
@@ -143,7 +189,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         setFormData(prevData => {
             const updatedData = {
                 ...prevData,
-                Number_of_Days: isNaN(value) ? 0 : value
+                // Ensure Number_of_Days is 0 or greater
+                Number_of_Days: isNaN(value) || value < 0 ? 0 : value
             };
 
             // Recalculate Planned_Delivery_Timestamp if Planned_Start_Timestamp exists
@@ -160,11 +207,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         });
     };
 
-    const handleDailyHoursChange = (e) => { // Renamed handler
+    const handleDailyHoursSliderChange = (date) => (e) => {
         const value = parseInt(e.target.value, 10);
-        setFormData(prevData => ({
-            ...prevData,
-            Daily_Hours_Planned: isNaN(value) ? 0 : value
+        setDailyHours(prevDailyHours => ({
+            ...prevDailyHours,
+            [date]: isNaN(value) ? 0 : value
         }));
     };
 
@@ -181,6 +228,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         setLoading(true);
         setError(null);
         setSuccess(null);
+
+        // Basic validation for required fields
+        if (!formData.Planned_Start_Timestamp || formData.Number_of_Days <= 0 || !formData.Responsibility) {
+            setError("Please fill all required fields: Start Date, Number of Days (must be > 0), and Person Responsible.");
+            setLoading(false);
+            return;
+        }
 
         try {
             // Prepare data for the main task table update
@@ -209,22 +263,15 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Card_Corner_Status: formData.Card_Corner_Status,
             };
 
-            // Prepare data for Per_Key_Per_Day table
-            const perKeyPerDayRows = [];
-            if (formData.Planned_Start_Timestamp && formData.Number_of_Days > 0 && formData.Daily_Hours_Planned > 0) {
-                let currentDay = moment(formData.Planned_Start_Timestamp);
-                for (let i = 0; i < formData.Number_of_Days; i++) {
-                    perKeyPerDayRows.push({
-                        Key: formData.Key,
-                        Day: currentDay.format('YYYY-MM-DD'), // Format as 'YYYY-MM-DD' for DATE type
-                        Duration: formData.Daily_Hours_Planned,
-                        Duration_Unit: 'Hours', // Assuming fixed unit
-                        Planned_Delivery_Slot: null, // As per schema, this can be nullable or derived
-                        Responsibility: formData.Responsibility,
-                    });
-                    currentDay.add(1, 'days');
-                }
-            }
+            // Prepare data for Per_Key_Per_Day table from dailyHours state
+            const perKeyPerDayRows = Object.keys(dailyHours).map(date => ({
+                Key: formData.Key,
+                Day: date, // Already in 'YYYY-MM-DD' format
+                Duration: dailyHours[date],
+                Duration_Unit: 'Hours',
+                Planned_Delivery_Slot: null, // As per schema, this can be nullable or derived
+                Responsibility: formData.Responsibility,
+            })).filter(row => row.Duration > 0); // Only send rows with planned hours
 
             const payload = {
                 mainTask: mainTaskPayload,
@@ -267,7 +314,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     // Determine if fields should be disabled for non-admins
     const isFieldDisabledForNonAdmin = !isAdmin && (formData.Emails !== currentUserEmail && formData.Emails !== "systems@brightbraintech.com");
     // The "System" email for tasks that should be globally visible to non-admins
-    const SYSTEM_EMAIL_FOR_GLOBAL_TASKS = "systems@brightbraintech.com";
+    // const SYSTEM_EMAIL_FOR_GLOBAL_TASKS = "systems@brightbraintech.com"; // Already defined globally if needed
 
     return (
         <Form onSubmit={handleSubmit} className="p-3 border rounded shadow-sm bg-light">
@@ -282,30 +329,33 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     name="Task_Details"
                     value={formData.Task_Details}
                     onChange={handleChange}
-                    disabled={isFieldDisabledForNonAdmin} // Disable for non-admins if not assigned
+                    disabled={true} // Disabled as requested
                     required
                 />
             </Form.Group>
 
             <Form.Group className="mb-3">
-                <Form.Label>Start Date</Form.Label>
+                <Form.Label>Start Date<span className="text-danger">*</span></Form.Label>
                 <Form.Control
                     type="date"
                     name="Planned_Start_Timestamp"
                     value={formData.Planned_Start_Timestamp}
                     onChange={handleDateChange}
                     disabled={isFieldDisabledForNonAdmin}
+                    required // Made required
                 />
             </Form.Group>
 
             <Form.Group className="mb-3">
-                <Form.Label>Number of Days</Form.Label>
+                <Form.Label>Number of Days<span className="text-danger">*</span></Form.Label>
                 <Form.Control
                     type="number"
                     name="Number_of_Days"
                     value={formData.Number_of_Days}
                     onChange={handleNumberOfDaysChange}
+                    min="0" // Ensure 0 or greater
                     disabled={isFieldDisabledForNonAdmin}
+                    required // Made required
                 />
             </Form.Group>
 
@@ -316,38 +366,42 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     name="Planned_Delivery_Timestamp"
                     value={formData.Planned_Delivery_Timestamp}
                     readOnly // This field is calculated, not directly editable
-                    disabled={isFieldDisabledForNonAdmin}
+                    disabled={true} // Disabled as requested
                 />
             </Form.Group>
 
-            <Form.Group className="mb-3">
-                <Form.Label>Daily Hours Planned</Form.Label> {/* Renamed label */}
-                <Form.Range
-                    name="Daily_Hours_Planned" // Renamed field
-                    min="0"
-                    max="8"
-                    step="1"
-                    value={formData.Daily_Hours_Planned}
-                    onChange={handleDailyHoursChange} // Renamed handler
-                    disabled={isFieldDisabledForNonAdmin}
-                />
-                <div className="d-flex justify-content-between">
-                    <span>0h</span>
-                    <span>{formData.Daily_Hours_Planned}h</span>
-                    <span>8h</span>
-                </div>
-            </Form.Group>
+            {/* Dynamic Sliders for Daily Hours */}
+            {Object.keys(dailyHours).sort().map(date => (
+                <Form.Group className="mb-3" key={date}>
+                    <Form.Label>Hours for {moment(date).format('YYYY-MM-DD')}</Form.Label>
+                    <Form.Range
+                        name={`hours-for-${date}`}
+                        min="0"
+                        max="8"
+                        step="1"
+                        value={dailyHours[date]}
+                        onChange={handleDailyHoursSliderChange(date)}
+                        disabled={isFieldDisabledForNonAdmin}
+                    />
+                    <div className="d-flex justify-content-between">
+                        <span>0h</span>
+                        <span>{dailyHours[date]}h</span>
+                        <span>8h</span>
+                    </div>
+                </Form.Group>
+            ))}
 
             <Form.Group className="mb-3">
-                <Form.Label>Person Responsible</Form.Label>
+                <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
                 <Select
                     name="Responsibility"
                     options={personsToDisplay}
                     value={selectedPerson}
                     onChange={handlePersonSelect}
-                    isDisabled={!isAdmin || loadingPersons || isFieldDisabledForNonAdmin} // Disable if not admin or loading or not assigned
+                    isDisabled={!isAdmin || loadingPersons || isFieldDisabledForNonAdmin}
                     placeholder="Select Person"
                     isClearable
+                    required // Made required
                 />
             </Form.Group>
 
