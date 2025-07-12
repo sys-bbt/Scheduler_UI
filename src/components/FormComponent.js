@@ -1,13 +1,43 @@
-import React, { useState, useEffect, useContext, useCallback } from 'react';
-import { Form, Button, Spinner, Alert } from 'react-bootstrap';
-import Select from 'react-select';
-import moment from 'moment';
-import { UserContext } from './UserContext'; // Import UserContext
+const express = require('express');
+const { BigQuery } = require('@google-cloud/bigquery');
+const cors = require('cors');
+const path = require('path');
+const dotenv = require('dotenv');
+const moment = require('moment'); // Import moment for date handling
 
-const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
+dotenv.config();
 
-// Define admin emails on the frontend, matching the backend
-const ADMIN_EMAILS_FRONTEND = [
+const projectId = process.env.GOOGLE_PROJECT_ID;
+const bigQueryDataset = process.env.BIGQUERY_DATASET;
+const bigQueryTable = process.env.BIGQUERY_TABLE; // Your main task table
+const bigQueryTable2 = "Per_Key_Per_Day"; // Per_Key_Per_Day table
+const bigQueryTable3 = "Per_Person_Per_Day";
+
+const app = express();
+
+// Middleware setup
+app.use(cors());
+app.use(express.json());
+
+console.log('DEBUG: GOOGLE_PROJECT_ID:', process.env.GOOGLE_PROJECT_ID);
+console.log('DEBUG: BIGQUERY_CLIENT_EMAIL:', process.env.BIGQUERY_CLIENT_EMAIL);
+console.log('DEBUG: BIGQUERY_PRIVATE_KEY exists:', !!process.env.BIGQUERY_PRIVATE_KEY);
+if (process.env.BIGQUERY_PRIVATE_KEY) {
+    console.log('DEBUG: First 50 chars of private key:', process.env.BIGQUERY_PRIVATE_KEY.substring(0, 50));
+    console.log('DEBUG: Last 50 chars of private key:', process.env.BIGQUERY_PRIVATE_KEY.slice(-50));
+    console.log('DEBUG: Private key contains \\n:', process.env.BIGQUERY_PRIVATE_KEY.includes('\\n'));
+}
+
+const bigQueryClient = new BigQuery({
+    projectId: projectId,
+    credentials: {
+        client_email: process.env.BIGQUERY_CLIENT_EMAIL,
+        private_key: process.env.BIGQUERY_PRIVATE_KEY ? process.env.BIGQUERY_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
+    },
+});
+
+// Define admin emails on the backend for consistency and security
+const ADMIN_EMAILS_BACKEND = [
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -15,434 +45,389 @@ const ADMIN_EMAILS_FRONTEND = [
     "hitesh.r@brightbraintech.com"
 ];
 
-// Helper function to format total minutes into "Xh Ym" string
-const formatMinutesToHoursMinutes = (totalMinutes) => {
-    if (totalMinutes === 0) return '0m'; // Show 0m if total is 0
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    let result = '';
-    if (hours > 0) {
-        result += `${hours}h`;
-    }
-    if (minutes > 0) {
-        result += `${minutes}m`;
-    }
-    return result.trim();
-};
+// Define the special "System" email for tasks that should be globally visible to non-admins
+const SYSTEM_EMAIL_FOR_GLOBAL_TASKS = "systems@brightbraintech.com";
 
-const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
-    const { userEmail } = useContext(UserContext); // Use userEmail from context
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-    const [formData, setFormData] = useState({
-        Key: '',
-        Delivery_code: '',
-        DelCode_w_o__: '',
-        Step_ID: 0,
-        Task_Details: '',
-        Frequency___Timeline: '',
-        Client: '',
-        Short_Description: '',
-        Planned_Start_Timestamp: null, // Now stores moment object or null
-        Planned_Delivery_Timestamp: null, // Now stores moment object or null
-        Responsibility: '',
-        Current_Status: '',
-        Email: '',
-        Emails: '',
-        Total_Tasks: 0,
-        Completed_Tasks: 0,
-        Planned_Tasks: 0,
-        Percent_Tasks_Completed: 0,
-        Created_at: null,
-        Updated_at: null,
-        Time_Left_For_Next_Task_dd_hh_mm_ss: '',
-        Card_Corner_Status: '',
-        Number_of_Days: 0,
-    });
-    const [dailyHours, setDailyHours] = useState({}); // Stores hours for each day: { 'YYYY-MM-DD': totalMinutes }
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const [success, setSuccess] = useState(null);
-    const [persons, setPersons] = useState([]);
-    const [loadingPersons, setLoadingPersons] = useState(true);
-    const [personError, setPersonError] = useState(null);
+// Endpoint to fetch people mapping - UPDATED TO QUERY NATIVE TABLE
+app.get('/api/people-mapping', async (req, res) => {
+    // IMPORTANT: Replace 'People_To_Email_Mapping_Native' with the exact name
+    // you used when creating the native BigQuery table from your Google Sheet.
+    const NATIVE_PEOPLE_TABLE = 'People_To_Email_Mapping_Native'; // <--- CHANGE THIS TO YOUR NEW NATIVE TABLE NAME
+    const query = `
+        SELECT Current_Employes, Emp_Emails
+        FROM \`${projectId}.${bigQueryDataset}.${NATIVE_PEOPLE_TABLE}\`
+    `;
 
-    // Function to calculate End Date
-    const calculateEndDate = useCallback((startMoment, numDays) => {
-        if (startMoment && startMoment.isValid() && numDays > 0) {
-            // End date is 'numDays' *after* start date, inclusive. So add numDays - 1.
-            return startMoment.clone().add(numDays - 1, 'days');
-        }
-        return null;
-    }, []);
-
-    // Function to generate daily sliders data based on start date and number of days
-    const generateDailySliders = useCallback((startMoment, numDays) => {
-        const newDailyHours = {};
-        if (startMoment && startMoment.isValid() && numDays > 0) {
-            for (let i = 0; i < numDays; i++) {
-                const date = startMoment.clone().add(i, 'days').format('YYYY-MM-DD');
-                // Preserve existing hours if available, otherwise default to 0
-                newDailyHours[date] = dailyHours[date] !== undefined ? dailyHours[date] : 0;
-            }
-        }
-        setDailyHours(newDailyHours);
-    }, [dailyHours]); // Dependency on dailyHours to preserve existing values
-
-    useEffect(() => {
-        if (task) {
-            const initialStartDate = task.Planned_Start_Timestamp ? moment(task.Planned_Start_Timestamp) : null;
-            const initialNumberOfDays = task.Number_of_Days || 0;
-            const initialEndDate = calculateEndDate(initialStartDate, initialNumberOfDays);
-
-            setFormData({
-                Key: task.Key || '',
-                Delivery_code: task.Delivery_code || '',
-                DelCode_w_o__: task.DelCode_w_o__ || '',
-                Step_ID: task.Step_ID || 0,
-                Task_Details: task.Task_Details || '',
-                Frequency___Timeline: task.Frequency___Timeline || '',
-                Client: task.Client || '',
-                Short_Description: task.Short_Description || '',
-                Planned_Start_Timestamp: initialStartDate, // Store as moment object
-                Planned_Delivery_Timestamp: initialEndDate, // Store as moment object
-                Responsibility: task.Responsibility || '',
-                Email: task.Email || '',
-                Emails: task.Emails || '',
-                Current_Status: task.Current_Status || '',
-                Total_Tasks: task.Total_Tasks || 0,
-                Completed_Tasks: task.Completed_Tasks || 0,
-                Planned_Tasks: task.Planned_Tasks || 0,
-                Percent_Tasks_Completed: task.Percent_Tasks_Completed || 0,
-                Created_at: task.Created_at || null,
-                Updated_at: task.Updated_at || null,
-                Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss || '',
-                Card_Corner_Status: task.Card_Corner_Status || '',
-                Number_of_Days: initialNumberOfDays,
-            });
-
-            // Fetch existing daily hours for this task if available
-            const fetchDailyHours = async () => {
-                try {
-                    const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day-by-key?key=${encodeURIComponent(task.Key)}`);
-                    if (!response.ok) {
-                        if (response.status === 404) {
-                            console.log('No existing daily hours found for this key.');
-                            return; // Not an error if no data found
-                        }
-                        const errorData = await response.json();
-                        throw new Error(errorData.error || 'Failed to fetch existing daily hours.');
-                    }
-                    const data = await response.json();
-                    const existingDailyHours = {};
-                    if (data && data.entries) {
-                        data.entries.forEach(entry => {
-                            // Convert hours from backend to minutes for frontend state
-                            existingDailyHours[moment(entry.Day).format('YYYY-MM-DD')] = Math.round((entry.Duration || 0) * 60); // Round to nearest minute
-                        });
-                    }
-                    setDailyHours(existingDailyHours);
-                } catch (err) {
-                    console.error("Error fetching existing daily hours:", err);
-                    // Do not set a critical error, just log it
-                }
-            };
-            if (task.Key) {
-                fetchDailyHours();
-            }
-        }
-    }, [task, calculateEndDate]); // Dependencies: task and calculateEndDate
-
-    // Effect to regenerate daily sliders when start date or number of days changes
-    useEffect(() => {
-        generateDailySliders(formData.Planned_Start_Timestamp, formData.Number_of_Days);
-        setFormData(prevData => ({
-            ...prevData,
-            Planned_Delivery_Timestamp: calculateEndDate(prevData.Planned_Start_Timestamp, prevData.Number_of_Days)
+    try {
+        const [rows] = await bigQueryClient.query(query);
+        const formattedRows = rows.map(row => ({
+            Current_Employes: row.Current_Employes,
+            Emp_Emails: row.Emp_Emails
         }));
-    }, [formData.Planned_Start_Timestamp, formData.Number_of_Days, generateDailySliders, calculateEndDate]);
+        res.status(200).json(formattedRows);
+    } catch (error) {
+        console.error('Error fetching people mapping from BigQuery:', error);
+        res.status(500).send({ error: 'Failed to fetch people mapping data.' });
+    }
+});
+
+// Modified /api/data route (GET workflow headers only, with filtering for non-admins)
+app.get('/api/data', async (req, res) => {
+    const userEmail = req.query.email; // Get email from query parameter
+    const searchQuery = req.query.searchQuery; // Get search query from parameter
+    const clientFilter = req.query.clientFilter; // Get client filter from parameter
+
+    let query;
+    let params = {};
+    let whereClauses = [`Step_ID = 0`]; // Always filter for workflow headers
+
+    // Add user-specific filtering for non-admins
+    if (userEmail && !ADMIN_EMAILS_BACKEND.includes(userEmail)) {
+        whereClauses.push(`DelCode_w_o__ IN (
+            SELECT DISTINCT DelCode_w_o__
+            FROM \`${projectId}.${bigQueryDataset}.${bigQueryTable}\`
+            WHERE Emails LIKE @userEmail OR Emails LIKE @systemEmail
+        )`);
+        params.userEmail = `%${userEmail}%`;
+        params.systemEmail = `%${SYSTEM_EMAIL_FOR_GLOBAL_TASKS}%`;
+        console.log(`Filtering workflow headers for non-admin user: ${userEmail}`);
+    } else if (userEmail && ADMIN_EMAILS_BACKEND.includes(userEmail)) {
+        console.log(`Fetching all workflow headers for admin user: ${userEmail}`);
+    } else {
+        console.log(`Fetching all workflow headers (no user email provided or default behavior)`);
+    }
+
+    // Add search query filtering
+    if (searchQuery) {
+        // Search in Task_Details or Delivery_code
+        whereClauses.push(`(Task_Details LIKE @searchQuery OR Delivery_code LIKE @searchQuery)`);
+        params.searchQuery = `%${searchQuery}%`;
+        console.log(`Applying search filter: ${searchQuery}`);
+    }
+
+    // Add client filter
+    if (clientFilter) {
+        whereClauses.push(`Client = @clientFilter`);
+        params.clientFilter = clientFilter;
+        console.log(`Applying client filter: ${clientFilter}`);
+    }
+
+    query = `SELECT * FROM \`${projectId}.${bigQueryDataset}.${bigQueryTable}\`
+             WHERE ${whereClauses.join(' AND ')}`;
+
+    try {
+        const [rows] = await bigQueryClient.query({
+            query: query,
+            params: params,
+            location: 'US', // Specify your BigQuery dataset location
+        });
+        res.status(200).json(rows);
+    } catch (error) {
+        console.error('Error fetching data from BigQuery for /api/data:', error);
+        res.status(500).send({ error: 'Failed to fetch data from BigQuery.' });
+    }
+});
+
+// NEW ENDPOINT: /api/workflow-details/:deliveryCode (GET all tasks for a specific workflow)
+app.get('/api/workflow-details/:deliveryCode', async (req, res) => {
+    const { deliveryCode } = req.params;
+    const query = `
+        SELECT *
+        FROM \`${projectId}.${bigQueryDataset}.${bigQueryTable}\`
+        WHERE DelCode_w_o__ = @deliveryCode
+    `;
+    const params = { deliveryCode: deliveryCode };
+
+    try {
+        const [rows] = await bigQueryClient.query({
+            query: query,
+            params: params,
+            location: 'US',
+        });
+        res.status(200).json(rows);
+    } catch (error) {
+        console.error(`Error fetching workflow details for ${deliveryCode} from BigQuery:`, error);
+        res.status(500).send({ error: `Failed to fetch workflow details for ${deliveryCode}.` });
+    }
+});
 
 
-    // Fetch people mapping data
-    useEffect(() => {
-        const fetchPeopleMapping = async () => {
-            setLoadingPersons(true);
-            setPersonError(null);
-            try {
-                const response = await fetch(`${BACKEND_API_BASE_URL}/api/people-mapping`);
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to fetch people mapping data.');
-                }
-                const data = await response.json();
-                setPersons(data);
-            } catch (err) {
-                console.error("Failed to load person data:", err);
-                setPersonError(`Failed to load person data: ${err.message}. Please ensure the backend endpoint /api/people-mapping is correctly configured.`);
-            } finally {
-                setLoadingPersons(false);
-            }
+// NEW ENDPOINT: /api/per-key-per-day-by-key
+app.get('/api/per-key-per-day-by-key', async (req, res) => {
+    const { key } = req.query; // Get the key from query parameters
+    if (!key) {
+        return res.status(400).send({ error: 'Key parameter is required.' });
+    }
+
+    const query = `
+        SELECT Key, Day, Duration, Duration_Unit, Planned_Delivery_Slot, Responsibility
+        FROM \`${projectId}.${bigQueryDataset}.${bigQueryTable2}\`
+        WHERE Key = @key
+    `;
+    const params = { key: parseInt(key, 10) }; // Convert key to INT64 for comparison
+    const queryTypes = {
+        key: 'INT64' // Explicitly define key as INT64 based on schema
+    };
+
+    try {
+        const [rows] = await bigQueryClient.query({
+            query: query,
+            params: params,
+            types: queryTypes, // Pass types here
+            location: 'US', // Specify your BigQuery dataset location
+        });
+
+        const groupedData = {
+            totalDuration: 0,
+            entries: []
         };
-        fetchPeopleMapping();
-    }, []);
-
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prevData => ({
-            ...prevData,
-            [name]: value
-        }));
-    };
-
-    const handleStartDateChange = (e) => { // e.target.value is string 'YYYY-MM-DD'
-        const dateString = e.target.value;
-        const dateMoment = moment(dateString); // Convert string to moment object
-        setFormData(prevData => {
-            const updatedData = {
-                ...prevData,
-                Planned_Start_Timestamp: dateMoment.isValid() ? dateMoment : null // Store moment object directly
-            };
-            // Recalculate end date based on new start date and existing number of days
-            updatedData.Planned_Delivery_Timestamp = calculateEndDate(updatedData.Planned_Start_Timestamp, updatedData.Number_of_Days);
-            return updatedData;
+        rows.forEach(row => {
+            groupedData.entries.push(row);
+            groupedData.totalDuration += row.Duration || 0; // Assuming Duration is the hours
         });
-    };
 
-    const handleNumberOfDaysChange = (e) => {
-        const value = parseInt(e.target.value, 10);
-        setFormData(prevData => {
-            const updatedData = {
-                ...prevData,
-                Number_of_Days: isNaN(value) || value < 0 ? 0 : value
-            };
-            // Recalculate end date based on existing start date and new number of days
-            updatedData.Planned_Delivery_Timestamp = calculateEndDate(updatedData.Planned_Start_Timestamp, updatedData.Number_of_Days);
-            return updatedData;
-        });
-    };
-
-    const handleDailyHoursSliderChange = (date) => (e) => {
-        const value = parseInt(e.target.value, 10); // Value from slider is in minutes
-        setDailyHours(prevDailyHours => ({
-            ...prevDailyHours,
-            [date]: isNaN(value) ? 0 : value
-        }));
-    };
-
-    const handlePersonSelect = (selectedOption) => {
-        setFormData(prevData => ({
-            ...prevData,
-            Responsibility: selectedOption ? selectedOption.label : '',
-            Emails: selectedOption ? selectedOption.value : '' // Assuming value is the email
-        }));
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        setError(null);
-        setSuccess(null);
-
-        // Basic validation for required fields
-        if (!formData.Planned_Start_Timestamp || !formData.Planned_Start_Timestamp.isValid() || formData.Number_of_Days <= 0 || !formData.Responsibility) {
-            setError("Please fill all required fields: Start Date, Number of Days (must be > 0), and Person Responsible.");
-            setLoading(false);
-            return;
+        if (rows.length === 0) {
+            return res.status(404).send({ message: 'No entries found for this key.' });
         }
 
-        try {
-            // Prepare data for the main task table update
-            const mainTaskPayload = {
-                Key: formData.Key,
-                Delivery_code: formData.Delivery_code,
-                DelCode_w_o__: formData.DelCode_w_o__,
-                Step_ID: formData.Step_ID,
-                Task_Details: formData.Task_Details,
-                Frequency___Timeline: formData.Frequency___Timeline,
-                Client: formData.Client,
-                Short_Description: formData.Short_Description,
-                // Convert moment objects to ISO strings for backend
-                Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null,
-                Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
-                Responsibility: formData.Responsibility,
-                Current_Status: formData.Current_Status,
-                Email: formData.Email, // This field is still in formData, but removed from backend query
-                Emails: formData.Emails,
-                Total_Tasks: formData.Total_Tasks,
-                Completed_Tasks: formData.Completed_Tasks,
-                Planned_Tasks: formData.Planned_Tasks,
-                Percent_Tasks_Completed: formData.Percent_Tasks_Completed,
-                Created_at: formData.Created_at || null, // Preserve existing or set null
-                Updated_at: moment.utc().toISOString(), // Always update Updated_at
-                Time_Left_For_Next_Task_dd_hh_mm_ss: formData.Time_Left_For_Next_Task_dd_hh_mm_ss,
-                Card_Corner_Status: formData.Card_Corner_Status,
-            };
+        res.status(200).json(groupedData);
+    } catch (error) {
+        console.error(`Error fetching Per_Key_Per_Day data for Key ${key} from BigQuery:`, error);
+        res.status(500).send({ error: `Failed to fetch Per_Key_Per_Day data for Key ${key}.` });
+    }
+});
 
-            // Prepare data for Per_Key_Per_Day table from dailyHours state
-            const perKeyPerDayRows = Object.keys(dailyHours).map(date => ({
-                Key: mainTaskPayload.Key,
-                Day: date,
-                Duration: dailyHours[date], // Send minutes directly
-                Duration_Unit: 'Minutes', // Explicitly set to 'Minutes'
-                Planned_Delivery_Slot: null,
-                Responsibility: mainTaskPayload.Responsibility,
-            })).filter(row => row.Duration > 0); // Only send rows with planned hours > 0
 
-            const payload = {
-                mainTask: mainTaskPayload,
-                perKeyPerDayRows: perKeyPerDayRows
-            };
-
-            const response = await fetch(`${BACKEND_API_BASE_URL}/api/post`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload),
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+// Existing /api/per-key-per-day route (kept for other potential uses)
+app.get('/api/per-key-per-day', async (req, res) => {
+    const query = `SELECT * FROM \`${projectId}.${bigQueryDataset}.${bigQueryTable2}\``;
+    try {
+        const [rows] = await bigQueryClient.query(query);
+        const groupedData = {};
+        rows.forEach(row => {
+            const key = row.Key;
+            if (!groupedData[key]) {
+                groupedData[key] = {
+                    totalDuration: 0,
+                    entries: []
+                };
             }
+            groupedData[key].entries.push(row);
+            // Assuming Duration_In_Minutes is always present and a number
+            groupedData[key].totalDuration += row.Duration_In_Minutes || 0;
+        });
+        res.status(200).json(groupedData);
+    } catch (error) {
+        console.error('Error fetching per-key-per-day data from BigQuery:', error);
+        res.status(500).send({ error: 'Failed to fetch per-key-per-day data from BigQuery.' });
+    }
+});
 
-            const result = await response.json();
-            setSuccess('Task and schedule updated successfully!');
-            console.log('Task and schedule updated successfully:', result);
-            onSubmit(formData); // Pass updated data back to parent
-        } catch (err) {
-            console.error('Error updating task:', err);
-            setError(`Failed to update task: ${err.message}`);
-        } finally {
-            setLoading(false);
+// Existing /api/per-person-per-day route
+app.get('/api/per-person-per-day', async (req, res) => {
+    const query = `SELECT * FROM \`${projectId}.${bigQueryDataset}.${bigQueryTable3}\``;
+    try {
+        const [rows] = await bigQueryClient.query(query);
+        res.status(200).json(rows);
+    }
+    catch (error) {
+        console.error('Error fetching per-person-per-day data from BigQuery:', error);
+        res.status(500).send({ error: 'Failed to fetch per-person-per-day data from BigQuery.' });
+    }
+});
+
+// Modified POST route to handle both main task and Per_Key_Per_Day updates
+app.post('/api/post', async (req, res) => {
+    const { mainTask, perKeyPerDayRows } = req.body;
+
+    // Convert timestamps to BigQuery compatible format for mainTask
+    const formatTimestamp = (timestamp, type) => {
+        if (!timestamp) return null;
+        const momentObj = moment.utc(timestamp);
+        if (type === 'TIMESTAMP') {
+            return momentObj.isValid() ? momentObj.format('YYYY-MM-DD HH:mm:ss.SSSSSS') + ' UTC' : null;
+        } else if (type === 'DATETIME') {
+            return momentObj.isValid() ? momentObj.format('YYYY-MM-DD HH:mm:ss.SSSSSS') : null;
         }
+        return null; // Default or error case
     };
 
-    // Filter persons for dropdown based on admin status
-    const personsToDisplay = isAdmin
-        ? persons.map(p => ({ value: p.Emp_Emails, label: p.Current_Employes }))
-        : persons.filter(p => p.Emp_Emails === currentUserEmail)
-                 .map(p => ({ value: p.Emp_Emails, label: p.Current_Employes }));
-
-    const selectedPerson = personsToDisplay.find(p => p.value === formData.Emails);
-
-    // Determine if fields should be disabled for non-admins
-    const isFieldDisabledForNonAdmin = !isAdmin && (formData.Emails !== currentUserEmail && formData.Emails !== "systems@brightbraintech.com");
-    // The "System" email for tasks that should be globally visible to non-admins
-    // const SYSTEM_EMAIL_FOR_GLOBAL_TASKS = "systems@brightbraintech.com"; // Already defined globally if needed
-
-    // --- DIAGNOSTIC CONSOLE LOGS ---
-    useEffect(() => {
-        console.log('--- FormComponent Debug Info ---');
-        console.log('userEmail (from context):', userEmail);
-        console.log('isAdmin:', isAdmin);
-        console.log('formData.Emails (task assigned email):', formData.Emails);
-        console.log('currentUserEmail (prop):', currentUserEmail);
-        console.log('isFieldDisabledForNonAdmin:', isFieldDisabledForNonAdmin);
-        console.log('formData.Planned_Start_Timestamp:', formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : 'null');
-        console.log('formData.Planned_Delivery_Timestamp:', formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : 'null');
-        console.log('formData.Number_of_Days:', formData.Number_of_Days);
-        console.log('dailyHours:', dailyHours);
-        console.log('--------------------------------');
-    }, [userEmail, isAdmin, formData.Emails, currentUserEmail, isFieldDisabledForNonAdmin, formData.Planned_Start_Timestamp, formData.Planned_Delivery_Timestamp, formData.Number_of_Days, dailyHours]);
+    const formattedPlannedStartTimestamp = formatTimestamp(mainTask.Planned_Start_Timestamp, 'TIMESTAMP');
+    const formattedPlannedDeliveryTimestamp = formatTimestamp(mainTask.Planned_Delivery_Timestamp, 'TIMESTAMP');
+    const formattedCreatedAt = formatTimestamp(mainTask.Created_at, 'TIMESTAMP');
+    const formattedUpdatedAt = formatTimestamp(mainTask.Updated_at, 'DATETIME');
 
 
-    return (
-        <Form onSubmit={handleSubmit} className="p-3 border rounded shadow-sm bg-light">
-            {error && <Alert variant="danger">{error}</Alert>}
-            {success && <Alert variant="success">{success}</Alert>}
-            {personError && <Alert variant="warning">{personError}</Alert>} {/* Display person data loading error */}
+    // Prepare data for the main task table update
+    const mainTaskRow = {
+        Key: mainTask.Key,
+        Delivery_code: mainTask.Delivery_code,
+        DelCode_w_o__: mainTask.DelCode_w_o__,
+        Step_ID: mainTask.Step_ID,
+        Task_Details: mainTask.Task_Details,
+        Frequency___Timeline: mainTask.Frequency___Timeline,
+        Client: mainTask.Client,
+        Short_Description: mainTask.Short_Description,
+        Planned_Start_Timestamp: formattedPlannedStartTimestamp,
+        Planned_Delivery_Timestamp: formattedPlannedDeliveryTimestamp,
+        Responsibility: mainTask.Responsibility,
+        Current_Status: mainTask.Current_Status,
+        Emails: mainTask.Emails,
+        Total_Tasks: mainTask.Total_Tasks,
+        Completed_Tasks: mainTask.Completed_Tasks,
+        Planned_Tasks: mainTask.Planned_Tasks,
+        Percent_Tasks_Completed: mainTask.Percent_Tasks_Completed,
+        Created_at: formattedCreatedAt,
+        Updated_at: formattedUpdatedAt,
+        Time_Left_For_Next_Task_dd_hh_mm_ss: mainTask.Time_Left_For_Next_Task_dd_hh_mm_ss,
+        Card_Corner_Status: mainTask.Card_Corner_Status,
+    };
 
-            <Form.Group className="mb-3">
-                <Form.Label>Task Name</Form.Label>
-                <Form.Control
-                    type="text"
-                    name="Task_Details"
-                    value={formData.Task_Details}
-                    onChange={handleChange}
-                    disabled={true} // Disabled as requested
-                    required
-                />
-            </Form.Group>
+    // Define types for nullable parameters in mainTaskRow
+    const mainTaskParameterTypes = {
+        Planned_Start_Timestamp: 'TIMESTAMP',
+        Planned_Delivery_Timestamp: 'TIMESTAMP',
+        Created_at: 'TIMESTAMP',
+        Updated_at: 'DATETIME',
+        Emails: 'STRING',
+        Responsibility: 'STRING',
+        Client: 'STRING',
+        Short_Description: 'STRING',
+        Frequency___Timeline: 'STRING',
+        Time_Left_For_Next_Task_dd_hh_mm_ss: 'STRING',
+        Card_Corner_Status: 'STRING',
+    };
 
-            <Form.Group className="mb-3">
-                <Form.Label>Start Date<span className="text-danger">*</span></Form.Label>
-                <Form.Control
-                    type="date"
-                    name="Planned_Start_Timestamp"
-                    // Pass moment object to value, format for display
-                    value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
-                    onChange={handleStartDateChange}
-                    disabled={isFieldDisabledForNonAdmin}
-                    required // Made required
-                />
-            </Form.Group>
+    // Define schema for Per_Key_Per_Day table inserts
+    const perKeyPerDaySchema = [
+        { name: 'Key', type: 'INTEGER' }, // Corrected to INTEGER
+        { name: 'Day', type: 'DATE' },
+        { name: 'Duration', type: 'INTEGER' }, // Corrected to INTEGER
+        { name: 'Duration_Unit', type: 'STRING' },
+        { name: 'Planned_Delivery_Slot', type: 'STRING', mode: 'NULLABLE' },
+        { name: 'Responsibility', type: 'STRING' },
+    ];
 
-            <Form.Group className="mb-3">
-                <Form.Label>Number of Days<span className="text-danger">*</span></Form.Label>
-                <Form.Control
-                    type="number"
-                    name="Number_of_Days"
-                    value={formData.Number_of_Days}
-                    onChange={handleNumberOfDaysChange}
-                    min="0" // Ensure 0 or greater
-                    disabled={isFieldDisabledForNonAdmin}
-                    required // Made required
-                />
-            </Form.Group>
+    try {
+        // 1. Update the main task table
+        const updateMainTaskQuery = `
+            UPDATE \`${projectId}.${bigQueryDataset}.${bigQueryTable}\`
+            SET
+                Delivery_code = @Delivery_code,
+                DelCode_w_o__ = @DelCode_w_o__,
+                Step_ID = @Step_ID,
+                Task_Details = @Task_Details,
+                Frequency___Timeline = @Frequency___Timeline,
+                Client = @Client,
+                Short_Description = @Short_Description,
+                Planned_Start_Timestamp = @Planned_Start_Timestamp,
+                Planned_Delivery_Timestamp = @Planned_Delivery_Timestamp,
+                Responsibility = @Responsibility,
+                Current_Status = @Current_Status,
+                Emails = @Emails,
+                Total_Tasks = @Total_Tasks,
+                Completed_Tasks = @Completed_Tasks,
+                Planned_Tasks = @Planned_Tasks,
+                Percent_Tasks_Completed = @Percent_Tasks_Completed,
+                Created_at = @Created_at,
+                Updated_at = @Updated_at,
+                Time_Left_For_Next_Task_dd_hh_mm_ss = @Time_Left_For_Next_Task_dd_hh_mm_ss,
+                Card_Corner_Status = @Card_Corner_Status
+            WHERE Key = @Key
+        `;
+        const updateMainTaskOptions = {
+            query: updateMainTaskQuery,
+            params: mainTaskRow,
+            types: mainTaskParameterTypes,
+            location: 'US',
+        };
+        const [mainTaskJob] = await bigQueryClient.createQueryJob(updateMainTaskOptions);
+        await mainTaskJob.getQueryResults();
+        console.log(`Main task with Key ${mainTask.Key} updated successfully.`);
 
-            <Form.Group className="mb-3">
-                <Form.Label>End Date</Form.Label>
-                <Form.Control
-                    type="date"
-                    name="Planned_Delivery_Timestamp"
-                    // Pass moment object to value, format for display
-                    value={formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : ''}
-                    readOnly // This field is calculated, not directly editable
-                    disabled={true} // Disabled as requested
-                />
-            </Form.Group>
+        // 2. Delete existing Per_Key_Per_Day entries for this Key
+        const deletePerKeyQuery = `
+            DELETE FROM \`${projectId}.${bigQueryDataset}.${bigQueryTable2}\`
+            WHERE Key = @Key
+        `;
+        const deletePerKeyOptions = {
+            query: deletePerKeyQuery,
+            params: { Key: parseInt(mainTask.Key, 10) }, // Convert Key to INT64 for deletion
+            types: { Key: 'INT64' }, // Explicitly define type for Key as INT64
+            location: 'US',
+        };
+        const [deleteJob] = await bigQueryClient.createQueryJob(deletePerKeyOptions);
+        await deleteJob.getQueryResults();
+        console.log(`Existing Per_Key_Per_Day entries for Key ${mainTask.Key} deleted.`);
 
-            {/* Dynamic Sliders for Daily Hours */}
-            {Object.keys(dailyHours).sort().map(date => (
-                <Form.Group className="mb-3" key={date}>
-                    <Form.Label>Hours for {moment(date).format('YYYY-MM-DD')}</Form.Label>
-                    <Form.Range
-                        name={`hours-for-${date}`}
-                        min="0"
-                        max="480" // 8 hours * 60 minutes
-                        step="1" // Each minute
-                        value={dailyHours[date]}
-                        onChange={handleDailyHoursSliderChange(date)}
-                        disabled={isFieldDisabledForNonAdmin}
-                    />
-                    <div className="d-flex justify-content-between">
-                        <span>0m</span>
-                        <span>{formatMinutesToHoursMinutes(dailyHours[date])}</span> {/* Formatted display */}
-                        <span>8h (480m)</span> {/* Max value display */}
-                    </div>
-                </Form.Group>
-            ))}
+        // 3. Insert new Per_Key_Per_Day entries
+        if (perKeyPerDayRows && perKeyPerDayRows.length > 0) {
+            const insertRows = perKeyPerDayRows.map(row => ({
+                Key: parseInt(row.Key, 10), // Convert Key to INTEGER for insertion
+                Day: row.Day,
+                Duration: row.Duration, // This is now in minutes from frontend
+                Duration_Unit: row.Duration_Unit, // This is now 'Minutes' from frontend
+                Planned_Delivery_Slot: row.Planned_Delivery_Slot,
+                Responsibility: row.Responsibility,
+            }));
 
-            <Form.Group className="mb-3">
-                <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
-                <Select
-                    name="Responsibility"
-                    options={personsToDisplay}
-                    value={selectedPerson}
-                    onChange={handlePersonSelect}
-                    isDisabled={!isAdmin || loadingPersons || isFieldDisabledForNonAdmin}
-                    placeholder="Select Person"
-                    isClearable
-                    required // Made required
-                />
-            </Form.Group>
+            await bigQueryClient
+                .dataset(bigQueryDataset)
+                .table(bigQueryTable2)
+                .insert(insertRows, { schema: perKeyPerDaySchema });
+            console.log(`New Per_Key_Per_Day entries for Key ${mainTask.Key} inserted successfully.`);
+        }
 
-            <Button variant="primary" type="submit" disabled={loading || isFieldDisabledForNonAdmin}>
-                {loading ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" /> : 'Update Task'}
-            </Button>
-        </Form>
-    );
-};
+        res.status(200).send({ message: 'Task and associated schedule data updated successfully.' });
 
-export default FormComponent;
+    } catch (error) {
+        console.error('Error updating task and schedule in BigQuery:', error);
+        if (error.response && error.response.insertErrors) {
+            console.error('BigQuery specific insert errors details:');
+            error.response.insertErrors.forEach((insertError, index) => {
+                console.error(`  Row ${index} had errors:`);
+                insertError.errors.forEach(e => console.error(`    - Reason: ${e.reason}, Message: ${e.message}`));
+                console.error('  Raw row that failed:', JSON.stringify(insertError.row, null, 2));
+            });
+        } else if (error.code && error.errors) {
+            console.error('Google Cloud API Error:', JSON.stringify(error.errors, null, 2));
+        }
+
+        res.status(500).json({
+            message: 'Failed to update task due to a backend error.',
+            details: error.message || 'Unknown server error.',
+            bigQueryErrorDetails: error.response?.insertErrors ? JSON.stringify(error.response.insertErrors) : null,
+        });
+    }
+});
+
+// Delete Task from BigQuery
+app.delete('/api/data/:deliveryCode', async (req, res) => {
+    const { deliveryCode } = req.params;
+    console.log("hi", req.params)
+    const query = `
+        DELETE FROM \`${projectId}.${bigQueryDataset}.${bigQueryTable}\`
+        WHERE DelCode_w_o__ = @deliveryCode
+    `;
+
+    const options = {
+        query: query,
+        params: { deliveryCode },
+        types: { deliveryCode: 'STRING' }, // Explicitly define type for deliveryCode
+    };
+
+    try {
+        const [job] = await bigQueryClient.createQueryJob(options);
+        await job.getQueryResults();
+        res.status(200).send({ message: 'All tasks with the specified delivery code were deleted successfully.' });
+    } catch (error) {
+        console.error('Error deleting tasks from BigQuery:', error);
+        res.status(500).send({ error: 'Failed to delete tasks from BigQuery.' });
+    }
+});
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
