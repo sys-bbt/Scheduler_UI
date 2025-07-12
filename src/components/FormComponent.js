@@ -82,7 +82,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [startDate, setStartDate] = useState(() =>
         task?.Planned_Start_Timestamp
             ? moment(task.Planned_Start_Timestamp)
-            : null
+            : moment() // Changed: Default to today's date if no planned start timestamp
     );
 
     const [endDate, setEndDate] = useState(() =>
@@ -212,7 +212,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         };
 
         fetchTaskAndScheduleData();
-    }, [task, form, startDate]); // Added startDate to dependencies to ensure initial hours are correctly set relative to it
+    }, [task, form]); // Removed startDate from dependencies
 
     // --- EFFECT HOOK 2: SET INITIAL PERSON RESPONSIBLE AND CONTROL EDITABILITY ---
     useEffect(() => {
@@ -258,7 +258,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         const days = e.target.value;
         const numericDays = parseInt(days, 10) || 0;
         setNumberOfDays(numericDays);
-        if (startDate && numericDays > 0) {
+        if (startDate && numericDays > 0) { // startDate will now always be a moment object (either from task or today)
             calculateEndDate(startDate, numericDays);
         } else {
             setEndDate(null);
