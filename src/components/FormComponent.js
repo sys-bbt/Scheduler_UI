@@ -17,14 +17,14 @@ const ADMIN_EMAILS_FRONTEND = [
 
 // Helper function to format total minutes into "Xh Ym" string
 const formatMinutesToHoursMinutes = (totalMinutes) => {
-    if (totalMinutes === 0) return '0h';
+    if (totalMinutes === 0) return '0m'; // Show 0m if total is 0
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     let result = '';
     if (hours > 0) {
         result += `${hours}h`;
     }
-    if (minutes > 0 || (hours === 0 && minutes === 0)) { // Show 0m if total is 0
+    if (minutes > 0) {
         result += `${minutes}m`;
     }
     return result.trim();
@@ -59,7 +59,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         Card_Corner_Status: '',
         Number_of_Days: 0,
     });
-    const [dailyHours, setDailyHours] = useState({}); // Stores hours for each day: { 'YYYY-MM-DD': hours }
+    const [dailyHours, setDailyHours] = useState({}); // Stores hours for each day: { 'YYYY-MM-DD': totalMinutes }
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
@@ -138,12 +138,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     if (data && data.entries) {
                         data.entries.forEach(entry => {
                             // Convert hours from backend to minutes for frontend state
-                            existingDailyHours[moment(entry.Day).format('YYYY-MM-DD')] = (entry.Duration || 0) * 60;
+                            existingDailyHours[moment(entry.Day).format('YYYY-MM-DD')] = Math.round((entry.Duration || 0) * 60); // Round to nearest minute
                         });
                     }
                     setDailyHours(existingDailyHours);
                 } catch (err) {
                     console.error("Error fetching existing daily hours:", err);
+                    // Do not set a critical error, just log it
                 }
             };
             if (task.Key) {
@@ -265,7 +266,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
                 Responsibility: formData.Responsibility,
                 Current_Status: formData.Current_Status,
-                Email: formData.Email,
+                Email: formData.Email, // This field is still in formData, but removed from backend query
                 Emails: formData.Emails,
                 Total_Tasks: formData.Total_Tasks,
                 Completed_Tasks: formData.Completed_Tasks,
@@ -279,12 +280,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
             // Prepare data for Per_Key_Per_Day table from dailyHours state
             const perKeyPerDayRows = Object.keys(dailyHours).map(date => ({
-                Key: mainTaskPayload.Key, // Use key from mainTaskPayload
-                Day: date, // Already in 'YYYY-MM-DD' format
-                Duration: dailyHours[date] / 60, // Convert minutes back to hours for backend
-                Duration_Unit: 'Hours',
-                Planned_Delivery_Slot: null, // As per schema, this can be nullable or derived
-                Responsibility: mainTaskPayload.Responsibility, // Use responsibility from mainTaskPayload
+                Key: mainTaskPayload.Key,
+                Day: date,
+                Duration: dailyHours[date], // Send minutes directly
+                Duration_Unit: 'Minutes', // Explicitly set to 'Minutes'
+                Planned_Delivery_Slot: null,
+                Responsibility: mainTaskPayload.Responsibility,
             })).filter(row => row.Duration > 0); // Only send rows with planned hours > 0
 
             const payload = {
@@ -371,7 +372,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     name="Planned_Start_Timestamp"
                     // Pass moment object to value, format for display
                     value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
-                    onChange={handleStartDateChange} // No longer converting to moment here
+                    onChange={handleStartDateChange}
                     disabled={isFieldDisabledForNonAdmin}
                     required // Made required
                 />
@@ -416,7 +417,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         disabled={isFieldDisabledForNonAdmin}
                     />
                     <div className="d-flex justify-content-between">
-                        <span>0h</span>
+                        <span>0m</span>
                         <span>{formatMinutesToHoursMinutes(dailyHours[date])}</span> {/* Formatted display */}
                         <span>8h (480m)</span> {/* Max value display */}
                     </div>
