@@ -8,7 +8,6 @@ const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localh
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -29,8 +28,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         Frequency___Timeline: '',
         Client: '',
         Short_Description: '',
-        Planned_Start_Timestamp: '', // Changed to empty string for date input
-        Planned_Delivery_Timestamp: '', // Changed to empty string for date input
+        Planned_Start_Timestamp: null, // Now stores moment object or null
+        Planned_Delivery_Timestamp: null, // Now stores moment object or null
         Responsibility: '',
         Current_Status: '',
         Email: '',
@@ -53,14 +52,21 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [loadingPersons, setLoadingPersons] = useState(true);
     const [personError, setPersonError] = useState(null);
 
-    // Function to generate daily sliders data based on start date and number of days
-    const generateDailySliders = useCallback((startDateStr, numDays) => {
-        const newDailyHours = {};
-        const startDate = moment(startDateStr);
+    // Function to calculate End Date
+    const calculateEndDate = useCallback((startMoment, numDays) => {
+        if (startMoment && startMoment.isValid() && numDays > 0) {
+            // End date is 'numDays' *after* start date, inclusive. So add numDays - 1.
+            return startMoment.clone().add(numDays - 1, 'days');
+        }
+        return null;
+    }, []);
 
-        if (startDate.isValid() && numDays > 0) {
+    // Function to generate daily sliders data based on start date and number of days
+    const generateDailySliders = useCallback((startMoment, numDays) => {
+        const newDailyHours = {};
+        if (startMoment && startMoment.isValid() && numDays > 0) {
             for (let i = 0; i < numDays; i++) {
-                const date = startDate.clone().add(i, 'days').format('YYYY-MM-DD');
+                const date = startMoment.clone().add(i, 'days').format('YYYY-MM-DD');
                 // Preserve existing hours if available, otherwise default to 0
                 newDailyHours[date] = dailyHours[date] !== undefined ? dailyHours[date] : 0;
             }
@@ -70,6 +76,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     useEffect(() => {
         if (task) {
+            const initialStartDate = task.Planned_Start_Timestamp ? moment(task.Planned_Start_Timestamp) : null;
+            const initialNumberOfDays = task.Number_of_Days || 0;
+            const initialEndDate = calculateEndDate(initialStartDate, initialNumberOfDays);
+
             setFormData({
                 Key: task.Key || '',
                 Delivery_code: task.Delivery_code || '',
@@ -79,8 +89,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Frequency___Timeline: task.Frequency___Timeline || '',
                 Client: task.Client || '',
                 Short_Description: task.Short_Description || '',
-                Planned_Start_Timestamp: task.Planned_Start_Timestamp ? moment(task.Planned_Start_Timestamp).format('YYYY-MM-DD') : '',
-                Planned_Delivery_Timestamp: task.Planned_Delivery_Timestamp ? moment(task.Planned_Delivery_Timestamp).format('YYYY-MM-DD') : '',
+                Planned_Start_Timestamp: initialStartDate, // Store as moment object
+                Planned_Delivery_Timestamp: initialEndDate, // Store as moment object
                 Responsibility: task.Responsibility || '',
                 Email: task.Email || '',
                 Emails: task.Emails || '',
@@ -93,7 +103,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Updated_at: task.Updated_at || null,
                 Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss || '',
                 Card_Corner_Status: task.Card_Corner_Status || '',
-                Number_of_Days: task.Number_of_Days || 0,
+                Number_of_Days: initialNumberOfDays,
             });
 
             // Fetch existing daily hours for this task if available
@@ -101,8 +111,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 try {
                     const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day-by-key?key=${encodeURIComponent(task.Key)}`);
                     if (!response.ok) {
-                        // If no data found, it's not an error, just means no existing daily hours
-                        if (response.status === 404) return;
+                        if (response.status === 404) {
+                            console.log('No existing daily hours found for this key.');
+                            return; // Not an error if no data found
+                        }
                         const errorData = await response.json();
                         throw new Error(errorData.error || 'Failed to fetch existing daily hours.');
                     }
@@ -116,19 +128,22 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     setDailyHours(existingDailyHours);
                 } catch (err) {
                     console.error("Error fetching existing daily hours:", err);
-                    // Do not set a critical error, just log it
                 }
             };
-            if (task.Key) { // Only fetch if task key exists
+            if (task.Key) {
                 fetchDailyHours();
             }
         }
-    }, [task, generateDailySliders]); // Added generateDailySliders to dependencies
+    }, [task, calculateEndDate]); // Dependencies: task and calculateEndDate
 
     // Effect to regenerate daily sliders when start date or number of days changes
     useEffect(() => {
         generateDailySliders(formData.Planned_Start_Timestamp, formData.Number_of_Days);
-    }, [formData.Planned_Start_Timestamp, formData.Number_of_Days, generateDailySliders]);
+        setFormData(prevData => ({
+            ...prevData,
+            Planned_Delivery_Timestamp: calculateEndDate(prevData.Planned_Start_Timestamp, prevData.Number_of_Days)
+        }));
+    }, [formData.Planned_Start_Timestamp, formData.Number_of_Days, generateDailySliders, calculateEndDate]);
 
 
     // Fetch people mapping data
@@ -162,24 +177,14 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         }));
     };
 
-    const handleDateChange = (e) => {
-        const { name, value } = e.target;
+    const handleStartDateChange = (dateMoment) => { // 'dateMoment' is already a moment object
         setFormData(prevData => {
             const updatedData = {
                 ...prevData,
-                [name]: value
+                Planned_Start_Timestamp: dateMoment // Store moment object directly
             };
-
-            // If Planned_Start_Timestamp changes, recalculate Planned_Delivery_Timestamp
-            if (name === 'Planned_Start_Timestamp' && updatedData.Number_of_Days > 0) {
-                const startDate = moment(value);
-                if (startDate.isValid()) {
-                    const endDate = startDate.add(updatedData.Number_of_Days, 'days');
-                    updatedData.Planned_Delivery_Timestamp = endDate.format('YYYY-MM-DD');
-                } else {
-                    updatedData.Planned_Delivery_Timestamp = '';
-                }
-            }
+            // Recalculate end date based on new start date and existing number of days
+            updatedData.Planned_Delivery_Timestamp = calculateEndDate(dateMoment, updatedData.Number_of_Days);
             return updatedData;
         });
     };
@@ -189,20 +194,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         setFormData(prevData => {
             const updatedData = {
                 ...prevData,
-                // Ensure Number_of_Days is 0 or greater
                 Number_of_Days: isNaN(value) || value < 0 ? 0 : value
             };
-
-            // Recalculate Planned_Delivery_Timestamp if Planned_Start_Timestamp exists
-            if (updatedData.Planned_Start_Timestamp) {
-                const startDate = moment(updatedData.Planned_Start_Timestamp);
-                if (startDate.isValid()) {
-                    const endDate = startDate.add(updatedData.Number_of_Days, 'days');
-                    updatedData.Planned_Delivery_Timestamp = endDate.format('YYYY-MM-DD');
-                } else {
-                    updatedData.Planned_Delivery_Timestamp = '';
-                }
-            }
+            // Recalculate end date based on existing start date and new number of days
+            updatedData.Planned_Delivery_Timestamp = calculateEndDate(updatedData.Planned_Start_Timestamp, updatedData.Number_of_Days);
             return updatedData;
         });
     };
@@ -230,7 +225,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         setSuccess(null);
 
         // Basic validation for required fields
-        if (!formData.Planned_Start_Timestamp || formData.Number_of_Days <= 0 || !formData.Responsibility) {
+        if (!formData.Planned_Start_Timestamp || !formData.Planned_Start_Timestamp.isValid() || formData.Number_of_Days <= 0 || !formData.Responsibility) {
             setError("Please fill all required fields: Start Date, Number of Days (must be > 0), and Person Responsible.");
             setLoading(false);
             return;
@@ -247,8 +242,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Frequency___Timeline: formData.Frequency___Timeline,
                 Client: formData.Client,
                 Short_Description: formData.Short_Description,
-                Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? moment(formData.Planned_Start_Timestamp).toISOString() : null,
-                Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? moment(formData.Planned_Delivery_Timestamp).toISOString() : null,
+                // Convert moment objects to ISO strings for backend
+                Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null,
+                Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
                 Responsibility: formData.Responsibility,
                 Current_Status: formData.Current_Status,
                 Email: formData.Email,
@@ -265,13 +261,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
             // Prepare data for Per_Key_Per_Day table from dailyHours state
             const perKeyPerDayRows = Object.keys(dailyHours).map(date => ({
-                Key: formData.Key,
+                Key: mainTaskPayload.Key, // Use key from mainTaskPayload
                 Day: date, // Already in 'YYYY-MM-DD' format
                 Duration: dailyHours[date],
                 Duration_Unit: 'Hours',
                 Planned_Delivery_Slot: null, // As per schema, this can be nullable or derived
-                Responsibility: formData.Responsibility,
-            })).filter(row => row.Duration > 0); // Only send rows with planned hours
+                Responsibility: mainTaskPayload.Responsibility, // Use responsibility from mainTaskPayload
+            })).filter(row => row.Duration > 0); // Only send rows with planned hours > 0
 
             const payload = {
                 mainTask: mainTaskPayload,
@@ -316,6 +312,22 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     // The "System" email for tasks that should be globally visible to non-admins
     // const SYSTEM_EMAIL_FOR_GLOBAL_TASKS = "systems@brightbraintech.com"; // Already defined globally if needed
 
+    // --- DIAGNOSTIC CONSOLE LOGS ---
+    useEffect(() => {
+        console.log('--- FormComponent Debug Info ---');
+        console.log('userEmail (from context):', userEmail);
+        console.log('isAdmin:', isAdmin);
+        console.log('formData.Emails (task assigned email):', formData.Emails);
+        console.log('currentUserEmail (prop):', currentUserEmail);
+        console.log('isFieldDisabledForNonAdmin:', isFieldDisabledForNonAdmin);
+        console.log('formData.Planned_Start_Timestamp:', formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : 'null');
+        console.log('formData.Planned_Delivery_Timestamp:', formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : 'null');
+        console.log('formData.Number_of_Days:', formData.Number_of_Days);
+        console.log('dailyHours:', dailyHours);
+        console.log('--------------------------------');
+    }, [userEmail, isAdmin, formData.Emails, currentUserEmail, isFieldDisabledForNonAdmin, formData.Planned_Start_Timestamp, formData.Planned_Delivery_Timestamp, formData.Number_of_Days, dailyHours]);
+
+
     return (
         <Form onSubmit={handleSubmit} className="p-3 border rounded shadow-sm bg-light">
             {error && <Alert variant="danger">{error}</Alert>}
@@ -339,8 +351,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 <Form.Control
                     type="date"
                     name="Planned_Start_Timestamp"
-                    value={formData.Planned_Start_Timestamp}
-                    onChange={handleDateChange}
+                    // Pass moment object to value, format for display
+                    value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
+                    onChange={e => handleStartDateChange(moment(e.target.value))} // Convert string to moment object
                     disabled={isFieldDisabledForNonAdmin}
                     required // Made required
                 />
@@ -364,7 +377,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 <Form.Control
                     type="date"
                     name="Planned_Delivery_Timestamp"
-                    value={formData.Planned_Delivery_Timestamp}
+                    // Pass moment object to value, format for display
+                    value={formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : ''}
                     readOnly // This field is calculated, not directly editable
                     disabled={true} // Disabled as requested
                 />
