@@ -447,6 +447,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         480: '8 h',
     };
 
+    // Function to disable dates before today
+    const disabledPastDates = (current) => {
+        // Can not select days before today
+        return current && current < moment().startOf('day');
+    };
+
     // Define personsToDisplay based on user role
     const personsToDisplay = isAdmin
         ? ALL_AVAILABLE_PERSONS_HARDCODED
@@ -473,6 +479,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             value={startDate}
                             placeholder="Select start date"
                             style={{ width: '100%' }}
+                            disabledDate={disabledPastDates} // Added disabledDate prop
                         />
                     </Form.Item>
                 </Col>
