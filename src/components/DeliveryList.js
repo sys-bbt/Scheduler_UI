@@ -36,7 +36,7 @@ const debounce = (func, delay) => {
 const DeliveryList = () => {
   const { userEmail, userName, logoutUser } = useContext(UserContext);
   const [deliveries, setDeliveries] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClient, setSelectedClient] = useState('');
@@ -229,11 +229,15 @@ const DeliveryList = () => {
                       </div>
                       <ProgressBar
                         now={progress}
-                        label={<span style={{ color: 'black' }}>{`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`}</span>} // Set label color to black
+                        // Removed the label prop from ProgressBar
                         className="my-3"
                         variant={progressBarVariant} // Dynamic variant
                       />
-                      <div className="d-flex justify-content-between align-items-center">
+                      {/* Moved the progress text outside the ProgressBar */}
+                      <p className="mb-0 text-center" style={{ color: 'black', fontWeight: 'bold' }}>
+                        {`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`}
+                      </p>
+                      <div className="d-flex justify-content-between align-items-center mt-2">
                         <p className="mb-0 text-primary">
                           <FiClock style={{ marginRight: '5px' }} /> {delivery.Time_Left_For_Next_Task_dd_hh_mm_ss || 'N/A'}
                         </p>
