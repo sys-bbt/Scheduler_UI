@@ -15,7 +15,7 @@ const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localh
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-   "systems@brightbraintech.com",
+    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -229,7 +229,7 @@ const DeliveryList = () => {
                       </div>
                       <ProgressBar
                         now={progress}
-                        label={`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`}
+                        label={<span style={{ color: 'black' }}>{`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`}</span>} // Set label color to black
                         className="my-3"
                         variant={progressBarVariant} // Dynamic variant
                       />
