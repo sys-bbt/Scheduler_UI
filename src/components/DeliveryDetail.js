@@ -4,12 +4,12 @@ import { Container, Card, ListGroup, Row, Col, Spinner } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
 import { FaPause, FaPlay, FaStop, FaCalendarAlt } from 'react-icons/fa';
-import { FiCheckCircle } from 'react-icons/fi'; // Added import for FiCheckCircle
+// Removed FiCheckCircle import as it's no longer needed for "Mark as Complete"
 import FormComponent from './FormComponent';
 import { UserContext } from './UserContext';
 import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
-import moment from 'moment'; // Added import for moment
+import moment from 'moment';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
@@ -72,7 +72,6 @@ const DeliveryDetail = () => {
             const mainDeliveryDetail = data.find(task => task.Step_ID === 0);
             setDeliveryDetails(mainDeliveryDetail || data[0]); // Fallback if no Step_ID=0
 
-            // Removed frontend filtering for tasks.
             // All tasks received from the /api/workflow-details/:deliveryCode endpoint will be displayed.
             const sortedTasks = data.sort((a, b) => {
                 if (a.Step_ID === 0) return -1;
@@ -92,7 +91,7 @@ const DeliveryDetail = () => {
 
     useEffect(() => {
         fetchDeliveryDetails();
-    }, [deliveryCode, userEmail, isAdmin]); // Re-fetch if deliveryCode or userEmail/isAdmin changes
+    }, [deliveryCode, userEmail, isAdmin]);
 
 
     const handleFormSubmit = (updatedTaskData) => {
@@ -109,9 +108,10 @@ const DeliveryDetail = () => {
         fetchDeliveryDetails(); // Re-fetch all details to ensure consistency
     };
 
-    const handleActionClick = (taskKey, type) => {
+    // Modified handleActionClick to always set actionType to 'edit'
+    const handleActionClick = (taskKey) => {
         setActiveTaskKey(taskKey);
-        setActionType(type);
+        setActionType('edit'); // Always set to 'edit' when a task is clicked
     };
 
     const onVisibleChange = (visible) => {
@@ -123,10 +123,9 @@ const DeliveryDetail = () => {
 
     const renderMenu = (task) => (
         <Menu>
-            <MenuItem key="edit" onClick={() => handleActionClick(task.Key, 'edit')}>
+            <MenuItem key="edit" onClick={() => handleActionClick(task.Key)}> {/* Removed actionType parameter */}
                 Edit
             </MenuItem>
-            {/* Add more actions here if needed, e.g., Pause, Play, Stop */}
             {/* Conditional rendering based on task status */}
             {task.Current_Status === 'Running' && (
                 <MenuItem key="pause" onClick={() => handleActionClick(task.Key, 'pause')}>
@@ -143,12 +142,7 @@ const DeliveryDetail = () => {
                     <FaStop style={{ marginRight: '5px' }} /> Stop
                 </MenuItem>
             )}
-            {/* Example: Mark as Completed */}
-            {task.Current_Status !== 'Completed' && (
-                <MenuItem key="complete" onClick={() => handleActionClick(task.Key, 'complete')}>
-                    <FiCheckCircle style={{ marginRight: '5px' }} /> Mark as Completed
-                </MenuItem>
-            )}
+            {/* Removed "Mark as Completed" button */}
         </Menu>
     );
 
@@ -195,9 +189,11 @@ const DeliveryDetail = () => {
             <Row xs={1} md={2} lg={3} className="g-4">
                 {tasks.length > 0 ? (
                     tasks.map((task) => {
-                        // Removed the shouldShowTask filtering logic here.
-                        // All tasks received from the backend for this workflow will be displayed.
                         const isTaskCompleted = task.Current_Status === COMPLETED_TASK_STATUS;
+                        // Determine the status to display
+                        const displayStatus = task.Planned_Start_Timestamp && task.Current_Status === 'Unassigned'
+                            ? 'Scheduled'
+                            : task.Current_Status;
 
                         return (
                             <Col key={task.Key}>
@@ -216,7 +212,7 @@ const DeliveryDetail = () => {
                                                 <Card.Text>
                                                     <strong>Step ID:</strong> {task.Step_ID}<br />
                                                     <strong>Responsibility:</strong> {task.Responsibility}<br />
-                                                    <strong>Status:</strong> {task.Current_Status}
+                                                    <strong>Status:</strong> {displayStatus} {/* Updated status display */}
                                                 </Card.Text>
                                                 <div className="d-flex justify-content-between align-items-center mt-3">
                                                     {task.Planned_Start_Timestamp && (
