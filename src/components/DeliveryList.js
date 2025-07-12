@@ -15,7 +15,7 @@ const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localh
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-   
+    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -216,7 +216,7 @@ const DeliveryList = () => {
                       </div>
                       <ProgressBar
                         now={progress}
-                        label={`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`} {/* Updated label */}
+                        label={`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`} // Updated label
                         className="my-3"
                         variant={progressBarVariant} // Dynamic variant
                       />
@@ -237,7 +237,7 @@ const DeliveryList = () => {
                           onClick={(e) => {
                             e.stopPropagation();
                             const el = document.createElement('textarea');
-                            el.value = delivery.delCode;
+                            el.value = delivery.DelCode_w_o__; // Corrected to DelCode_w_o__
                             document.body.appendChild(el);
                             el.select();
                             document.execCommand('copy');
@@ -257,23 +257,4 @@ const DeliveryList = () => {
           })
         ) : (
           <Col>
-            <p className="text-center">No deliveries found matching your criteria.</p>
-          </Col>
-        )}
-      </Row>
-
-      <div className="delivery-list-end"></div>
-
-      {loading && deliveries.length > 0 && ( // Show spinner when loading more, but preserve existing data
-        <div className="d-flex justify-content-center align-items-center" style={{ height: '100px' }}>
-          <FaSpinner
-            className="spinner-icon"
-            style={{ fontSize: '2rem', color: '#007bff', animation: 'spin 10s linear infinite' }}
-          />
-        </div>
-      )}
-    </Container>
-  );
-};
-
-export default DeliveryList;
+            <p className="te
