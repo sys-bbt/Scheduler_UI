@@ -71,10 +71,12 @@ const DeliveryDetail = () => {
             const mainDeliveryDetail = data.find(task => task.Step_ID === 0);
             setDeliveryDetails(mainDeliveryDetail || data[0]); // Fallback if no Step_ID=0
 
+            // Filter out Step_ID = 0 from the tasks array for display
+            const tasksToDisplay = data.filter(task => task.Step_ID !== 0);
+
             // All tasks received from the /api/workflow-details/:deliveryCode endpoint will be displayed.
-            const sortedTasks = data.sort((a, b) => {
-                if (a.Step_ID === 0) return -1;
-                if (b.Step_ID === 0) return 1;
+            const sortedTasks = tasksToDisplay.sort((a, b) => {
+                // Sort by Step_ID ascending for the remaining tasks.
                 return a.Step_ID - b.Step_ID;
             });
 
