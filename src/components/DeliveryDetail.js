@@ -27,7 +27,7 @@ const ADMIN_EMAILS_FRONTEND = [
 
 const DeliveryDetail = () => {
     const location = useLocation();
-    const delCodeMatch = location.pathname.match(/\/delivery\/data\/(.*)/);
+    const delCode = location.pathname.substring(location.pathname.lastIndexOf('/') + 1);
     const delCode = delCodeMatch ? delCodeMatch[1] : null;
 
     const { userEmail } = useContext(UserContext);
