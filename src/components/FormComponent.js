@@ -15,6 +15,21 @@ const ADMIN_EMAILS_FRONTEND = [
     "hitesh.r@brightbraintech.com"
 ];
 
+// Helper function to format total minutes into "Xh Ym" string
+const formatMinutesToHoursMinutes = (totalMinutes) => {
+    if (totalMinutes === 0) return '0h';
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    let result = '';
+    if (hours > 0) {
+        result += `${hours}h`;
+    }
+    if (minutes > 0 || (hours === 0 && minutes === 0)) { // Show 0m if total is 0
+        result += `${minutes}m`;
+    }
+    return result.trim();
+};
+
 const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const { userEmail } = useContext(UserContext); // Use userEmail from context
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
@@ -122,7 +137,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     const existingDailyHours = {};
                     if (data && data.entries) {
                         data.entries.forEach(entry => {
-                            existingDailyHours[moment(entry.Day).format('YYYY-MM-DD')] = entry.Duration;
+                            // Convert hours from backend to minutes for frontend state
+                            existingDailyHours[moment(entry.Day).format('YYYY-MM-DD')] = (entry.Duration || 0) * 60;
                         });
                     }
                     setDailyHours(existingDailyHours);
@@ -177,14 +193,16 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         }));
     };
 
-    const handleStartDateChange = (dateMoment) => { // 'dateMoment' is already a moment object
+    const handleStartDateChange = (e) => { // e.target.value is string 'YYYY-MM-DD'
+        const dateString = e.target.value;
+        const dateMoment = moment(dateString); // Convert string to moment object
         setFormData(prevData => {
             const updatedData = {
                 ...prevData,
-                Planned_Start_Timestamp: dateMoment // Store moment object directly
+                Planned_Start_Timestamp: dateMoment.isValid() ? dateMoment : null // Store moment object directly
             };
             // Recalculate end date based on new start date and existing number of days
-            updatedData.Planned_Delivery_Timestamp = calculateEndDate(dateMoment, updatedData.Number_of_Days);
+            updatedData.Planned_Delivery_Timestamp = calculateEndDate(updatedData.Planned_Start_Timestamp, updatedData.Number_of_Days);
             return updatedData;
         });
     };
@@ -203,7 +221,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     };
 
     const handleDailyHoursSliderChange = (date) => (e) => {
-        const value = parseInt(e.target.value, 10);
+        const value = parseInt(e.target.value, 10); // Value from slider is in minutes
         setDailyHours(prevDailyHours => ({
             ...prevDailyHours,
             [date]: isNaN(value) ? 0 : value
@@ -263,7 +281,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             const perKeyPerDayRows = Object.keys(dailyHours).map(date => ({
                 Key: mainTaskPayload.Key, // Use key from mainTaskPayload
                 Day: date, // Already in 'YYYY-MM-DD' format
-                Duration: dailyHours[date],
+                Duration: dailyHours[date] / 60, // Convert minutes back to hours for backend
                 Duration_Unit: 'Hours',
                 Planned_Delivery_Slot: null, // As per schema, this can be nullable or derived
                 Responsibility: mainTaskPayload.Responsibility, // Use responsibility from mainTaskPayload
@@ -353,7 +371,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     name="Planned_Start_Timestamp"
                     // Pass moment object to value, format for display
                     value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
-                    onChange={e => handleStartDateChange(moment(e.target.value))} // Convert string to moment object
+                    onChange={handleStartDateChange} // No longer converting to moment here
                     disabled={isFieldDisabledForNonAdmin}
                     required // Made required
                 />
@@ -391,16 +409,16 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     <Form.Range
                         name={`hours-for-${date}`}
                         min="0"
-                        max="8"
-                        step="1"
+                        max="480" // 8 hours * 60 minutes
+                        step="1" // Each minute
                         value={dailyHours[date]}
                         onChange={handleDailyHoursSliderChange(date)}
                         disabled={isFieldDisabledForNonAdmin}
                     />
                     <div className="d-flex justify-content-between">
                         <span>0h</span>
-                        <span>{dailyHours[date]}h</span>
-                        <span>8h</span>
+                        <span>{formatMinutesToHoursMinutes(dailyHours[date])}</span> {/* Formatted display */}
+                        <span>8h (480m)</span> {/* Max value display */}
                     </div>
                 </Form.Group>
             ))}
