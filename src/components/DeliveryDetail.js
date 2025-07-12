@@ -38,7 +38,7 @@ const DeliveryDetail = () => {
     const [actionType, setActionType] = useState(null); // 'edit', 'pause', 'play', 'stop'
 
     const { userEmail } = useContext(UserContext); // Get userEmail from context
-    const isAdmin = ADMIN_EMAELS_FRONTEND.includes(userEmail);
+    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
 
     const fetchDeliveryDetails = async () => {
