@@ -36,7 +36,7 @@ const debounce = (func, delay) => {
 const DeliveryList = () => {
   const { userEmail, userName, logoutUser } = useContext(UserContext);
   const [deliveries, setDeliveries] = useState([]);
-  const [loading, setLoading] = true);
+  const [loading, setLoading] = useState(true); // Added missing semicolon here
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClient, setSelectedClient] = useState('');
