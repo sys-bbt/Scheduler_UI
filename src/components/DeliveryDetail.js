@@ -220,6 +220,11 @@ const DeliveryDetail = () => {
                         // Use displayStatus for the isTaskScheduled check
                         const isTaskScheduled = displayStatus === 'Scheduled'; 
 
+                        // Safely get the timestamp value, handling BigQuery's object structure
+                        const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
+                            ? task.Planned_Start_Timestamp.value
+                            : task.Planned_Start_Timestamp;
+
                         return (
                             <Col key={task.Key}>
                                 <Card
@@ -235,13 +240,13 @@ const DeliveryDetail = () => {
                                             <strong>Status:</strong> {displayStatus} {/* Updated status display */}
                                         </Card.Text>
                                         <div className="d-flex justify-content-between align-items-center mt-3">
-                                            {task.Planned_Start_Timestamp && (
+                                            {rawPlannedStartTimestamp && ( // Use the safely extracted timestamp
                                                 <p className="text-muted mb-0">
                                                     <FaCalendarAlt style={{ marginRight: '5px' }} />
                                                     {/* Log the raw timestamp before formatting */}
-                                                    {console.log(`Task Key: ${task.Key}, Raw Planned_Start_Timestamp:`, task.Planned_Start_Timestamp)}
+                                                    {console.log(`Task Key: ${task.Key}, Raw Planned_Start_Timestamp:`, rawPlannedStartTimestamp)}
                                                     {/* Parse as UTC, then format to YYYY-MM-DD */}
-                                                    Start: {moment.utc(task.Planned_Start_Timestamp).format('YYYY-MM-DD')}
+                                                    Start: {moment.utc(rawPlannedStartTimestamp).format('YYYY-MM-DD')}
                                                 </p>
                                             )}
                                             {task.Current_Status === 'Paused' && (
