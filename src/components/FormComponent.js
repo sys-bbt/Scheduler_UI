@@ -232,12 +232,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
 
 
     const handleStartDateChange = (date) => {
-        // Ensure the date set to state is a UTC moment object if it's not null
-        const newStartDate = date ? moment.utc(date).startOf('day') : null;
-        setStartDate(newStartDate);
+        // Ensure the date object itself is passed to setStartDate
+        // moment() can handle the Ant Design date object directly
+        setStartDate(date); // Changed to directly set the date object
         // Recalculate end date and slider count immediately
-        if (newStartDate && numberOfDays > 0) {
-            calculateEndDate(newStartDate, numberOfDays);
+        if (date && numberOfDays > 0) { // Use 'date' directly here
+            calculateEndDate(date, numberOfDays);
         } else {
             setEndDate(null);
             setSliderCount(0);
@@ -490,7 +490,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                 label="Task Name"
                 rules={[{ required: true, message: 'Please input the task name!' }]}
             >
-                <Input readOnly={true} /> {/* Task Name is always read-only */}
+                {/* FIX 1: Ensure Input displays the value from form.setFieldsValue */}
+                <Input readOnly={true} value={form.getFieldValue('name')} />
             </Form.Item>
 
             <Row gutter={[8, 16]}>
@@ -557,7 +558,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                                 value={hours[index] || 0}
                                 onChange={(e) => handleInputChange(index, e.target.value)}
                                 addonAfter="min"
-                                disabled={isReadOnly} // Disable if read-only
                             />
                         </Col>
                     </Row>
