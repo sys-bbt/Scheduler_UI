@@ -72,16 +72,17 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                     setStartDate(initialStartDate);
                     setEndDate(initialEndDate);
 
+                    let calculatedDaysDiff = 0; // Declare with a default value
                     if (initialStartDate && initialEndDate) {
                         // Calculate daysDiff based on startOf('day') for both
-                        const daysDiff = initialEndDate.diff(initialStartDate, 'days') + 1;
-                        setNumberOfDays(daysDiff);
-                        setSliderCount(daysDiff);
+                        calculatedDaysDiff = initialEndDate.diff(initialStartDate, 'days') + 1;
+                        setNumberOfDays(calculatedDaysDiff);
+                        setSliderCount(calculatedDaysDiff);
                     } else {
                         setNumberOfDays(0);
                         setSliderCount(0);
                     }
-                    console.log('FormComponent (useEffect): Initial startDate:', initialStartDate ? initialStartDate.format() : 'null', 'initialEndDate:', initialEndDate ? initialEndDate.format() : 'null', 'numberOfDays:', daysDiff);
+                    console.log('FormComponent (useEffect): Initial startDate:', initialStartDate ? initialStartDate.format() : 'null', 'initialEndDate:', initialEndDate ? initialEndDate.format() : 'null', 'numberOfDays:', calculatedDaysDiff);
 
 
                     // Fetch per-key-per-day data
