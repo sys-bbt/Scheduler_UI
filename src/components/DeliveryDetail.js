@@ -19,7 +19,6 @@ const COMPLETED_TASK_STATUS = 'Completed'; // Adjust this string to match your B
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-   
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -202,8 +201,8 @@ const DeliveryDetail = () => {
             <h2 className="mb-4">Workflow: {deliveryDetails.Delivery_code}</h2>
             <p><strong>Client:</strong> {deliveryDetails.Client}</p>
             <p><strong>Description:</strong> {deliveryDetails.Short_Description}</p>
-            <p><strong>Planned Start:</strong> {deliveryDetails.Planned_Start_Timestamp ? moment(deliveryDetails.Planned_Start_Timestamp).format('YYYY-MM-DD') : 'N/A'}</p>
-            <p><strong>Planned Delivery:</strong> {deliveryDetails.Planned_Delivery_Timestamp ? moment(deliveryDetails.Planned_Delivery_Timestamp).format('YYYY-MM-DD') : 'N/A'}</p>
+            <p><strong>Planned Start:</strong> {deliveryDetails.Planned_Start_Timestamp ? moment.utc(deliveryDetails.Planned_Start_Timestamp).format('YYYY-MM-DD') : 'N/A'}</p>
+            <p><strong>Planned Delivery:</strong> {deliveryDetails.Planned_Delivery_Timestamp ? moment.utc(deliveryDetails.Planned_Delivery_Timestamp).format('YYYY-MM-DD') : 'N/A'}</p>
             <p><strong>Overall Status:</strong> {deliveryDetails.Current_Status}</p>
 
             <h3 className="mt-5 mb-3">Tasks in this Workflow:</h3>
@@ -239,7 +238,8 @@ const DeliveryDetail = () => {
                                             {task.Planned_Start_Timestamp && (
                                                 <p className="text-muted mb-0">
                                                     <FaCalendarAlt style={{ marginRight: '5px' }} />
-                                                    Start: {moment(task.Planned_Start_Timestamp).format('YYYY-MM-DD')}
+                                                    {/* Parse as UTC, then format to YYYY-MM-DD */}
+                                                    Start: {moment.utc(task.Planned_Start_Timestamp).format('YYYY-MM-DD')}
                                                 </p>
                                             )}
                                             {task.Current_Status === 'Paused' && (
