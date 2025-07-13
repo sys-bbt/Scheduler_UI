@@ -65,6 +65,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
                     // Set initial start and end dates from task if available
                     // Ensure dates are parsed as UTC to avoid timezone issues
+                    // Crucially, ensure startDate is a UTC moment object from the start
                     const initialStartDate = task.Planned_Start_Timestamp ? moment.utc(task.Planned_Start_Timestamp).startOf('day') : null;
                     const initialEndDate = task.Planned_Delivery_Timestamp ? moment.utc(task.Planned_Delivery_Timestamp).startOf('day') : null;
 
@@ -218,10 +219,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
 
     const handleStartDateChange = (date) => {
-        setStartDate(date);
+        // Ensure the date set to state is a UTC moment object if it's not null
+        const newStartDate = date ? moment.utc(date).startOf('day') : null;
+        setStartDate(newStartDate);
         // Recalculate end date and slider count immediately
-        if (date && numberOfDays > 0) {
-            calculateEndDate(date, numberOfDays);
+        if (newStartDate && numberOfDays > 0) {
+            calculateEndDate(newStartDate, numberOfDays);
         } else {
             setEndDate(null);
             setSliderCount(0);
@@ -282,7 +285,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 const totalTime = calculateTotalTime();
                 const slidersData = Array.from({ length: sliderCount }).map((_, index) => {
                     // Ensure calculatedDay is based on the UTC-parsed startDate and formatted for BigQuery DATE
-                    const calculatedDay = moment(startDate).add(index, 'days');
+                    const calculatedDay = moment(startDate).add(index, 'days'); // startDate is already UTC
                     const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
                     return {
                         day: formattedDay,
@@ -498,7 +501,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             {Array.from({ length: sliderCount }).map((_, index) => (
                 <Form.Item
                     key={index}
-                    label={`Hours for ${startDate ? moment(startDate).add(index, 'days').format('DD/MM/YYYY') : `Day ${index + 1}`}`}
+                    label={`Hours for ${startDate ? moment.utc(startDate).add(index, 'days').format('DD/MM/YYYY') : `Day ${index + 1}`}`}
                 >
                     <Row gutter={20}>
                         <Col xs={20}>
