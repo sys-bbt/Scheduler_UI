@@ -544,7 +544,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
             {Array.from({ length: sliderCount }).map((_, index) => {
                 // Log what's being used for calculation
                 console.log(`Slider ${index}: startDate in map: ${startDate ? startDate.format() : 'null'}, index: ${index}`);
-                const displayDate = startDate && startDate.isValid() ? moment.utc(startDate).add(index, 'days').format('DD/MM/YYYY') : `Day ${index + 1}`;
+                // Removed .utc() here to prevent timezone shifting for display
+                const displayDate = startDate && startDate.isValid() ? moment(startDate).add(index, 'days').format('DD/MM/YYYY') : `Day ${index + 1}`;
                 console.log(`Slider ${index}: Calculated displayDate: ${displayDate}`);
 
                 return (
