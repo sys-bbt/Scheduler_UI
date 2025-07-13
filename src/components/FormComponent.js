@@ -23,6 +23,7 @@ console.log('Using Backend API URL:', BACKEND_API_BASE_URL);
 
 
 const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { // Added isReadOnly prop
+    console.log('FormComponent: task prop on render:', task); // Log task prop on every render
     const [form] = Form.useForm();
     const [sliderCount, setSliderCount] = useState(0);
     const [hours, setHours] = useState({});
@@ -292,6 +293,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
 
 
     const handleSubmit = () => {
+        console.log('handleSubmit: task prop value at submission:', task); // Log task prop at submission
         form
             .validateFields()
             .then((values) => {
@@ -321,7 +323,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                     const calculatedDay = moment(startDate).add(index, 'days'); // startDate is already local
                     const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
                     return {
-                        Key: task.Key, // Include the task Key for each entry
+                        Key: task?.Key, // Use optional chaining to safely access task.Key
                         Day: formattedDay,
                         Duration: hours[index] || 0, // Use the value from the hours state
                         Duration_Unit: "min", // Set to "min" as requested
@@ -336,32 +338,32 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                 const newEmails = selectedPersonEmailData ? selectedPersonEmailData.allEmails : null;
                 
                 const mainTaskData = {
-                    Key: task.Key,
-                    Delivery_code: task.Delivery_code,
-                    DelCode_w_o__: task.DelCode_w_o__,
-                    Step_ID: task.Step_ID,
+                    Key: task?.Key, // Use optional chaining
+                    Delivery_code: task?.Delivery_code, // Use optional chaining
+                    DelCode_w_o__: task?.DelCode_w_o__, // Use optional chaining
+                    Step_ID: task?.Step_ID, // Use optional chaining
                     Task_Details: values.name,
-                    Frequency___Timeline: task.Frequency___Timeline,
-                    Client: task.Client,
-                    Short_Description: task.Short_Description,
+                    Frequency___Timeline: task?.Frequency___Timeline, // Use optional chaining
+                    Client: task?.Client, // Use optional chaining
+                    Short_Description: task?.Short_Description, // Use optional chaining
                     Planned_Start_Timestamp: plannedStartTimestamp,
                     Planned_Delivery_Timestamp: plannedDeliveryTimestamp,
                     Responsibility: personResponsible, // This comes from the dropdown
-                    Current_Status: task.Current_Status || 'Scheduled', // Default to 'Scheduled' if unassigned
+                    Current_Status: task?.Current_Status || 'Scheduled', // Default to 'Scheduled' if unassigned, use optional chaining
                     Email: newEmail, // Use the dynamically determined email
                     Emails: newEmails, // Use the dynamically determined emails string
-                    Total_Tasks: task.Total_Tasks,
-                    Completed_Tasks: task.Completed_Tasks,
-                    Planned_Tasks: task.Planned_Tasks,
-                    Percent_Tasks_Completed: task.Percent_Tasks_Completed,
-                    Created_at: task.Created_at || moment.utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Preserve original or set new
+                    Total_Tasks: task?.Total_Tasks, // Use optional chaining
+                    Completed_Tasks: task?.Completed_Tasks, // Use optional chaining
+                    Planned_Tasks: task?.Planned_Tasks, // Use optional chaining
+                    Percent_Tasks_Completed: task?.Percent_Tasks_Completed, // Use optional chaining
+                    Created_at: task?.Created_at || moment.utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Preserve original or set new, use optional chaining
                     Updated_at: moment.utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Always update Updated_at
-                    Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss,
-                    Card_Corner_Status: task.Card_Corner_Status,
+                    Time_Left_For_Next_Task_dd_hh_mm_ss: task?.Time_Left_For_Next_Task_dd_hh_mm_ss, // Use optional chaining
+                    Card_Corner_Status: task?.Card_Corner_Status, // Use optional chaining
                 };
 
-                console.log('Main Task Data for submission:', mainTaskData);
-                console.log('Per Key Per Day Rows for submission:', perKeyPerDayRows);
+                console.log('mainTask (constructed):', mainTaskData);
+                console.log('perKeyPerDayRows (from sliders):', JSON.stringify(perKeyPerDayRows)); // Stringify for clear logging
 
                 // Send both mainTask and perKeyPerDayRows in the request body
                 fetch(`${BACKEND_API_BASE_URL}/api/post`, {
