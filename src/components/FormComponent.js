@@ -22,7 +22,7 @@ const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localh
 console.log('Using Backend API URL:', BACKEND_API_BASE_URL);
 
 
-const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
+const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { // Added isReadOnly prop
     const [form] = Form.useForm();
     const [sliderCount, setSliderCount] = useState(0);
     const [hours, setHours] = useState({});
@@ -97,12 +97,19 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
                         if (taskEntries && taskEntries.length > 0 && initialStartDate) {
                             taskEntries.forEach((entry) => {
-                                if (entry.Duration !== undefined && entry.Day !== undefined) {
-                                    const dayMoment = moment.utc(entry.Day.value); // Parse as UTC
-                                    if (dayMoment.isValid() && dayMoment.isSameOrAfter(initialStartDate, 'day')) {
-                                        const dayIndex = dayMoment.diff(initialStartDate, 'days');
-                                        initialHours[dayIndex] = entry.Duration;
-                                    }
+                                // Safely get Day value, handling BigQuery's Date object structure or direct string
+                                const dayValue = entry.Day && typeof entry.Day === 'object' && entry.Day.value
+                                    ? entry.Day.value
+                                    : entry.Day; // If entry.Day is already a string or null/undefined
+
+                                const dayMoment = dayValue ? moment.utc(dayValue) : null; // Parse as UTC, handle null dayValue
+
+                                // Ensure Duration is a number, default to 0 if null/undefined/invalid
+                                const durationValue = typeof entry.Duration === 'number' ? entry.Duration : (parseInt(entry.Duration, 10) || 0);
+
+                                if (dayMoment && dayMoment.isValid() && dayMoment.isSameOrAfter(initialStartDate, 'day')) {
+                                    const dayIndex = dayMoment.diff(initialStartDate, 'days');
+                                    initialHours[dayIndex] = durationValue;
                                 }
                             });
                         }
@@ -120,11 +127,17 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     const schedules = {};
                     perPersonData.forEach((entry) => {
                         const { Responsibility, Day, Duration_In_Minutes } = entry;
-                        const date = Day.value;
-                        if (!schedules[Responsibility]) {
-                            schedules[Responsibility] = {};
+                        // Safely get Day value for schedules, handling BigQuery's Date object structure or direct string
+                        const dateValue = Day && typeof Day === 'object' && Day.value
+                            ? Day.value
+                            : Day; // If Day is already a string or null/undefined
+
+                        if (Responsibility && dateValue) { // Ensure both are valid
+                            if (!schedules[Responsibility]) {
+                                schedules[Responsibility] = {};
+                            }
+                            schedules[Responsibility][dateValue] = Duration_In_Minutes;
                         }
-                        schedules[Responsibility][date] = Duration_In_Minutes;
                     });
                     setExistingSchedules(schedules);
                 }
@@ -271,6 +284,15 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         form
             .validateFields()
             .then((values) => {
+                // If the form is read-only, prevent submission
+                if (isReadOnly) {
+                    notification.info({
+                        message: 'Read-Only Task',
+                        description: 'This task is scheduled and cannot be edited.',
+                    });
+                    return;
+                }
+
                 // Ensure plannedStartTimestamp and plannedDeliveryTimestamp are formatted as DATE strings (YYYY-MM-DD)
                 // for BigQuery DATE type, or TIMESTAMP with UTC for TIMESTAMP type.
                 // Based on previous discussions, Planned_Start_Timestamp and Planned_Delivery_Timestamp are TIMESTAMP.
@@ -283,15 +305,17 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     : null;
 
                 const totalTime = calculateTotalTime();
-                const slidersData = Array.from({ length: sliderCount }).map((_, index) => {
+                const perKeyPerDayRows = Array.from({ length: sliderCount }).map((_, index) => {
                     // Ensure calculatedDay is based on the UTC-parsed startDate and formatted for BigQuery DATE
-                    const calculatedDay = moment(startDate).add(index, 'days'); // startDate is already UTC
+                    const calculatedDay = moment.utc(startDate).add(index, 'days'); // startDate is already UTC
                     const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
                     return {
-                        day: formattedDay,
-                        duration: hours[index] || 0,
-                        slot: "Null", // Assuming 'Null' is the default slot
-                        personResponsible: personResponsible, // NEW: Include personResponsible for each slider entry
+                        Key: task.Key, // Include the task Key for each entry
+                        Day: formattedDay,
+                        Duration: hours[index] || 0, // Use the value from the hours state
+                        Duration_Unit: "min", // Set to "min" as requested
+                        Planned_Delivery_Slot: "Null", // Assuming 'Null' is the default slot
+                        Responsibility: personResponsible, // Use the selected personResponsible
                     };
                 });
 
@@ -300,7 +324,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 const newEmail = selectedPersonEmailData ? selectedPersonEmailData.primaryEmail : null;
                 const newEmails = selectedPersonEmailData ? selectedPersonEmailData.allEmails : null;
                 
-                const scheduledData = {
+                const mainTaskData = {
                     Key: task.Key,
                     Delivery_code: task.Delivery_code,
                     DelCode_w_o__: task.DelCode_w_o__,
@@ -323,18 +347,21 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     Updated_at: moment.utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Always update Updated_at
                     Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss,
                     Card_Corner_Status: task.Card_Corner_Status,
-                    sliders: slidersData,
                 };
 
-                console.log('Scheduled Data for submission:', scheduledData);
+                console.log('Main Task Data for submission:', mainTaskData);
+                console.log('Per Key Per Day Rows for submission:', perKeyPerDayRows);
 
-                // Using full backend URL for API call to Render.com backend
+                // Send both mainTask and perKeyPerDayRows in the request body
                 fetch(`${BACKEND_API_BASE_URL}/api/post`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(scheduledData),
+                    body: JSON.stringify({
+                        mainTask: mainTaskData,
+                        perKeyPerDayRows: perKeyPerDayRows
+                    }),
                 })
                     .then((response) => {
                         if (!response.ok) {
@@ -349,12 +376,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         });
                         // Pass updated scheduling data back to parent (DeliveryDetail)
                         onSubmit({
-                            personResponsible: scheduledData.Responsibility,
+                            personResponsible: mainTaskData.Responsibility,
                             totalTime: totalTime,
-                            Planned_Delivery_Timestamp: scheduledData.Planned_Delivery_Timestamp,
-                            Current_Status: scheduledData.Current_Status,
-                            Email: scheduledData.Email,
-                            Emails: scheduledData.Emails // Pass back new Emails as well
+                            Planned_Delivery_Timestamp: mainTaskData.Planned_Delivery_Timestamp,
+                            Current_Status: mainTaskData.Current_Status,
+                            Email: mainTaskData.Email,
+                            Emails: mainTaskData.Emails // Pass back new Emails as well
                         });
                     })
                     .catch((error) => {
@@ -375,7 +402,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
 
     const handleSliderChange = (index, value) => {
-        const currentDay = moment(startDate).add(index, 'days').format('YYYY-MM-DD');
+        if (isReadOnly) return; // Prevent changes if read-only
+        // Ensure currentDay is based on the UTC-parsed startDate
+        const currentDay = moment.utc(startDate).add(index, 'days').format('YYYY-MM-DD');
         const maxAllowedMinutes = 480;
         let effectiveValue = value;
 
@@ -395,12 +424,14 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     };
 
     const handleInputChange = (index, value) => {
+        if (isReadOnly) return; // Prevent changes if read-only
         let numericValue = parseInt(value, 10);
         if (isNaN(numericValue)) {
             numericValue = 0;
         }
 
-        const currentDay = moment(startDate).add(index, 'days').format('YYYY-MM-DD');
+        // Ensure currentDay is based on the UTC-parsed startDate
+        const currentDay = moment.utc(startDate).add(index, 'days').format('YYYY-MM-DD');
         const maxAllowedMinutes = 480;
         let effectiveValue = numericValue;
 
@@ -459,7 +490,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 label="Task Name"
                 rules={[{ required: true, message: 'Please input the task name!' }]}
             >
-                <Input readOnly={true} />
+                <Input readOnly={true} /> {/* Task Name is always read-only */}
             </Form.Item>
 
             <Row gutter={[8, 16]}>
@@ -472,6 +503,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             placeholder="Select start date"
                             style={{ width: '100%' }}
                             disabledDate={disabledDateRange}
+                            disabled={isReadOnly} // Disable if read-only
                         />
                     </Form.Item>
                 </Col>
@@ -483,6 +515,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             onChange={handleNumberOfDaysChange}
                             min={0}
                             style={{ width: '100%' }}
+                            disabled={isReadOnly} // Disable if read-only
                         />
                     </Form.Item>
                 </Col>
@@ -513,6 +546,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                                 onChange={(value) => handleSliderChange(index, value)}
                                 value={hours[index] || 0}
                                 tooltip={{ formatter: (value) => `${value} minutes` }}
+                                disabled={isReadOnly} // Disable if read-only
                             />
                         </Col>
                         <Col xs={4}>
@@ -523,6 +557,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                                 value={hours[index] || 0}
                                 onChange={(e) => handleInputChange(index, e.target.value)}
                                 addonAfter="min"
+                                disabled={isReadOnly} // Disable if read-only
                             />
                         </Col>
                     </Row>
@@ -542,8 +577,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     optionFilterProp={(input, option) =>
                         (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                     }
-                    // Disable if the user is not an admin
-                    disabled={!isAdmin || loadingPersons} // Disable if loading persons or not admin
+                    // Disable if the user is not an admin OR if the form is read-only
+                    disabled={!isAdmin || loadingPersons || isReadOnly} // Disable if loading persons, not admin, or read-only
                     loading={loadingPersons} // Show loading spinner if data is being fetched
                 >
                     {personsToDisplay.map((person) => (
@@ -555,7 +590,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             </Form.Item>
 
             <Form.Item>
-                <Button type="primary" htmlType="submit" onClick={handleSubmit}>
+                <Button type="primary" htmlType="submit" onClick={handleSubmit} disabled={isReadOnly}>
                     Submit
                 </Button>
             </Form.Item>
