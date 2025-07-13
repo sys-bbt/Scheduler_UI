@@ -238,6 +238,8 @@ const DeliveryDetail = () => {
                                             {task.Planned_Start_Timestamp && (
                                                 <p className="text-muted mb-0">
                                                     <FaCalendarAlt style={{ marginRight: '5px' }} />
+                                                    {/* Log the raw timestamp before formatting */}
+                                                    {console.log(`Task Key: ${task.Key}, Raw Planned_Start_Timestamp:`, task.Planned_Start_Timestamp)}
                                                     {/* Parse as UTC, then format to YYYY-MM-DD */}
                                                     Start: {moment.utc(task.Planned_Start_Timestamp).format('YYYY-MM-DD')}
                                                 </p>
