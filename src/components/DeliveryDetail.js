@@ -111,10 +111,10 @@ const DeliveryDetail = () => {
     };
 
     // Modified handleActionClick to always set actionType to 'edit' when card is clicked
-    const handleCardClick = (taskKey, currentStatus) => {
+    const handleCardClick = (taskKey, statusToEvaluate) => { // Renamed parameter for clarity
         // Log the exact status and the comparison result
-        const isScheduled = currentStatus === 'Scheduled';
-        console.log(`Task Key: ${taskKey}, Current Status on click: "${currentStatus}", isScheduled check: ${isScheduled}`);
+        const isScheduled = statusToEvaluate === 'Scheduled';
+        console.log(`Task Key: ${taskKey}, Status on click: "${statusToEvaluate}", isScheduled check: ${isScheduled}`);
 
         // Only open the form for editing if the task is NOT 'Scheduled'
         if (!isScheduled) { // Use the boolean variable for clarity
@@ -211,20 +211,22 @@ const DeliveryDetail = () => {
                 {tasks.length > 0 ? (
                     tasks.map((task) => {
                         const isTaskCompleted = task.Current_Status === COMPLETED_TASK_STATUS;
-                        const isTaskScheduled = task.Current_Status === 'Scheduled'; // Determine if task is scheduled
                         // Determine the status to display
                         // If it has a planned start timestamp AND is not 'Completed', show 'Scheduled'
                         // Otherwise, show its actual Current_Status
                         const displayStatus = (task.Planned_Start_Timestamp && task.Current_Status !== COMPLETED_TASK_STATUS)
                             ? 'Scheduled'
                             : task.Current_Status;
+                        
+                        // Use displayStatus for the isTaskScheduled check
+                        const isTaskScheduled = displayStatus === 'Scheduled'; 
 
                         return (
                             <Col key={task.Key}>
                                 <Card
                                     className={`task-card ${isTaskCompleted ? 'task-completed' : ''} ${task.Key === activeTaskKey ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
                                     style={{ width: '100%', cursor: isTaskScheduled ? 'not-allowed' : 'pointer' }} // Change cursor
-                                    onClick={() => handleCardClick(task.Key, task.Current_Status)} // Pass currentStatus
+                                    onClick={() => handleCardClick(task.Key, displayStatus)} // Pass displayStatus
                                 >
                                     <Card.Body>
                                         <Card.Title>{task.Task_Details}</Card.Title>
