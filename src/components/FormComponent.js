@@ -301,7 +301,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                     : null;
 
                 const plannedDeliveryTimestamp = endDate
-                    ? moment(endDate).startOf('day').utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
+                    ? moment(endDate).startOf('day').utc().utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC" // Ensure endDate is also UTC
                     : null;
 
                 const totalTime = calculateTotalTime();
@@ -532,10 +532,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                 </Col>
             </Row>
 
+            {/* FIX: Ensure slider labels update with the current startDate state */}
             {Array.from({ length: sliderCount }).map((_, index) => (
                 <Form.Item
                     key={index}
-                    label={`Hours for ${startDate ? moment.utc(startDate).add(index, 'days').format('DD/MM/YYYY') : `Day ${index + 1}`}`}
+                    label={`Hours for ${startDate && startDate.isValid() ? moment.utc(startDate).add(index, 'days').format('DD/MM/YYYY') : `Day ${index + 1}`}`}
                 >
                     <Row gutter={20}>
                         <Col xs={20}>
