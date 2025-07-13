@@ -18,7 +18,7 @@ const COMPLETED_TASK_STATUS = 'Completed'; // Adjust this string to match your B
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
+   
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -110,9 +110,18 @@ const DeliveryDetail = () => {
     };
 
     // Modified handleActionClick to always set actionType to 'edit' when card is clicked
-    const handleCardClick = (taskKey) => {
-        setActiveTaskKey(taskKey);
-        setActionType('edit'); // Always set to 'edit' when a task card is clicked
+    const handleCardClick = (taskKey, currentStatus) => {
+        // Only open the form for editing if the task is NOT 'Scheduled'
+        if (currentStatus !== 'Scheduled') {
+            setActiveTaskKey(taskKey);
+            setActionType('edit'); // Always set to 'edit' when a task card is clicked
+        } else {
+            // Optionally, show a notification or do nothing if it's scheduled
+            notification.info({
+                message: 'Task Scheduled',
+                description: 'This task is already scheduled and cannot be edited.',
+            });
+        }
     };
 
     // New handler for dropdown menu item clicks (for Pause/Play/Stop)
@@ -197,6 +206,7 @@ const DeliveryDetail = () => {
                 {tasks.length > 0 ? (
                     tasks.map((task) => {
                         const isTaskCompleted = task.Current_Status === COMPLETED_TASK_STATUS;
+                        const isTaskScheduled = task.Current_Status === 'Scheduled'; // Determine if task is scheduled
                         // Determine the status to display
                         // If it has a planned start timestamp AND is not 'Completed', show 'Scheduled'
                         // Otherwise, show its actual Current_Status
@@ -207,9 +217,9 @@ const DeliveryDetail = () => {
                         return (
                             <Col key={task.Key}>
                                 <Card
-                                    className={`task-card ${isTaskCompleted ? 'task-completed' : ''} ${task.Key === activeTaskKey ? 'active-task' : ''}`}
-                                    style={{ width: '100%', cursor: 'pointer' }}
-                                    onClick={() => handleCardClick(task.Key)} // Direct click on card opens form
+                                    className={`task-card ${isTaskCompleted ? 'task-completed' : ''} ${task.Key === activeTaskKey ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
+                                    style={{ width: '100%', cursor: isTaskScheduled ? 'not-allowed' : 'pointer' }} // Change cursor
+                                    onClick={() => handleCardClick(task.Key, task.Current_Status)} // Pass currentStatus
                                 >
                                     <Card.Body>
                                         <Card.Title>{task.Task_Details}</Card.Title>
@@ -247,6 +257,7 @@ const DeliveryDetail = () => {
                                                     onSubmit={handleFormSubmit}
                                                     task={task}
                                                     currentUserEmail={userEmail}
+                                                    isReadOnly={isTaskScheduled} // Pass the new prop here
                                                 />
                                             </div>
                                         )}
