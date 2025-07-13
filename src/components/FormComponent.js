@@ -63,18 +63,23 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                         name: task.Task_Details || '',
                     });
 
-                    // Set initial start and end dates from task if available
-                    // Ensure dates are parsed as UTC to avoid timezone issues
-                    // Crucially, ensure startDate is a UTC moment object from the start
-                    const initialStartDate = task.Planned_Start_Timestamp ? moment.utc(task.Planned_Start_Timestamp).startOf('day') : null;
-                    const initialEndDate = task.Planned_Delivery_Timestamp ? moment.utc(task.Planned_Delivery_Timestamp).startOf('day') : null;
+                    // Safely get timestamp values, handling BigQuery's object structure
+                    const rawInitialStart = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
+                        ? task.Planned_Start_Timestamp.value
+                        : task.Planned_Start_Timestamp;
+                    const rawInitialEnd = task.Planned_Delivery_Timestamp && typeof task.Planned_Delivery_Timestamp === 'object' && task.Planned_Delivery_Timestamp.value
+                        ? task.Planned_Delivery_Timestamp.value
+                        : task.Planned_Delivery_Timestamp;
+
+                    // Parse initial dates as UTC, then convert to local for consistent display
+                    const initialStartDate = rawInitialStart ? moment.utc(rawInitialStart).local().startOf('day') : null;
+                    const initialEndDate = rawInitialEnd ? moment.utc(rawInitialEnd).local().startOf('day') : null;
 
                     setStartDate(initialStartDate);
                     setEndDate(initialEndDate);
 
-                    let calculatedDaysDiff = 0; // Declare with a default value
+                    let calculatedDaysDiff = 0;
                     if (initialStartDate && initialEndDate) {
-                        // Calculate daysDiff based on startOf('day') for both
                         calculatedDaysDiff = initialEndDate.diff(initialStartDate, 'days') + 1;
                         setNumberOfDays(calculatedDaysDiff);
                         setSliderCount(calculatedDaysDiff);
@@ -82,7 +87,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                         setNumberOfDays(0);
                         setSliderCount(0);
                     }
-                    console.log('FormComponent (useEffect): Initial startDate:', initialStartDate ? initialStartDate.format() : 'null', 'initialEndDate:', initialEndDate ? initialEndDate.format() : 'null', 'numberOfDays:', calculatedDaysDiff);
+                    console.log('FormComponent (useEffect): Initial startDate (local):', initialStartDate ? initialStartDate.format() : 'null', 'initialEndDate (local):', initialEndDate ? initialEndDate.format() : 'null', 'numberOfDays:', calculatedDaysDiff);
 
 
                     // Fetch per-key-per-day data
@@ -100,14 +105,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
 
                         if (taskEntries && taskEntries.length > 0 && initialStartDate) {
                             taskEntries.forEach((entry) => {
-                                // Safely get Day value, handling BigQuery's Date object structure or direct string
                                 const dayValue = entry.Day && typeof entry.Day === 'object' && entry.Day.value
                                     ? entry.Day.value
-                                    : entry.Day; // If entry.Day is already a string or null/undefined
+                                    : entry.Day;
 
-                                const dayMoment = dayValue ? moment.utc(dayValue) : null; // Parse as UTC, handle null dayValue
+                                // Parse stored day as UTC, then convert to local for comparison
+                                const dayMoment = dayValue ? moment.utc(dayValue).local() : null;
 
-                                // Ensure Duration is a number, default to 0 if null/undefined/invalid
                                 const durationValue = typeof entry.Duration === 'number' ? entry.Duration : (parseInt(entry.Duration, 10) || 0);
 
                                 if (dayMoment && dayMoment.isValid() && dayMoment.isSameOrAfter(initialStartDate, 'day')) {
@@ -130,12 +134,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                     const schedules = {};
                     perPersonData.forEach((entry) => {
                         const { Responsibility, Day, Duration_In_Minutes } = entry;
-                        // Safely get Day value for schedules, handling BigQuery's Date object structure or direct string
                         const dateValue = Day && typeof Day === 'object' && Day.value
                             ? Day.value
-                            : Day; // If Day is already a string or null/undefined
+                            : Day;
 
-                        if (Responsibility && dateValue) { // Ensure both are valid
+                        if (Responsibility && dateValue) {
                             if (!schedules[Responsibility]) {
                                 schedules[Responsibility] = {};
                             }
@@ -305,17 +308,17 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                 // for BigQuery DATE type, or TIMESTAMP with UTC for TIMESTAMP type.
                 // Based on previous discussions, Planned_Start_Timestamp and Planned_Delivery_Timestamp are TIMESTAMP.
                 const plannedStartTimestamp = startDate
-                    ? moment(startDate).startOf('day').utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
+                    ? moment(startDate).utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
                     : null;
 
                 const plannedDeliveryTimestamp = endDate
-                    ? moment(endDate).startOf('day').utc().utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC" // Ensure endDate is also UTC
+                    ? moment(endDate).utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
                     : null;
 
                 const totalTime = calculateTotalTime();
                 const perKeyPerDayRows = Array.from({ length: sliderCount }).map((_, index) => {
                     // Ensure calculatedDay is based on the UTC-parsed startDate and formatted for BigQuery DATE
-                    const calculatedDay = moment.utc(startDate).add(index, 'days'); // startDate is already UTC
+                    const calculatedDay = moment(startDate).add(index, 'days'); // startDate is already local
                     const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
                     return {
                         Key: task.Key, // Include the task Key for each entry
