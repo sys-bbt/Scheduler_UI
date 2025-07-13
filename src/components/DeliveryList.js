@@ -15,7 +15,7 @@ const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localh
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
+   
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "zoya.a@brightbraintech.com",
@@ -208,6 +208,12 @@ const DeliveryList = () => {
                 progressBarVariant = "danger";
             }
 
+            // Robustly parse and format Planned_Delivery_Timestamp
+            const deadlineDate = delivery.Planned_Delivery_Timestamp ? moment(delivery.Planned_Delivery_Timestamp) : null;
+            const formattedDeadline = deadlineDate && deadlineDate.isValid() ? deadlineDate.format('YYYY-MM-DD') : 'N/A';
+
+            console.log(`Delivery Key: ${delivery.Key}, Planned_Delivery_Timestamp (raw): ${delivery.Planned_Delivery_Timestamp}, Formatted Deadline: ${formattedDeadline}`); // Log the timestamp
+
             return (
               <Col key={delivery.Key}>
                 <Link to={`/delivery/data/${encodeURIComponent(delivery.DelCode_w_o__)}`} className="text-decoration-none">
@@ -248,7 +254,7 @@ const DeliveryList = () => {
                       <div className="d-flex justify-content-between align-items-center mt-2">
                         {/* Display Deadline date */}
                         <p className="mb-0 text-danger">
-                          <FiFlag style={{ marginRight: '5px' }} /> Deadline: {delivery.Planned_Delivery_Timestamp ? moment(delivery.Planned_Delivery_Timestamp).format('YYYY-MM-DD') : 'N/A'}
+                          <FiFlag style={{ marginRight: '5px' }} /> Deadline: {formattedDeadline}
                         </p>
                         <p
                           onClick={(e) => {
