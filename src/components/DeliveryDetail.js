@@ -112,8 +112,12 @@ const DeliveryDetail = () => {
 
     // Modified handleActionClick to always set actionType to 'edit' when card is clicked
     const handleCardClick = (taskKey, currentStatus) => {
+        // Log the exact status and the comparison result
+        const isScheduled = currentStatus === 'Scheduled';
+        console.log(`Task Key: ${taskKey}, Current Status on click: "${currentStatus}", isScheduled check: ${isScheduled}`);
+
         // Only open the form for editing if the task is NOT 'Scheduled'
-        if (currentStatus !== 'Scheduled') {
+        if (!isScheduled) { // Use the boolean variable for clarity
             setActiveTaskKey(taskKey);
             setActionType('edit'); // Always set to 'edit' when a task card is clicked
         } else {
