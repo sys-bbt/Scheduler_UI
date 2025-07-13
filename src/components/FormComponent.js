@@ -64,9 +64,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     });
 
                     // Set initial start and end dates from task if available
-                    // Ensure dates are parsed correctly and consistently
-                    const initialStartDate = task.Planned_Start_Timestamp ? moment(task.Planned_Start_Timestamp).startOf('day') : null;
-                    const initialEndDate = task.Planned_Delivery_Timestamp ? moment(task.Planned_Delivery_Timestamp).startOf('day') : null;
+                    // Ensure dates are parsed as UTC to avoid timezone issues
+                    const initialStartDate = task.Planned_Start_Timestamp ? moment.utc(task.Planned_Start_Timestamp).startOf('day') : null;
+                    const initialEndDate = task.Planned_Delivery_Timestamp ? moment.utc(task.Planned_Delivery_Timestamp).startOf('day') : null;
 
                     setStartDate(initialStartDate);
                     setEndDate(initialEndDate);
@@ -97,7 +97,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         if (taskEntries && taskEntries.length > 0 && initialStartDate) {
                             taskEntries.forEach((entry) => {
                                 if (entry.Duration !== undefined && entry.Day !== undefined) {
-                                    const dayMoment = moment(entry.Day.value);
+                                    const dayMoment = moment.utc(entry.Day.value); // Parse as UTC
                                     if (dayMoment.isValid() && dayMoment.isSameOrAfter(initialStartDate, 'day')) {
                                         const dayIndex = dayMoment.diff(initialStartDate, 'days');
                                         initialHours[dayIndex] = entry.Duration;
@@ -281,7 +281,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
                 const totalTime = calculateTotalTime();
                 const slidersData = Array.from({ length: sliderCount }).map((_, index) => {
-                    const calculatedDay = moment(startDate).add(index, 'days').startOf('day'); // Ensure day is start of day
+                    // Ensure calculatedDay is based on the UTC-parsed startDate and formatted for BigQuery DATE
+                    const calculatedDay = moment(startDate).add(index, 'days');
                     const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
                     return {
                         day: formattedDay,
