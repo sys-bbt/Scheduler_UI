@@ -80,9 +80,16 @@ const DeliveryList = () => {
             const keyB = Number(b.Key);
             return keyB - keyA; // Descending order
         } else { // 'earliest'
-            // Sort by Initiated_Timestamp for "earliest"
-            const dateA = moment(a.Initiated_Timestamp || a.Created_at);
-            const dateB = moment(b.Initiated_Timestamp || b.Created_at);
+            // Safely get timestamp value for sorting
+            const timestampA = a.Initiated_Timestamp && typeof a.Initiated_Timestamp === 'object' && a.Initiated_Timestamp.value
+                ? a.Initiated_Timestamp.value
+                : a.Initiated_Timestamp || a.Created_at;
+            const timestampB = b.Initiated_Timestamp && typeof b.Initiated_Timestamp === 'object' && b.Initiated_Timestamp.value
+                ? b.Initiated_Timestamp.value
+                : b.Initiated_Timestamp || b.Created_at;
+
+            const dateA = moment(timestampA);
+            const dateB = moment(timestampB);
 
             if (!dateA.isValid() || !dateB.isValid()) {
                 console.warn("Invalid date found during sorting. Falling back to original order for affected items.", a, b);
@@ -209,10 +216,15 @@ const DeliveryList = () => {
             }
 
             // Robustly parse and format Planned_Delivery_Timestamp
-            const deadlineDate = delivery.Planned_Delivery_Timestamp ? moment(delivery.Planned_Delivery_Timestamp) : null;
+            // Check if delivery.Planned_Delivery_Timestamp is an object with a 'value' property
+            const rawDeadlineTimestamp = delivery.Planned_Delivery_Timestamp && typeof delivery.Planned_Delivery_Timestamp === 'object' && delivery.Planned_Delivery_Timestamp.value
+                ? delivery.Planned_Delivery_Timestamp.value
+                : delivery.Planned_Delivery_Timestamp; // Use directly if it's already a string or null/undefined
+
+            const deadlineDate = rawDeadlineTimestamp ? moment(rawDeadlineTimestamp) : null;
             const formattedDeadline = deadlineDate && deadlineDate.isValid() ? deadlineDate.format('YYYY-MM-DD') : 'N/A';
 
-            console.log(`Delivery Key: ${delivery.Key}, Planned_Delivery_Timestamp (raw): ${delivery.Planned_Delivery_Timestamp}, Formatted Deadline: ${formattedDeadline}`); // Log the timestamp
+            console.log(`Delivery Key: ${delivery.Key}, Planned_Delivery_Timestamp (raw object/string): ${JSON.stringify(delivery.Planned_Delivery_Timestamp)}, Formatted Deadline: ${formattedDeadline}`); // Log the timestamp
 
             return (
               <Col key={delivery.Key}>
