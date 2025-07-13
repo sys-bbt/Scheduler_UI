@@ -136,8 +136,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                     perPersonData.forEach((entry) => {
                         const { Responsibility, Day, Duration_In_Minutes } = entry;
                         const dateValue = Day && typeof Day === 'object' && Day.value
-                            ? Day.value
-                            : Day;
+                            ? entry.Day.value
+                            : entry.Day;
 
                         if (Responsibility && dateValue) {
                             if (!schedules[Responsibility]) {
@@ -292,123 +292,124 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
     };
 
 
-    const handleSubmit = () => {
-        console.log('handleSubmit: task prop value at submission:', task); // Log task prop at submission
-        form
-            .validateFields()
-            .then((values) => {
-                // If the form is read-only, prevent submission
-                if (isReadOnly) {
-                    notification.info({
-                        message: 'Read-Only Task',
-                        description: 'This task is scheduled and cannot be edited.',
-                    });
-                    return;
+    // Renamed handleSubmit to onFinish to align with Ant Design Form's prop
+    const onFinish = (values) => {
+        console.log('onFinish: task prop value at submission:', task); // Log task prop at submission
+
+        // Crucial check: Ensure task data is available before proceeding
+        if (!task || !task.Key) {
+            console.error('Submission prevented: Task data is missing or incomplete.');
+            notification.error({
+                message: 'Submission Error',
+                description: 'Task data is not fully loaded. Please try again.',
+            });
+            return;
+        }
+
+        // If the form is read-only, prevent submission
+        if (isReadOnly) {
+            notification.info({
+                message: 'Read-Only Task',
+                description: 'This task is scheduled and cannot be edited.',
+            });
+            return;
+        }
+
+        // Ensure plannedStartTimestamp and plannedDeliveryTimestamp are formatted as DATE strings (YYYY-MM-DD)
+        // for BigQuery DATE type, or TIMESTAMP with UTC for TIMESTAMP type.
+        // Based on previous discussions, Planned_Start_Timestamp and Planned_Delivery_Timestamp are TIMESTAMP.
+        const plannedStartTimestamp = startDate
+            ? moment(startDate).utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
+            : null;
+
+        const plannedDeliveryTimestamp = endDate
+            ? moment(endDate).utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
+            : null;
+
+        const totalTime = calculateTotalTime();
+        const perKeyPerDayRows = Array.from({ length: sliderCount }).map((_, index) => {
+            // Ensure calculatedDay is based on the local startDate and formatted for BigQuery DATE
+            const calculatedDay = moment(startDate).add(index, 'days'); // startDate is already local
+            const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
+            return {
+                Key: task.Key, // task.Key should be available now due to the check above
+                Day: formattedDay,
+                Duration: hours[index] || 0, // Use the value from the hours state
+                Duration_Unit: "min", // Set to "min" as requested
+                Planned_Delivery_Slot: "Null", // Assuming 'Null' is the default slot
+                Responsibility: personResponsible, // Use the selected personResponsible
+            };
+        });
+
+        // Use the dynamically fetched person email data
+        const selectedPersonEmailData = fetchedPersonsData.personEmailMap[personResponsible];
+        const newEmail = selectedPersonEmailData ? selectedPersonEmailData.primaryEmail : null;
+        const newEmails = selectedPersonEmailData ? selectedPersonEmailData.allEmails : null;
+        
+        const mainTaskData = {
+            Key: task.Key, // task.Key should be available now
+            Delivery_code: task.Delivery_code, // task.Delivery_code should be available now
+            DelCode_w_o__: task.DelCode_w_o__, // task.DelCode_w_o__ should be available now
+            Step_ID: task.Step_ID, // task.Step_ID should be available now
+            Task_Details: values.name,
+            Frequency___Timeline: task.Frequency___Timeline,
+            Client: task.Client,
+            Short_Description: task.Short_Description,
+            Planned_Start_Timestamp: plannedStartTimestamp,
+            Planned_Delivery_Timestamp: plannedDeliveryTimestamp,
+            Responsibility: personResponsible, // This comes from the dropdown
+            Current_Status: task.Current_Status || 'Scheduled', // Default to 'Scheduled' if unassigned
+            Email: newEmail, // Use the dynamically determined email
+            Emails: newEmails, // Use the dynamically determined emails string
+            Total_Tasks: task.Total_Tasks,
+            Completed_Tasks: task.Completed_Tasks,
+            Planned_Tasks: task.Planned_Tasks,
+            Percent_Tasks_Completed: task.Percent_Tasks_Completed,
+            Created_at: task.Created_at || moment.utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Preserve original or set new
+            Updated_at: moment.utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Always update Updated_at
+            Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss,
+            Card_Corner_Status: task.Card_Corner_Status,
+        };
+
+        console.log('mainTask (constructed):', mainTaskData);
+        console.log('perKeyPerDayRows (from sliders):', JSON.stringify(perKeyPerDayRows)); // Stringify for clear logging
+
+        // Send both mainTask and perKeyPerDayRows in the request body
+        fetch(`${BACKEND_API_BASE_URL}/api/post`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                mainTask: mainTaskData,
+                perKeyPerDayRows: perKeyPerDayRows
+            }),
+        })
+            .then((response) => {
+                if (!response.ok) {
+                    return response.text().then(text => { throw new Error(text); });
                 }
-
-                // Ensure plannedStartTimestamp and plannedDeliveryTimestamp are formatted as DATE strings (YYYY-MM-DD)
-                // for BigQuery DATE type, or TIMESTAMP with UTC for TIMESTAMP type.
-                // Based on previous discussions, Planned_Start_Timestamp and Planned_Delivery_Timestamp are TIMESTAMP.
-                const plannedStartTimestamp = startDate
-                    ? moment(startDate).utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
-                    : null;
-
-                const plannedDeliveryTimestamp = endDate
-                    ? moment(endDate).utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
-                    : null;
-
-                const totalTime = calculateTotalTime();
-                const perKeyPerDayRows = Array.from({ length: sliderCount }).map((_, index) => {
-                    // Ensure calculatedDay is based on the UTC-parsed startDate and formatted for BigQuery DATE
-                    const calculatedDay = moment(startDate).add(index, 'days'); // startDate is already local
-                    const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
-                    return {
-                        Key: task?.Key, // Use optional chaining to safely access task.Key
-                        Day: formattedDay,
-                        Duration: hours[index] || 0, // Use the value from the hours state
-                        Duration_Unit: "min", // Set to "min" as requested
-                        Planned_Delivery_Slot: "Null", // Assuming 'Null' is the default slot
-                        Responsibility: personResponsible, // Use the selected personResponsible
-                    };
-                });
-
-                // Use the dynamically fetched person email data
-                const selectedPersonEmailData = fetchedPersonsData.personEmailMap[personResponsible];
-                const newEmail = selectedPersonEmailData ? selectedPersonEmailData.primaryEmail : null;
-                const newEmails = selectedPersonEmailData ? selectedPersonEmailData.allEmails : null;
-                
-                const mainTaskData = {
-                    Key: task?.Key, // Use optional chaining
-                    Delivery_code: task?.Delivery_code, // Use optional chaining
-                    DelCode_w_o__: task?.DelCode_w_o__, // Use optional chaining
-                    Step_ID: task?.Step_ID, // Use optional chaining
-                    Task_Details: values.name,
-                    Frequency___Timeline: task?.Frequency___Timeline, // Use optional chaining
-                    Client: task?.Client, // Use optional chaining
-                    Short_Description: task?.Short_Description, // Use optional chaining
-                    Planned_Start_Timestamp: plannedStartTimestamp,
-                    Planned_Delivery_Timestamp: plannedDeliveryTimestamp,
-                    Responsibility: personResponsible, // This comes from the dropdown
-                    Current_Status: task?.Current_Status || 'Scheduled', // Default to 'Scheduled' if unassigned, use optional chaining
-                    Email: newEmail, // Use the dynamically determined email
-                    Emails: newEmails, // Use the dynamically determined emails string
-                    Total_Tasks: task?.Total_Tasks, // Use optional chaining
-                    Completed_Tasks: task?.Completed_Tasks, // Use optional chaining
-                    Planned_Tasks: task?.Planned_Tasks, // Use optional chaining
-                    Percent_Tasks_Completed: task?.Percent_Tasks_Completed, // Use optional chaining
-                    Created_at: task?.Created_at || moment.utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Preserve original or set new, use optional chaining
-                    Updated_at: moment.utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Always update Updated_at
-                    Time_Left_For_Next_Task_dd_hh_mm_ss: task?.Time_Left_For_Next_Task_dd_hh_mm_ss, // Use optional chaining
-                    Card_Corner_Status: task?.Card_Corner_Status, // Use optional chaining
-                };
-
-                console.log('mainTask (constructed):', mainTaskData);
-                console.log('perKeyPerDayRows (from sliders):', JSON.stringify(perKeyPerDayRows)); // Stringify for clear logging
-
-                // Send both mainTask and perKeyPerDayRows in the request body
-                fetch(`${BACKEND_API_BASE_URL}/api/post`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        mainTask: mainTaskData,
-                        perKeyPerDayRows: perKeyPerDayRows
-                    }),
-                })
-                    .then((response) => {
-                        if (!response.ok) {
-                            return response.text().then(text => { throw new Error(text); });
-                        }
-                        return response.json();
-                    })
-                    .then(() => {
-                        notification.success({
-                            message: 'Task Updated',
-                            description: 'Your task has been successfully updated!',
-                        });
-                        // Pass updated scheduling data back to parent (DeliveryDetail)
-                        onSubmit({
-                            personResponsible: mainTaskData.Responsibility,
-                            totalTime: totalTime,
-                            Planned_Delivery_Timestamp: mainTaskData.Planned_Delivery_Timestamp,
-                            Current_Status: mainTaskData.Current_Status,
-                            Email: mainTaskData.Email,
-                            Emails: mainTaskData.Emails // Pass back new Emails as well
-                        });
-                    })
-                    .catch((error) => {
-                        notification.error({
-                            message: 'Error',
-                            description: error.message || 'An error occurred while updating the task.',
-                        });
-                    });
+                return response.json();
             })
-            .catch((info) => {
-                console.error('Validation Failed:', info);
+            .then(() => {
+                notification.success({
+                    message: 'Task Updated',
+                    description: 'Your task has been successfully updated!',
+                });
+                // Pass updated scheduling data back to parent (DeliveryDetail)
+                onSubmit({
+                    personResponsible: mainTaskData.Responsibility,
+                    totalTime: totalTime,
+                    Planned_Delivery_Timestamp: mainTaskData.Planned_Delivery_Timestamp,
+                    Current_Status: mainTaskData.Current_Status,
+                    Email: mainTaskData.Email,
+                    Emails: mainTaskData.Emails // Pass back new Emails as well
+                });
+            })
+            .catch((error) => {
                 notification.error({
                     message: 'Error',
-                    description: 'Please fill in all required fields correctly.',
+                    description: error.message || 'An error occurred while updating the task.',
                 });
             });
     };
@@ -497,7 +498,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
     console.log('FormComponent: personsToDisplay:', personsToDisplay); // Added console log here
 
     return (
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" onFinish={onFinish}> {/* Changed onSubmit to onFinish */}
             <Form.Item
                 name="name"
                 label="Task Name"
@@ -613,7 +614,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
             </Form.Item>
 
             <Form.Item>
-                <Button type="primary" htmlType="submit" onClick={handleSubmit} disabled={isReadOnly}>
+                {/* Removed onClick from Button and moved logic to Form's onFinish */}
+                <Button type="primary" htmlType="submit" disabled={isReadOnly}>
                     Submit
                 </Button>
             </Form.Item>
