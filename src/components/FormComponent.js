@@ -64,13 +64,15 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     });
 
                     // Set initial start and end dates from task if available
-                    const initialStartDate = task.Planned_Start_Timestamp ? moment(task.Planned_Start_Timestamp) : null;
-                    const initialEndDate = task.Planned_Delivery_Timestamp ? moment(task.Planned_Delivery_Timestamp) : null;
+                    // Ensure dates are parsed correctly and consistently
+                    const initialStartDate = task.Planned_Start_Timestamp ? moment(task.Planned_Start_Timestamp).startOf('day') : null;
+                    const initialEndDate = task.Planned_Delivery_Timestamp ? moment(task.Planned_Delivery_Timestamp).startOf('day') : null;
 
                     setStartDate(initialStartDate);
                     setEndDate(initialEndDate);
 
                     if (initialStartDate && initialEndDate) {
+                        // Calculate daysDiff based on startOf('day') for both
                         const daysDiff = initialEndDate.diff(initialStartDate, 'days') + 1;
                         setNumberOfDays(daysDiff);
                         setSliderCount(daysDiff);
@@ -217,6 +219,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     const handleStartDateChange = (date) => {
         setStartDate(date);
+        // Recalculate end date and slider count immediately
         if (date && numberOfDays > 0) {
             calculateEndDate(date, numberOfDays);
         } else {
@@ -231,6 +234,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         const days = e.target.value;
         const numericDays = parseInt(days, 10) || 0;
         setNumberOfDays(numericDays);
+        // Recalculate end date and slider count immediately
         if (startDate && numericDays > 0) {
             calculateEndDate(startDate, numericDays);
         } else {
@@ -240,16 +244,18 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         }
     };
 
-    const calculateEndDate = (start, days) => {
-        if (start && days > 0) {
-            const calculatedEndDate = moment(start).add(days - 1, 'days');
+    const calculateEndDate = useCallback((start, days) => {
+        if (start && start.isValid() && days > 0) {
+            // End date is 'days' inclusive, so add days - 1
+            const calculatedEndDate = start.clone().add(days - 1, 'days').startOf('day');
             setEndDate(calculatedEndDate);
             setSliderCount(days);
         } else {
             setEndDate(null);
             setSliderCount(0);
         }
-    };
+    }, []); // No dependencies needed for useCallback as start and days are passed as args
+
 
     const calculateTotalTime = () => {
         return Object.values(hours).reduce((acc, curr) => {
@@ -262,17 +268,20 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         form
             .validateFields()
             .then((values) => {
+                // Ensure plannedStartTimestamp and plannedDeliveryTimestamp are formatted as DATE strings (YYYY-MM-DD)
+                // for BigQuery DATE type, or TIMESTAMP with UTC for TIMESTAMP type.
+                // Based on previous discussions, Planned_Start_Timestamp and Planned_Delivery_Timestamp are TIMESTAMP.
                 const plannedStartTimestamp = startDate
                     ? moment(startDate).startOf('day').utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
                     : null;
 
                 const plannedDeliveryTimestamp = endDate
-                    ? moment(endDate).endOf('day').utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
+                    ? moment(endDate).startOf('day').utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC"
                     : null;
 
                 const totalTime = calculateTotalTime();
                 const slidersData = Array.from({ length: sliderCount }).map((_, index) => {
-                    const calculatedDay = moment(startDate).add(index, 'days');
+                    const calculatedDay = moment(startDate).add(index, 'days').startOf('day'); // Ensure day is start of day
                     const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
                     return {
                         day: formattedDay,
@@ -306,8 +315,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     Completed_Tasks: task.Completed_Tasks,
                     Planned_Tasks: task.Planned_Tasks,
                     Percent_Tasks_Completed: task.Percent_Tasks_Completed,
-                    Created_at: task.Created_at || moment().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Preserve original or set new
-                    Updated_at: moment().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC",
+                    Created_at: task.Created_at || moment.utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Preserve original or set new
+                    Updated_at: moment.utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Always update Updated_at
                     Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss,
                     Card_Corner_Status: task.Card_Corner_Status,
                     sliders: slidersData,
@@ -424,9 +433,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     // Function to disable dates outside the allowed range (past dates and beyond 2 months from today)
     const disabledDateRange = (current) => {
         // Can not select days before today
-        const isPastDate = current && current < moment().startOf('day');
+        const isPastDate = current && current.isBefore(moment().startOf('day'));
         // Can not select days more than 2 months from today (end of the month)
-        const isFutureDateBeyondLimit = current && current > moment().add(2, 'months').endOf('month');
+        const isFutureDateBeyondLimit = current && current.isAfter(moment().add(2, 'months').endOf('month'));
         return isPastDate || isFutureDateBeyondLimit;
     };
 
