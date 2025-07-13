@@ -308,4 +308,246 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     Percent_Tasks_Completed: task.Percent_Tasks_Completed,
                     Created_at: task.Created_at || moment().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC", // Preserve original or set new
                     Updated_at: moment().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC",
-                    Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_
+                    Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss,
+                    Card_Corner_Status: task.Card_Corner_Status,
+                    sliders: slidersData,
+                };
+
+                console.log('Scheduled Data for submission:', scheduledData);
+
+                // Using full backend URL for API call to Render.com backend
+                fetch(`${BACKEND_API_BASE_URL}/api/post`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(scheduledData),
+                })
+                    .then((response) => {
+                        if (!response.ok) {
+                            return response.text().then(text => { throw new Error(text); });
+                        }
+                        return response.json();
+                    })
+                    .then(() => {
+                        notification.success({
+                            message: 'Task Updated',
+                            description: 'Your task has been successfully updated!',
+                        });
+                        // Pass updated scheduling data back to parent (DeliveryDetail)
+                        onSubmit({
+                            personResponsible: scheduledData.Responsibility,
+                            totalTime: totalTime,
+                            Planned_Delivery_Timestamp: scheduledData.Planned_Delivery_Timestamp,
+                            Current_Status: scheduledData.Current_Status,
+                            Email: scheduledData.Email,
+                            Emails: scheduledData.Emails // Pass back new Emails as well
+                        });
+                    })
+                    .catch((error) => {
+                        notification.error({
+                            message: 'Error',
+                            description: error.message || 'An error occurred while updating the task.',
+                        });
+                    });
+            })
+            .catch((info) => {
+                console.error('Validation Failed:', info);
+                notification.error({
+                    message: 'Error',
+                    description: 'Please fill in all required fields correctly.',
+                });
+            });
+    };
+
+
+    const handleSliderChange = (index, value) => {
+        const currentDay = moment(startDate).add(index, 'days').format('YYYY-MM-DD');
+        const maxAllowedMinutes = 480;
+        let effectiveValue = value;
+
+        if (existingSchedules[personResponsible]?.[currentDay]) {
+            const alreadyScheduledMinutes = existingSchedules[personResponsible][currentDay];
+            const remainingMinutes = maxAllowedMinutes - (alreadyScheduledMinutes || 0);
+            effectiveValue = Math.min(value, remainingMinutes);
+            if (value > remainingMinutes) {
+                notification.warning({
+                    message: 'Time Limit Reached',
+                    description: `Cannot schedule more than ${remainingMinutes} minutes for ${personResponsible} on ${currentDay} due to existing tasks.`,
+                });
+            }
+        }
+
+        setHours((prev) => ({ ...prev, [index]: effectiveValue }));
+    };
+
+    const handleInputChange = (index, value) => {
+        let numericValue = parseInt(value, 10);
+        if (isNaN(numericValue)) {
+            numericValue = 0;
+        }
+
+        const currentDay = moment(startDate).add(index, 'days').format('YYYY-MM-DD');
+        const maxAllowedMinutes = 480;
+        let effectiveValue = numericValue;
+
+        if (existingSchedules[personResponsible]?.[currentDay]) {
+            const alreadyScheduledMinutes = existingSchedules[personResponsible][currentDay];
+            const remainingMinutes = maxAllowedMinutes - (alreadyScheduledMinutes || 0);
+            effectiveValue = Math.min(numericValue, remainingMinutes);
+            if (numericValue > remainingMinutes) {
+                notification.warning({
+                    message: 'Time Limit Reached',
+                    description: `Cannot schedule more than ${remainingMinutes} minutes for ${personResponsible} on ${currentDay} due to existing tasks.`,
+                });
+            }
+        }
+
+        setHours((prev) => ({
+            ...prev,
+            [index]: effectiveValue < 0 ? 0 : effectiveValue,
+        }));
+    };
+
+    const customMarks = {
+        1: '1 m',
+        60: '1 h',
+        120: '2 h',
+        180: '3 h',
+        240: '4 h',
+        300: '5 h',
+        360: '6 h',
+        420: '7 h',
+        480: '8 h',
+    };
+
+    // Function to disable dates outside the allowed range (past dates and beyond 2 months from today)
+    const disabledDateRange = (current) => {
+        // Can not select days before today
+        const isPastDate = current && current < moment().startOf('day');
+        // Can not select days more than 2 months from today (end of the month)
+        const isFutureDateBeyondLimit = current && current > moment().add(2, 'months').endOf('month');
+        return isPastDate || isFutureDateBeyondLimit;
+    };
+
+    // Define personsToDisplay based on user role and fetched data
+    const personsToDisplay = isAdmin
+        ? fetchedPersonsData.allAvailablePersons
+        : (getPersonNameFromEmail(currentUserEmail) && fetchedPersonsData.allAvailablePersons.includes(getPersonNameFromEmail(currentUserEmail)))
+            ? [getPersonNameFromEmail(currentUserEmail)]
+            : [];
+
+    console.log('FormComponent: personsToDisplay:', personsToDisplay); // Added console log here
+
+    return (
+        <Form form={form} layout="vertical">
+            <Form.Item
+                name="name"
+                label="Task Name"
+                rules={[{ required: true, message: 'Please input the task name!' }]}
+            >
+                <Input readOnly={true} />
+            </Form.Item>
+
+            <Row gutter={[8, 16]}>
+                <Col xs={24} sm={8}>
+                    <Form.Item label="Start Date">
+                        <DatePicker
+                            format="YYYY-MM-DD"
+                            onChange={handleStartDateChange}
+                            value={startDate}
+                            placeholder="Select start date"
+                            style={{ width: '100%' }}
+                            disabledDate={disabledDateRange}
+                        />
+                    </Form.Item>
+                </Col>
+                <Col xs={24} sm={8}>
+                    <Form.Item label="Number of Days">
+                        <Input
+                            type="number"
+                            value={numberOfDays}
+                            onChange={handleNumberOfDaysChange}
+                            min={0}
+                            style={{ width: '100%' }}
+                        />
+                    </Form.Item>
+                </Col>
+                <Col xs={24} sm={8}>
+                    <Form.Item label="End Date">
+                        <DatePicker
+                            format="YYYY-MM-DD"
+                            value={endDate}
+                            disabled
+                            style={{ width: '100%' }}
+                        />
+                    </Form.Item>
+                </Col>
+            </Row>
+
+            {Array.from({ length: sliderCount }).map((_, index) => (
+                <Form.Item
+                    key={index}
+                    label={`Hours for ${startDate ? moment(startDate).add(index, 'days').format('DD/MM/YYYY') : `Day ${index + 1}`}`}
+                >
+                    <Row gutter={20}>
+                        <Col xs={20}>
+                            <Slider
+                                marks={customMarks}
+                                min={0}
+                                max={480}
+                                step={1}
+                                onChange={(value) => handleSliderChange(index, value)}
+                                value={hours[index] || 0}
+                                tooltip={{ formatter: (value) => `${value} minutes` }}
+                            />
+                        </Col>
+                        <Col xs={4}>
+                            <Input
+                                type="number"
+                                min={0}
+                                max={480}
+                                value={hours[index] || 0}
+                                onChange={(e) => handleInputChange(index, e.target.value)}
+                                addonAfter="min"
+                            />
+                        </Col>
+                    </Row>
+                </Form.Item>
+            ))}
+
+            <Form.Item
+                label="Person Responsible"
+                name="personResponsible"
+                rules={[{ required: true, message: 'Please select the person responsible!' }]}
+            >
+                <Select
+                    placeholder="Select a person"
+                    onChange={setPersonResponsible}
+                    value={personResponsible || null} // Changed from || undefined to || null
+                    showSearch
+                    optionFilterProp={(input, option) =>
+                        (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                    }
+                    // Disable if the user is not an admin
+                    disabled={!isAdmin || loadingPersons} // Disable if loading persons or not admin
+                    loading={loadingPersons} // Show loading spinner if data is being fetched
+                >
+                    {personsToDisplay.map((person) => (
+                        <Option key={person} value={person}>
+                            {person}
+                        </Option>
+                    ))}
+                </Select>
+            </Form.Item>
+
+            <Form.Item>
+                <Button type="primary" htmlType="submit" onClick={handleSubmit}>
+                    Submit
+                </Button>
+            </Form.Item>
+        </Form>
+    );
+};
+
+export default memo(FormComponent);
