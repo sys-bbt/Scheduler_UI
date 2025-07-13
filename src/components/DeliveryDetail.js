@@ -225,7 +225,7 @@ const DeliveryDetail = () => {
                             <Col key={task.Key}>
                                 <Card
                                     className={`task-card ${isTaskCompleted ? 'task-completed' : ''} ${task.Key === activeTaskKey ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
-                                    style={{ width: '100%', cursor: isTaskScheduled ? 'not-allowed' : 'pointer' }} // Change cursor
+                                    // Removed the cursor style change here
                                     onClick={() => handleCardClick(task.Key, displayStatus)} // Pass displayStatus
                                 >
                                     <Card.Body>
