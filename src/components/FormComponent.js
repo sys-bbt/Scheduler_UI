@@ -544,11 +544,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
             </Row>
 
             {/* FIX: Ensure slider labels update with the current startDate state */}
+            {console.log('Rendering Sliders: startDate:', startDate ? startDate.format() : 'null', 'sliderCount:', sliderCount)}
             {Array.from({ length: sliderCount }).map((_, index) => {
                 // Log what's being used for calculation
                 console.log(`Slider ${index}: startDate in map: ${startDate ? startDate.format() : 'null'}, index: ${index}`);
-                // Removed .utc() here to prevent timezone shifting for display
-                const displayDate = startDate && startDate.isValid() ? moment(startDate).add(index, 'days').format('DD/MM/YYYY') : `Day ${index + 1}`;
+                // Use .clone() to ensure local context is preserved and then add days
+                const displayDate = startDate && startDate.isValid() ? startDate.clone().add(index, 'days').format('DD/MM/YYYY') : `Day ${index + 1}`;
                 console.log(`Slider ${index}: Calculated displayDate: ${displayDate}`);
 
                 return (
