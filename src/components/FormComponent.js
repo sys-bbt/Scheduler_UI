@@ -81,6 +81,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
                         setNumberOfDays(0);
                         setSliderCount(0);
                     }
+                    console.log('FormComponent (useEffect): Initial startDate:', initialStartDate ? initialStartDate.format() : 'null', 'initialEndDate:', initialEndDate ? initialEndDate.format() : 'null', 'numberOfDays:', daysDiff);
+
 
                     // Fetch per-key-per-day data
                     const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
@@ -232,9 +234,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
 
 
     const handleStartDateChange = (date) => {
-        // Ensure the date object itself is passed to setStartDate
-        // moment() can handle the Ant Design date object directly
+        console.log('handleStartDateChange: DatePicker selected date:', date ? date.format() : 'null');
         setStartDate(date); // Changed to directly set the date object
+        console.log('handleStartDateChange: startDate after setStartDate:', date ? date.format() : 'null');
+
         // Recalculate end date and slider count immediately
         if (date && numberOfDays > 0) { // Use 'date' directly here
             calculateEndDate(date, numberOfDays);
@@ -250,6 +253,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
         const days = e.target.value;
         const numericDays = parseInt(days, 10) || 0;
         setNumberOfDays(numericDays);
+        console.log('handleNumberOfDaysChange: numberOfDays:', numericDays, 'startDate:', startDate ? startDate.format() : 'null');
+
         // Recalculate end date and slider count immediately
         if (startDate && numericDays > 0) {
             calculateEndDate(startDate, numericDays);
@@ -266,9 +271,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
             const calculatedEndDate = start.clone().add(days - 1, 'days').startOf('day');
             setEndDate(calculatedEndDate);
             setSliderCount(days);
+            console.log('calculateEndDate: Calculated endDate:', calculatedEndDate.format(), 'sliderCount:', days);
         } else {
             setEndDate(null);
             setSliderCount(0);
+            console.log('calculateEndDate: Invalid start or days. endDate: null, sliderCount: 0');
         }
     }, []); // No dependencies needed for useCallback as start and days are passed as args
 
@@ -533,37 +540,44 @@ const FormComponent = ({ onSubmit, task, currentUserEmail, isReadOnly }) => { //
             </Row>
 
             {/* FIX: Ensure slider labels update with the current startDate state */}
-            {Array.from({ length: sliderCount }).map((_, index) => (
-                <Form.Item
-                    key={index}
-                    label={`Hours for ${startDate && startDate.isValid() ? moment.utc(startDate).add(index, 'days').format('DD/MM/YYYY') : `Day ${index + 1}`}`}
-                >
-                    <Row gutter={20}>
-                        <Col xs={20}>
-                            <Slider
-                                marks={customMarks}
-                                min={0}
-                                max={480}
-                                step={1}
-                                onChange={(value) => handleSliderChange(index, value)}
-                                value={hours[index] || 0}
-                                tooltip={{ formatter: (value) => `${value} minutes` }}
-                                disabled={isReadOnly} // Disable if read-only
-                            />
-                        </Col>
-                        <Col xs={4}>
-                            <Input
-                                type="number"
-                                min={0}
-                                max={480}
-                                value={hours[index] || 0}
-                                onChange={(e) => handleInputChange(index, e.target.value)}
-                                addonAfter="min"
-                            />
-                        </Col>
-                    </Row>
-                </Form.Item>
-            ))}
+            {Array.from({ length: sliderCount }).map((_, index) => {
+                // Log what's being used for calculation
+                console.log(`Slider ${index}: startDate in map: ${startDate ? startDate.format() : 'null'}, index: ${index}`);
+                const displayDate = startDate && startDate.isValid() ? moment.utc(startDate).add(index, 'days').format('DD/MM/YYYY') : `Day ${index + 1}`;
+                console.log(`Slider ${index}: Calculated displayDate: ${displayDate}`);
+
+                return (
+                    <Form.Item
+                        key={index}
+                        label={`Hours for ${displayDate}`}
+                    >
+                        <Row gutter={20}>
+                            <Col xs={20}>
+                                <Slider
+                                    marks={customMarks}
+                                    min={0}
+                                    max={480}
+                                    step={1}
+                                    onChange={(value) => handleSliderChange(index, value)}
+                                    value={hours[index] || 0}
+                                    tooltip={{ formatter: (value) => `${value} minutes` }}
+                                    disabled={isReadOnly} // Disable if read-only
+                                />
+                            </Col>
+                            <Col xs={4}>
+                                <Input
+                                    type="number"
+                                    min={0}
+                                    max={480}
+                                    value={hours[index] || 0}
+                                    onChange={(e) => handleInputChange(index, e.target.value)}
+                                    addonAfter="min"
+                                />
+                            </Col>
+                        </Row>
+                    </Form.Item>
+                );
+            })}
 
             <Form.Item
                 label="Person Responsible"
