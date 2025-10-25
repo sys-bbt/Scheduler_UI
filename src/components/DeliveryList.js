@@ -15,12 +15,13 @@ const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localh
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
+     "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
+    "divya.s@brightbraintech.com",
     "zoya.a@brightbraintech.com",
-    "shweta.g@brightbraintech.com",
-    "hitesh.r@brightbraintech.com"
+    "altaf.s@brightbraintech.com",
+    "arvanbir.s@brightbraintech.com"
 ];
 
 // Debounce utility function
