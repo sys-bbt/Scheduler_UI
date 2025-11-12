@@ -752,121 +752,121 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
 
 
-            // <Form.Group className="mb-3">
+            <Form.Group className="mb-3">
 
-            //     <Form.Label>Start Date<span className="text-danger">*</span></Form.Label>
+                <Form.Label>Start Date<span className="text-danger">*</span></Form.Label>
 
-            //     <Form.Control
+                <Form.Control
 
-            //         type="date"
+                    type="date"
 
-            //         name="Planned_Start_Timestamp"
+                    name="Planned_Start_Timestamp"
 
-            //         // Pass moment object to value, format for display
+                    // Pass moment object to value, format for display
 
-            //         value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
+                    value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
 
-            //         onChange={handleStartDateChange}
+                    onChange={handleStartDateChange}
 
-            //         disabled={isFieldDisabledForNonAdmin}
+                    disabled={isFieldDisabledForNonAdmin}
 
-            //         required // Made required
+                    required // Made required
 
-            //     />
+                />
 
-            // </Form.Group>
-
-
-
-            // <Form.Group className="mb-3">
-
-            //     <Form.Label>Number of Days<span className="text-danger">*</span></Form.Label>
-
-            //     <Form.Control
-
-            //         type="number"
-
-            //         name="Number_of_Days"
-
-            //         value={formData.Number_of_Days}
-
-            //         onChange={handleNumberOfDaysChange}
-
-            //         min="0" // Ensure 0 or greater
-
-            //         disabled={isFieldDisabledForNonAdmin}
-
-            //         required // Made required
-
-            //     />
-
-            // </Form.Group>
+            </Form.Group>
 
 
 
-            // <Form.Group className="mb-3">
+            <Form.Group className="mb-3">
 
-            //     <Form.Label>End Date</Form.Label>
+                <Form.Label>Number of Days<span className="text-danger">*</span></Form.Label>
 
-            //     <Form.Control
+                <Form.Control
 
-            //         type="date"
+                    type="number"
 
-            //         name="Planned_Delivery_Timestamp"
+                    name="Number_of_Days"
 
-            //         // Pass moment object to value, format for display
+                    value={formData.Number_of_Days}
 
-            //         value={formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : ''}
+                    onChange={handleNumberOfDaysChange}
 
-            //         readOnly // This field is calculated, not directly editable
+                    min="0" // Ensure 0 or greater
 
-            //         disabled={true} // Disabled as requested
+                    disabled={isFieldDisabledForNonAdmin}
 
-            //     />
+                    required // Made required
 
-            // </Form.Group>
+                />
+
+            </Form.Group>
 
 
 
-            // {/* Dynamic Sliders for Daily Hours */}
+            <Form.Group className="mb-3">
 
-            // {Object.keys(dailyHours).sort().map(date => (
+                <Form.Label>End Date</Form.Label>
 
-            //     <Form.Group className="mb-3" key={date}>
+                <Form.Control
 
-            //         <Form.Label>Hours for {moment(date).format('YYYY-MM-DD')}</Form.Label>
+                    type="date"
 
-            //         <Form.Range
+                    name="Planned_Delivery_Timestamp"
 
-            //             name={`hours-for-${date}`}
+                    // Pass moment object to value, format for display
 
-            //             min="0"
+                    value={formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : ''}
 
-            //             max="480" // 8 hours * 60 minutes
+                    readOnly // This field is calculated, not directly editable
 
-            //             step="1" // Each minute
+                    disabled={true} // Disabled as requested
 
-            //             value={dailyHours[date]}
+                />
 
-            //             onChange={handleDailyHoursSliderChange(date)}
+            </Form.Group>
 
-            //             disabled={isFieldDisabledForNonAdmin}
 
-            //         />
 
-            //         <div className="d-flex justify-content-between">
+            {/* Dynamic Sliders for Daily Hours */}
 
-            //             <span>0m</span>
+            {Object.keys(dailyHours).sort().map(date => (
 
-            //             <span>{formatMinutesToHoursMinutes(dailyHours[date])}</span> {/* Formatted display */}
+                <Form.Group className="mb-3" key={date}>
 
-            //             <span>8h (480m)</span> {/* Max value display */}
+                    <Form.Label>Hours for {moment(date).format('YYYY-MM-DD')}</Form.Label>
 
-            //         </div>
+                    <Form.Range
 
-            //     </Form.Group>
+                        name={`hours-for-${date}`}
 
-            // ))}
+                        min="0"
+
+                        max="480" // 8 hours * 60 minutes
+
+                        step="1" // Each minute
+
+                        value={dailyHours[date]}
+
+                        onChange={handleDailyHoursSliderChange(date)}
+
+                        disabled={isFieldDisabledForNonAdmin}
+
+                    />
+
+                    <div className="d-flex justify-content-between">
+
+                        <span>0m</span>
+
+                        <span>{formatMinutesToHoursMinutes(dailyHours[date])}</span> {/* Formatted display */}
+
+                        <span>8h (480m)</span> {/* Max value display */}
+
+                    </div>
+
+                </Form.Group>
+
+            ))}
 
 
 
