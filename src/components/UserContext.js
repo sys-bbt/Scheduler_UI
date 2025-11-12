@@ -1,6 +1,6 @@
 import React, { createContext, useState, useEffect } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
-import { jwtDecode } from 'jwt-decode'; // Make sure you have installed 'jwt-decode' (npm install jwt-decode)
+import { jwtDecode } from 'jwt-decode'; // Make sure 'jwt-decode' is installed
 
 // Create the UserContext
 export const UserContext = createContext(null);
@@ -22,7 +22,7 @@ export const UserProvider = ({ children }) => {
         setUserName(null);
         localStorage.removeItem('userEmail');
         localStorage.removeItem('userName');
-        localStorage.removeItem('authToken');
+        localStorage.removeItem('authToken'); // Also remove authToken on logout
     };
 
     const contextValue = {
@@ -44,16 +44,10 @@ export const LoginComponent = () => {
     const { loginUser } = React.useContext(UserContext);
 
     const handleGoogleSuccess = (credentialResponse) => {
-        // --- NEW DEBUGGING LOGS START ---
-        console.log("LoginComponent: Raw credentialResponse:", credentialResponse);
-        console.log("LoginComponent: credentialResponse.credential:", credentialResponse.credential);
-        // --- NEW DEBUGGING LOGS END ---
-
         try {
-            const decoded = jwtDecode(credentialResponse.credential);
-            console.log("Google Login Success! Decoded JWT:", decoded);
-            const email = decoded.email;
-            const name = decoded.name || decoded.given_name;
+            const decodedToken = jwtDecode(credentialResponse.credential);
+            const email = decodedToken.email;
+            const name = decodedToken.name;
             const authToken = credentialResponse.credential; // Get the raw credential as authToken
 
             if (email) {
@@ -61,13 +55,13 @@ export const LoginComponent = () => {
                 
                 // Ensure authToken is a string before storing
                 if (typeof authToken === 'string' && authToken.length > 0) {
-                    console.log("LoginComponent: Storing authToken in localStorage:", authToken.substring(0, 50) + "..."); // Log first 50 chars
+                    console.log("LoginComponent: Storing authToken in localStorage.");
                     localStorage.setItem('authToken', authToken);
                 } else {
                     console.warn("LoginComponent: authToken is not a valid string. Not storing.");
                 }
                 
-                window.location.href = '/'; // Force a page reload
+                window.location.href = '/'; // Force a page reload to reset state/router
             } else {
                 console.error("Email not found in Google credential response.");
             }
@@ -83,7 +77,7 @@ export const LoginComponent = () => {
     return (
         <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'Arial, sans-serif' }}>
             <h2>Sign In to Scheduler</h2>
-            <p>Please use your BrightBrainTech.com account.</p>
+            <p>Please use your authorized account.</p>
             <GoogleLogin
                 onSuccess={handleGoogleSuccess}
                 onError={handleGoogleError}
