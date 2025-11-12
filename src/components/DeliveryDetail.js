@@ -93,11 +93,12 @@ const DeliveryDetail = () => {
         } finally {
             setLoading(false);
         }
-    }, [delCode, userEmail, isAdmin, BACKEND_API_BASE_URL]);
+    }, [delCode, userEmail, isAdmin, BACKEND_API_BASE_URL]); // All dependencies for useCallback
 
     useEffect(() => {
+        // FIX: Include fetchDeliveryDetails as a dependency to satisfy react-hooks/exhaustive-deps
         fetchDeliveryDetails();
-    }, [fetchDeliveryDetails]);
+    }, [fetchDeliveryDetails]); 
 
     const handleTaskClick = (task) => {
         if (!task.scheduled) {
