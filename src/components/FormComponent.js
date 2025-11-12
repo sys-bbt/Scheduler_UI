@@ -18,6 +18,7 @@ const ADMIN_EMAILS_FRONTEND = [
 ];
 
 // Helper function to format total minutes into "Xh Ym" string
+// This function is still useful for debugging or if the logic is re-enabled later
 const formatMinutesToHoursMinutes = (totalMinutes) => {
     if (totalMinutes === 0) return '0m'; // Show 0m if total is 0
     const hours = Math.floor(totalMinutes / 60);
@@ -45,8 +46,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         Frequency___Timeline: '',
         Client: '',
         Short_Description: '',
-        Planned_Start_Timestamp: null, // Now stores moment object or null
-        Planned_Delivery_Timestamp: null, // Now stores moment object or null
+        // Planned_Start_Timestamp: null, // Commented out
+        // Planned_Delivery_Timestamp: null, // Commented out
         Responsibility: '',
         Current_Status: '',
         Email: '',
@@ -59,9 +60,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         Updated_at: null,
         Time_Left_For_Next_Task_dd_hh_mm_ss: '',
         Card_Corner_Status: '',
-        Number_of_Days: 0,
+        // Number_of_Days: 0, // Commented out
     });
-    const [dailyHours, setDailyHours] = useState({}); // Stores hours for each day: { 'YYYY-MM-DD': totalMinutes }
+    // const [dailyHours, setDailyHours] = useState({}); // Commented out: Stores hours for each day: { 'YYYY-MM-DD': totalMinutes }
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
@@ -69,35 +70,36 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [loadingPersons, setLoadingPersons] = useState(true);
     const [personError, setPersonError] = useState(null);
 
-    // Function to calculate End Date
-    const calculateEndDate = useCallback((startMoment, numDays) => {
-        if (startMoment && startMoment.isValid() && numDays > 0) {
-            // End date is 'numDays' *after* start date, inclusive. So add numDays - 1.
-            return startMoment.clone().add(numDays - 1, 'days');
-        }
-        return null;
-    }, []);
+    // Function to calculate End Date - COMMENTED OUT
+    // const calculateEndDate = useCallback((startMoment, numDays) => {
+    //     if (startMoment && startMoment.isValid() && numDays > 0) {
+    //         // End date is 'numDays' *after* start date, inclusive. So add numDays - 1.
+    //         return startMoment.clone().add(numDays - 1, 'days');
+    //     }
+    //     return null;
+    // }, []);
 
-    // Function to generate daily sliders data based on start date and number of days
-    const generateDailySliders = useCallback((startMoment, numDays) => {
-        const newDailyHours = {};
-        if (startMoment && startMoment.isValid() && numDays > 0) {
-            for (let i = 0; i < numDays; i++) {
-                const date = startMoment.clone().add(i, 'days').format('YYYY-MM-DD');
-                // Preserve existing hours if available, otherwise default to 0
-                newDailyHours[date] = dailyHours[date] !== undefined ? dailyHours[date] : 0;
-            }
-        }
-        setDailyHours(newDailyHours);
-    }, [dailyHours]); // Dependency on dailyHours to preserve existing values
+    // Function to generate daily sliders data based on start date and number of days - COMMENTED OUT
+    // const generateDailySliders = useCallback((startMoment, numDays) => {
+    //     const newDailyHours = {};
+    //     if (startMoment && startMoment.isValid() && numDays > 0) {
+    //         for (let i = 0; i < numDays; i++) {
+    //             const date = startMoment.clone().add(i, 'days').format('YYYY-MM-DD');
+    //             // Preserve existing hours if available, otherwise default to 0
+    //             newDailyHours[date] = dailyHours[date] !== undefined ? dailyHours[date] : 0;
+    //         }
+    //     }
+    //     setDailyHours(newDailyHours);
+    // }, [dailyHours]); // Dependency on dailyHours to preserve existing values
 
     useEffect(() => {
         if (task) {
-            const initialStartDate = task.Planned_Start_Timestamp ? moment(task.Planned_Start_Timestamp) : null;
-            const initialNumberOfDays = task.Number_of_Days || 0;
-            const initialEndDate = calculateEndDate(initialStartDate, initialNumberOfDays);
+            // const initialStartDate = task.Planned_Start_Timestamp ? moment(task.Planned_Start_Timestamp) : null; // Commented out
+            // const initialNumberOfDays = task.Number_of_Days || 0; // Commented out
+            // const initialEndDate = calculateEndDate(initialStartDate, initialNumberOfDays); // Commented out
 
-            setFormData({
+            setFormData(prevData => ({ // Use functional update to ensure moment is not called if task is null
+                ...prevData,
                 Key: task.Key || '',
                 Delivery_code: task.Delivery_code || '',
                 DelCode_w_o__: task.DelCode_w_o__ || '',
@@ -106,8 +108,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Frequency___Timeline: task.Frequency___Timeline || '',
                 Client: task.Client || '',
                 Short_Description: task.Short_Description || '',
-                Planned_Start_Timestamp: initialStartDate, // Store as moment object
-                Planned_Delivery_Timestamp: initialEndDate, // Store as moment object
+                // Planned_Start_Timestamp: initialStartDate, // Commented out
+                // Planned_Delivery_Timestamp: initialEndDate, // Commented out
                 Responsibility: task.Responsibility || '',
                 Email: task.Email || '',
                 Emails: task.Emails || '',
@@ -120,49 +122,23 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Updated_at: task.Updated_at || null,
                 Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss || '',
                 Card_Corner_Status: task.Card_Corner_Status || '',
-                Number_of_Days: initialNumberOfDays,
-            });
+                // Number_of_Days: initialNumberOfDays, // Commented out
+            }));
 
-            // Fetch existing daily hours for this task if available
-            const fetchDailyHours = async () => {
-                try {
-                    const response = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day-by-key?key=${encodeURIComponent(task.Key)}`);
-                    if (!response.ok) {
-                        if (response.status === 404) {
-                            console.log('No existing daily hours found for this key.');
-                            return; // Not an error if no data found
-                        }
-                        const errorData = await response.json();
-                        throw new Error(errorData.error || 'Failed to fetch existing daily hours.');
-                    }
-                    const data = await response.json();
-                    const existingDailyHours = {};
-                    if (data && data.entries) {
-                        data.entries.forEach(entry => {
-                            // Convert hours from backend to minutes for frontend state
-                            existingDailyHours[moment(entry.Day).format('YYYY-MM-DD')] = Math.round((entry.Duration || 0) * 60); // Round to nearest minute
-                        });
-                    }
-                    setDailyHours(existingDailyHours);
-                } catch (err) {
-                    console.error("Error fetching existing daily hours:", err);
-                    // Do not set a critical error, just log it
-                }
-            };
-            if (task.Key) {
-                fetchDailyHours();
-            }
+            // Fetch existing daily hours for this task if available - COMMENTED OUT
+            // const fetchDailyHours = async () => {
+            //     // ... fetch logic commented out ...
+            // };
+            // if (task.Key) {
+            //     // fetchDailyHours(); // Commented out
+            // }
         }
-    }, [task, calculateEndDate]); // Dependencies: task and calculateEndDate
+    }, [task]); // Dependencies: task and calculateEndDate (removed)
 
-    // Effect to regenerate daily sliders when start date or number of days changes
-    useEffect(() => {
-        generateDailySliders(formData.Planned_Start_Timestamp, formData.Number_of_Days);
-        setFormData(prevData => ({
-            ...prevData,
-            Planned_Delivery_Timestamp: calculateEndDate(prevData.Planned_Start_Timestamp, prevData.Number_of_Days)
-        }));
-    }, [formData.Planned_Start_Timestamp, formData.Number_of_Days, generateDailySliders, calculateEndDate]);
+    // Effect to regenerate daily sliders when start date or number of days changes - COMMENTED OUT
+    // useEffect(() => {
+    //     // ... logic commented out ...
+    // }, [formData.Planned_Start_Timestamp, formData.Number_of_Days, generateDailySliders, calculateEndDate]);
 
 
     // Fetch people mapping data
@@ -196,40 +172,20 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         }));
     };
 
-    const handleStartDateChange = (e) => { // e.target.value is string 'YYYY-MM-DD'
-        const dateString = e.target.value;
-        const dateMoment = moment(dateString); // Convert string to moment object
-        setFormData(prevData => {
-            const updatedData = {
-                ...prevData,
-                Planned_Start_Timestamp: dateMoment.isValid() ? dateMoment : null // Store moment object directly
-            };
-            // Recalculate end date based on new start date and existing number of days
-            updatedData.Planned_Delivery_Timestamp = calculateEndDate(updatedData.Planned_Start_Timestamp, updatedData.Number_of_Days);
-            return updatedData;
-        });
-    };
+    // Handler for Start Date change - COMMENTED OUT
+    // const handleStartDateChange = (e) => { 
+    //     // ... logic commented out ...
+    // };
 
-    const handleNumberOfDaysChange = (e) => {
-        const value = parseInt(e.target.value, 10);
-        setFormData(prevData => {
-            const updatedData = {
-                ...prevData,
-                Number_of_Days: isNaN(value) || value < 0 ? 0 : value
-            };
-            // Recalculate end date based on existing start date and new number of days
-            updatedData.Planned_Delivery_Timestamp = calculateEndDate(updatedData.Planned_Start_Timestamp, updatedData.Number_of_Days);
-            return updatedData;
-        });
-    };
+    // Handler for Number of Days change - COMMENTED OUT
+    // const handleNumberOfDaysChange = (e) => {
+    //     // ... logic commented out ...
+    // };
 
-    const handleDailyHoursSliderChange = (date) => (e) => {
-        const value = parseInt(e.target.value, 10); // Value from slider is in minutes
-        setDailyHours(prevDailyHours => ({
-            ...prevDailyHours,
-            [date]: isNaN(value) ? 0 : value
-        }));
-    };
+    // Handler for Daily Hours slider change - COMMENTED OUT
+    // const handleDailyHoursSliderChange = (date) => (e) => {
+    //     // ... logic commented out ...
+    // };
 
     const handlePersonSelect = (selectedOption) => {
         setFormData(prevData => ({
@@ -245,9 +201,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         setError(null);
         setSuccess(null);
 
-        // Basic validation for required fields
-        if (!formData.Planned_Start_Timestamp || !formData.Planned_Start_Timestamp.isValid() || formData.Number_of_Days <= 0 || !formData.Responsibility) {
-            setError("Please fill all required fields: Start Date, Number of Days (must be > 0), and Person Responsible.");
+        // ✅ UPDATED VALIDATION: Only check for Responsibility
+        if (!formData.Responsibility) {
+            setError("Please fill all required fields: Person Responsible.");
             setLoading(false);
             return;
         }
@@ -263,12 +219,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Frequency___Timeline: formData.Frequency___Timeline,
                 Client: formData.Client,
                 Short_Description: formData.Short_Description,
-                // Convert moment objects to ISO strings for backend
-                Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null,
-                Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
+                // Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null, // Commented out
+                // Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null, // Commented out
                 Responsibility: formData.Responsibility,
                 Current_Status: formData.Current_Status,
-                Email: formData.Email, // This field is still in formData, but removed from backend query
+                Email: formData.Email,
                 Emails: formData.Emails,
                 Total_Tasks: formData.Total_Tasks,
                 Completed_Tasks: formData.Completed_Tasks,
@@ -280,27 +235,14 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Card_Corner_Status: formData.Card_Corner_Status,
             };
 
-            // Prepare data for Per_Key_Per_Day table from dailyHours state
-            const perKeyPerDayRows = [];
-            for (let i = 0; i < formData.Number_of_Days; i++) {
-                const currentDayMoment = formData.Planned_Start_Timestamp.clone().add(i, 'days');
-                const formattedDay = currentDayMoment.format('YYYY-MM-DD');
-                if (dailyHours[formattedDay] !== undefined) {
-                    perKeyPerDayRows.push({
-                        Key: mainTaskPayload.Key,
-                        Day: formattedDay, // Ensure this is the correct date string
-                        Duration: dailyHours[formattedDay], // Send minutes directly
-                        Duration_Unit: 'min', // Explicitly set to 'min' as per backend expectation
-                        Planned_Delivery_Slot: null,
-                        Responsibility: mainTaskPayload.Responsibility,
-                    });
-                }
-            }
+            // Prepare data for Per_Key_Per_Day table from dailyHours state - COMMENTED OUT
+            // The array is empty because the required inputs are removed.
+            const perKeyPerDayRows = []; 
 
 
             const payload = {
                 mainTask: mainTaskPayload,
-                perKeyPerDayRows: perKeyPerDayRows
+                perKeyPerDayRows: perKeyPerDayRows, // Sending empty array
             };
 
             const response = await fetch(`${BACKEND_API_BASE_URL}/api/post`, {
@@ -332,14 +274,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const personsToDisplay = isAdmin
         ? persons.map(p => ({ value: p.Emp_Emails, label: p.Current_Employes }))
         : persons.filter(p => p.Emp_Emails === currentUserEmail)
-                 .map(p => ({ value: p.Emp_Emails, label: p.Current_Employes }));
+             .map(p => ({ value: p.Emp_Emails, label: p.Current_Employes }));
 
     const selectedPerson = personsToDisplay.find(p => p.value === formData.Emails);
 
     // Determine if fields should be disabled for non-admins
     const isFieldDisabledForNonAdmin = !isAdmin && (formData.Emails !== currentUserEmail && formData.Emails !== "systems@brightbraintech.com");
-    // The "System" email for tasks that should be globally visible to non-admins
-    // const SYSTEM_EMAIL_FOR_GLOBAL_TASKS = "systems@brightbraintech.com"; // Already defined globally if needed
 
     // --- DIAGNOSTIC CONSOLE LOGS ---
     useEffect(() => {
@@ -349,12 +289,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         console.log('formData.Emails (task assigned email):', formData.Emails);
         console.log('currentUserEmail (prop):', currentUserEmail);
         console.log('isFieldDisabledForNonAdmin:', isFieldDisabledForNonAdmin);
-        console.log('formData.Planned_Start_Timestamp:', formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : 'null');
-        console.log('formData.Planned_Delivery_Timestamp:', formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : 'null');
-        console.log('formData.Number_of_Days:', formData.Number_of_Days);
-        console.log('dailyHours:', dailyHours);
         console.log('--------------------------------');
-    }, [userEmail, isAdmin, formData.Emails, currentUserEmail, isFieldDisabledForNonAdmin, formData.Planned_Start_Timestamp, formData.Planned_Delivery_Timestamp, formData.Number_of_Days, dailyHours]);
+    }, [userEmail, isAdmin, formData.Emails, currentUserEmail, isFieldDisabledForNonAdmin]);
 
 
     return (
@@ -375,8 +311,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 />
             </Form.Group>
 
+            {/* START DATE - COMMENTED OUT (Required attribute removed) */}
+            {/*
             <Form.Group className="mb-3">
-                <Form.Label>Start Date<span className="text-danger">*</span></Form.Label>
+                <Form.Label>Start Date</Form.Label> 
                 <Form.Control
                     type="date"
                     name="Planned_Start_Timestamp"
@@ -384,12 +322,15 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
                     onChange={handleStartDateChange}
                     disabled={isFieldDisabledForNonAdmin}
-                    required // Made required
+                    // required attribute REMOVED here
                 />
             </Form.Group>
+            */}
 
+            {/* NUMBER OF DAYS - COMMENTED OUT (Required attribute removed) */}
+            {/*
             <Form.Group className="mb-3">
-                <Form.Label>Number of Days<span className="text-danger">*</span></Form.Label>
+                <Form.Label>Number of Days</Form.Label>
                 <Form.Control
                     type="number"
                     name="Number_of_Days"
@@ -397,10 +338,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     onChange={handleNumberOfDaysChange}
                     min="0" // Ensure 0 or greater
                     disabled={isFieldDisabledForNonAdmin}
-                    required // Made required
+                    // required attribute REMOVED here
                 />
             </Form.Group>
+            */}
 
+            {/* END DATE - COMMENTED OUT */}
+            {/*
             <Form.Group className="mb-3">
                 <Form.Label>End Date</Form.Label>
                 <Form.Control
@@ -412,8 +356,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     disabled={true} // Disabled as requested
                 />
             </Form.Group>
+            */}
 
-            {/* Dynamic Sliders for Daily Hours */}
+            {/* Dynamic Sliders for Daily Hours - COMMENTED OUT */}
+            {/*
             {Object.keys(dailyHours).sort().map(date => (
                 <Form.Group className="mb-3" key={date}>
                     <Form.Label>Hours for {moment(date).format('YYYY-MM-DD')}</Form.Label>
@@ -428,11 +374,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     />
                     <div className="d-flex justify-content-between">
                         <span>0m</span>
-                        <span>{formatMinutesToHoursMinutes(dailyHours[date])}</span> {/* Formatted display */}
-                        <span>8h (480m)</span> {/* Max value display */}
+                        <span>{formatMinutesToHoursMinutes(dailyHours[date])}</span> 
+                        <span>8h (480m)</span> 
                     </div>
                 </Form.Group>
             ))}
+            */}
 
             <Form.Group className="mb-3">
                 <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
@@ -444,7 +391,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     isDisabled={!isAdmin || loadingPersons || isFieldDisabledForNonAdmin}
                     placeholder="Select Person"
                     isClearable
-                    required // Made required
+                    required // This is the only field still required
                 />
             </Form.Group>
 
