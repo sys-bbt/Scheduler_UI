@@ -14,10 +14,8 @@ import { notification } from 'antd';
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 
-// Define the status value that indicates a task is completed and should be hidden
 const COMPLETED_TASK_STATUS = 'Completed';
 
-// Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
     "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
@@ -28,8 +26,7 @@ const ADMIN_EMAILS_FRONTEND = [
     "arvanbir.s@brightbraintech.com"
 ];
 
-// --- Performance (Req 4) ---
-// Helper function for the dropdown menu, defined outside to be stable
+// Helper function for the dropdown menu
 const renderMenu = (task, onMenuItemClick) => (
     <Menu>
         {/* Conditional rendering based on task status */}
@@ -51,14 +48,12 @@ const renderMenu = (task, onMenuItemClick) => (
     </Menu>
 );
 
-// --- Performance (Req 4) ---
-// Created a memoized TaskCard component to prevent unnecessary re-renders of list items.
+// --- TaskCard Component (The Clickable Card with Inline Form Logic) ---
 const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemClick, onFormSubmit, currentUserEmail }) => {
     
     const isTaskCompleted = task.Current_Status === COMPLETED_TASK_STATUS;
     const isTaskScheduled = displayStatus === 'Scheduled';
 
-    // Safely extract the timestamp value
     const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
         ? task.Planned_Start_Timestamp.value
         : task.Planned_Start_Timestamp;
@@ -67,8 +62,9 @@ const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemC
         <Col>
             <Card
                 className={`task-card ${isTaskCompleted ? 'task-completed' : ''} ${isActive ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
+                // 🛑 The click handler that triggers the form toggle
                 style={{ cursor: isTaskScheduled ? 'default' : 'pointer' }}
-                onClick={() => onCardClick(task.Key, displayStatus)} // Use the passed handler
+                onClick={() => onCardClick(task.Key, displayStatus)} 
             >
                 <Card.Body>
                     <Card.Title>{task.Task_Details}</Card.Title>
@@ -93,8 +89,7 @@ const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemC
                         </Dropdown>
                     </div>
 
-                    {/* --- Form Opening (Req 3) --- */}
-                    {/* Display FormComponent ONLY if this task is the active one */}
+                    {/* 🟢 CONDITIONAL FORM RENDERING: ONLY displays when isActive is true */}
                     {isActive && (
                         <div className="mt-3" onClick={(e) => e.stopPropagation()}> {/* Prevent form click from closing form */}
                             <h6>Schedule Task: {task.Task_Details}</h6>
@@ -121,13 +116,13 @@ const DeliveryDetail = () => {
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    
+    // 🟢 KEY STATE: Controls which TaskCard form is open
     const [activeTaskKey, setActiveTaskKey] = useState(null);
     const [actionType, setActionType] = useState(null); // 'edit', 'pause', 'play', 'stop'
-    
-    // State added to trigger re-fetch after form submission
     const [refreshKey, setRefreshKey] = useState(0); 
 
-    const { userEmail } = useContext(UserContext); // Get userEmail from context
+    const { userEmail } = useContext(UserContext);
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
     useEffect(() => {
@@ -175,10 +170,8 @@ const DeliveryDetail = () => {
         };
 
         fetchDeliveryDetails();
-    }, [deliveryCode, userEmail, isAdmin, refreshKey]); // Now includes refreshKey as a dependency
+    }, [deliveryCode, userEmail, isAdmin, refreshKey]);
 
-    // --- Performance (Req 4) ---
-    // Wrapped in useCallback so its reference is stable for React.memo
     const handleFormSubmit = useCallback((updatedTaskData) => {
         // Optimistic update of tasks
         setTasks(prevTasks =>
@@ -188,14 +181,14 @@ const DeliveryDetail = () => {
                     : task
             )
         );
-        setActiveTaskKey(null); // Close the form after submission
-        setActionType(null); // Clear action type
-        setRefreshKey(prev => prev + 1); // Trigger the useEffect to re-fetch with fresh data
-    }, []); // State setters are stable, so dependency array is empty
+        // 🟢 Close the form after submission
+        setActiveTaskKey(null); 
+        setActionType(null);
+        // 🟢 Trigger re-fetch for fresh data and accurate status display
+        setRefreshKey(prev => prev + 1); 
+    }, []);
 
-    // --- Form Opening (Req 3) & Performance (Req 4) ---
-    // Updated click handler to toggle the form display
-    // Wrapped in useCallback so its reference is stable for React.memo
+    // 🟢 CLICK HANDLER: Controls the activeTaskKey state
     const handleCardClick = useCallback((taskKey, displayStatus) => {
         const isScheduled = displayStatus === 'Scheduled';
         
@@ -206,32 +199,29 @@ const DeliveryDetail = () => {
             });
             setActiveTaskKey(null);
             setActionType(null);
-            return; // Exit
+            return;
         }
 
-        // --- Toggle Logic (Req 3) ---
         if (activeTaskKey === taskKey) {
-            // If clicking the *same* card that is already active, close it.
+            // Close the currently active card
             setActiveTaskKey(null);
             setActionType(null);
         } else {
-            // If clicking a *new* card, open it.
+            // Open the new card
             setActiveTaskKey(taskKey);
             setActionType('edit');
         }
-    }, [activeTaskKey]); // Depends on activeTaskKey to perform toggle logic
+    }, [activeTaskKey]); // Depends on activeTaskKey for the toggle logic
 
-    // --- Performance (Req 4) ---
-    // Wrapped in useCallback so its reference is stable for React.memo
     const handleMenuItemClick = useCallback((taskKey, type) => {
-        // Temporarily block P/P/S actions, as API is not yet ready.
+        // Temporary block for P/P/S actions
         notification.info({
             message: 'Status Change Disabled',
             description: `API for ${type} is not yet implemented.`,
         });
         setActiveTaskKey(null);
         setActionType(null);
-    }, []); // State setters are stable
+    }, []);
 
     if (loading) {
         return (
@@ -278,25 +268,21 @@ const DeliveryDetail = () => {
             <Row xs={1} md={2} lg={3} className="g-4">
                 {tasks.length > 0 ? (
                     tasks.map((task) => {
-                        // Safely extract the timestamp value
                         const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
                             ? task.Planned_Start_Timestamp.value
                             : task.Planned_Start_Timestamp;
                         
-                        // Determine the status to display
                         const displayStatus = (rawPlannedStartTimestamp && task.Current_Status !== COMPLETED_TASK_STATUS)
                             ? 'Scheduled'
                             : task.Current_Status;
                         
                         return (
-                            // --- Performance (Req 4) ---
-                            // Using the new memoized TaskCard component
                             <TaskCard
-                                key={task.Key} // React key goes on the component
+                                key={task.Key} 
                                 task={task}
-                                isActive={activeTaskKey === task.Key && actionType === 'edit'}
+                                isActive={activeTaskKey === task.Key && actionType === 'edit'} // Controls form visibility
                                 displayStatus={displayStatus}
-                                onCardClick={handleCardClick}
+                                onCardClick={handleCardClick} // Passes down the toggle function
                                 onMenuItemClick={handleMenuItemClick}
                                 onFormSubmit={handleFormSubmit}
                                 currentUserEmail={userEmail}
