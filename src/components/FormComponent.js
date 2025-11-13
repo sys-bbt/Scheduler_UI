@@ -17,9 +17,6 @@ const ADMIN_EMAILS_FRONTEND = [
     "arvanbir.s@brightbraintech.com"
 ];
 
-// NOTE: The ESLint errors you saw (unused 'Button') were incorrect,
-// as 'Button' is clearly used in the return block. No changes were needed here.
-
 const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const { userEmail } = useContext(UserContext); // Use userEmail from context
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
@@ -61,7 +58,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             // --- START DEBUG LOGS ---
             console.log("--- FormComponent Debug ---");
             console.log("Task object received:", JSON.parse(JSON.stringify(task)));
-            console.log("Raw task.Planned_Delivery_Timestamp:", task.Planned_Delivery_Timestamp);
+            console.log("Raw task.Planned_Delivery_Timestamp (Original):", task.Planned_Delivery_Timestamp);
+            console.log("Raw task.Initiated_Timestamp (New End Date Source):", task.Initiated_Timestamp); // New Log
             // --- END DEBUG LOGS ---
 
             // FIX: Add logic to safely extract timestamp, checking if it's an object with a .value property
@@ -69,10 +67,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 ? task.Planned_Start_Timestamp.value
                 : task.Planned_Start_Timestamp;
 
-            // FIX: Add logic to safely extract timestamp for Delivery Date
-            const rawDeliveryDate = task.Planned_Delivery_Timestamp && typeof task.Planned_Delivery_Timestamp === 'object' && task.Planned_Delivery_Timestamp.value
-                ? task.Planned_Delivery_Timestamp.value
-                : task.Planned_Delivery_Timestamp;
+            // CHANGE: Use Initiated_Timestamp for the End Date field as requested
+            const rawDeliveryDate = task.Initiated_Timestamp && typeof task.Initiated_Timestamp === 'object' && task.Initiated_Timestamp.value
+                ? task.Initiated_Timestamp.value
+                : task.Initiated_Timestamp;
 
             const initialStartDate = rawStartDate ? moment(rawStartDate) : null;
             const initialDeliveryDate = rawDeliveryDate ? moment(rawDeliveryDate) : null;
@@ -190,7 +188,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Short_Description: formData.Short_Description,
                 // Convert moment objects to ISO strings for backend
                 Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null,
-                // Planned_Delivery_Timestamp is sent back as loaded (the fixed end date)
+                // Planned_Delivery_Timestamp is sent back as loaded (the fixed end date, now from Initiated_Timestamp)
                 Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
                 Responsibility: formData.Responsibility,
                 Current_Status: formData.Current_Status,
@@ -307,7 +305,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             </Form.Group>
 
             <Form.Group className="mb-3">
-                <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
+                <Form.Label>Person Responsible<span className="text-danger">*</span></This Form.Label>
                 <Select
                     name="Responsibility"
                     options={personsToDisplay}
