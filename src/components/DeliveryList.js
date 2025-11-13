@@ -34,7 +34,7 @@ const debounce = (func, delay) => {
 
 const DeliveryList = () => {
   const { userEmail, logoutUser } = useContext(UserContext);
-  const navigate = useNavigate(); // FIX: 'navigate' is correctly used below
+  const navigate = useNavigate(); 
   const [deliveries, setDeliveries] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(''); 
@@ -42,15 +42,20 @@ const DeliveryList = () => {
   const [page, setPage] = useState(0);
   const [selectedClient, setSelectedClient] = useState('');
   const [loading, setLoading] = useState(true);
-  const observer = useRef(null); // FIX: 'useRef' is correctly used for IntersectionObserver
+  const observer = useRef(null); 
   const [sortOption, setSortOption] = useState('earliest');
   const [totalFilteredDeliveries, setTotalFilteredDeliveries] = useState(0); 
   
-  // FIX: Refactored search debounce to use a stable ref for the debounced function
+  // Ref to hold the stable debounced function
   const updateSearchTerm = useRef(debounce((nextValue) => {
     setDebouncedSearchTerm(nextValue);
   }, 500));
 
+  // --- RUNTIME FIX PREP: Calculate unique list of clients ---
+  const uniqueClients = Array.from(
+    new Set(deliveries.map(d => d.client).filter(client => client))
+  ).sort();
+  // --------------------------------------------------------
 
   const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
@@ -122,7 +127,7 @@ const DeliveryList = () => {
             queryParams.append('selectedClient', clientFilter);
         }
 
-        // Removed BACKEND_API_BASE_URL from dependencies
+        // FIX: Removed BACKEND_API_BASE_URL from dependencies
         const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?${queryParams.toString()}`, {
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -250,7 +255,7 @@ const DeliveryList = () => {
   const handleSearchChange = (event) => {
     const value = event.target.value;
     setSearchTerm(value);
-    // FIX: Call the debounced function via its ref
+    // Call the debounced function via its ref
     updateSearchTerm.current(value);
   };
   
@@ -306,6 +311,8 @@ const DeliveryList = () => {
             handleClientSelect={handleClientSelect} 
             currentUserEmail={userEmail}
             isAdmin={isAdmin}
+            // PROP ADDED TO FIX RUNTIME ERROR
+            allClients={uniqueClients} 
           />
         </Col>
 
