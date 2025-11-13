@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-// FIX: Removed unused imports 'Button' and 'FiCheckCircle'
-import { Container, Row, Col, Card, ProgressBar, Form } from 'react-bootstrap';
-import { FiClock, FiFlag } from 'react-icons/fi';
+import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
+import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
 import { FaSpinner } from 'react-icons/fa';
 import { UserContext } from './UserContext';
 import './DeliveryList.css';
@@ -10,16 +9,19 @@ import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSe
 import SortDeliveriesByDate from './SortDeliveriesByDate';
 import DeleteButton from './DeleteButton';
 import { notification } from 'antd'; // Import notification from antd
+import moment from 'moment'; // Import moment for date formatting
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
+     "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
+    "divya.s@brightbraintech.com",
     "zoya.a@brightbraintech.com",
-    "shweta.g@brightbraintech.com",
-    "hitesh.r@brightbraintech.com"
+    "altaf.s@brightbraintech.com",
+    "arvanbir.s@brightbraintech.com"
 ];
 
 // Debounce utility function
@@ -39,45 +41,40 @@ const DeliveryList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(''); 
   const [authToken, setAuthToken] = useState(null);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(0); // Current page for infinite scroll
   const [selectedClient, setSelectedClient] = useState('');
   const [loading, setLoading] = useState(true);
   const observer = useRef(null); 
   const [sortOption, setSortOption] = useState('earliest');
   const [totalFilteredDeliveries, setTotalFilteredDeliveries] = useState(0); 
+  const [allClients, setAllClients] = useState([]); // State to hold all unique clients
   
-  // Ref to hold the stable debounced function
   const updateSearchTerm = useRef(debounce((nextValue) => {
     setDebouncedSearchTerm(nextValue);
   }, 500));
 
-  // --- RUNTIME FIX PREP: Calculate unique list of clients ---
-  const uniqueClients = Array.from(
-    new Set(deliveries.map(d => d.client).filter(client => client))
-  ).sort();
-  // --------------------------------------------------------
-
   const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-  // Memoize handleSort to ensure stable function reference
   const handleSort = useCallback((deliveriesToSort) => {
     return [...deliveriesToSort].sort((a, b) => { 
-      const dateA = new Date(a.initiatedTimestampRaw?.value || a.initiatedTimestampRaw);
-      const dateB = new Date(b.initiatedTimestampRaw?.value || b.initiatedTimestampRaw);
+      // Use DelCode_w_o__ or Delivery_code for key lookup
+      const dateA = new Date(a.Initiated_Timestamp?.value || a.Initiated_Timestamp);
+      const dateB = new Date(b.Initiated_Timestamp?.value || b.Initiated_Timestamp);
       
       const isValidDateA = !isNaN(dateA.getTime());
       const isValidDateB = !isNaN(dateB.getTime());
 
       if (!isValidDateA && !isValidDateB) return 0;
-      if (!isValidDateA) return 1; // Put invalid date at end
-      if (!isValidDateB) return -1; // Put invalid date at end
+      if (!isValidDateA) return 1; 
+      if (!isValidDateB) return -1; 
 
       return sortOption === 'earliest' ? dateA - dateB : dateB - dateA;
     });
   }, [sortOption]); 
 
 
-  const handleClientSelect = (client) => {
+  // Renamed to onClientSelect to match the FilterDeliveryBasedOnClientSelected.js component prop
+  const onClientSelect = (client) => {
     setSelectedClient(client);
     setDeliveries([]); 
     setPage(0); 
@@ -91,18 +88,18 @@ const DeliveryList = () => {
     return 'danger';
   };
   
-  // Implemented function for deleting a delivery and updating state
   const handleDeliveryDelete = useCallback((deletedDelCode) => {
     setDeliveries((prevDeliveries) => 
-        prevDeliveries.filter(d => d.delCode !== deletedDelCode)
+        prevDeliveries.filter(d => d.DelCode_w_o__ !== deletedDelCode)
     );
+    setTotalFilteredDeliveries(prev => prev > 0 ? prev - 1 : 0);
     notification.success({
       message: 'Deletion Successful',
       description: `Delivery ${deletedDelCode} has been removed.`,
     });
   }, []);
 
-  // Modified fetchData to accept search and client parameters
+
   const fetchData = useCallback(
     async (currentPage, searchQuery, clientFilter, isInitialLoad = false) => {
       if (!authToken || !userEmail) {
@@ -115,8 +112,8 @@ const DeliveryList = () => {
 
         const queryParams = new URLSearchParams({
             email: userEmail,
-            offset: currentPage * 500, 
-            limit: 500, 
+            offset: currentPage * 500, // Offset based on page number
+            limit: 500, // Fixed limit for infinite scroll batch
             isAdmin: isAdmin,
         });
 
@@ -127,7 +124,6 @@ const DeliveryList = () => {
             queryParams.append('selectedClient', clientFilter);
         }
 
-        // FIX: Removed BACKEND_API_BASE_URL from dependencies
         const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?${queryParams.toString()}`, {
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -144,12 +140,17 @@ const DeliveryList = () => {
           throw new Error(`Network response was not ok: ${response.status} - ${errorText}`);
         }
 
-        const { data, totalCount } = await response.json();
+        const { data, totalCount, allClients: fetchedClients } = await response.json();
         
         const tasksArray = Object.values(data).flat();
         
         // Filter for the main delivery entries (Step_ID === 0)
         const deliveriesForList = tasksArray.filter((delivery) => delivery.Step_ID === 0);
+
+        if (isInitialLoad && fetchedClients) {
+            // Update the full list of clients only on the initial load
+            setAllClients(fetchedClients.sort());
+        }
 
         if (deliveriesForList.length === 0 && currentPage !== 0 && !isInitialLoad) {
           setLoading(false);
@@ -173,13 +174,13 @@ const DeliveryList = () => {
           
           return {
             ...delivery,
-            delCode: delivery.Delivery_code,
+            delCode: delivery.Delivery_code, // Main code with underscores
             client: delivery.Client,
             tasksTotal,
             tasksPlanned,
             progress: tasksTotal === 0 ? 0 : Math.round((tasksPlanned / tasksTotal) * 100),
             deadline: deadlineText,
-            initiatedTimestampRaw: delivery.Initiated_Timestamp, // Use raw timestamp for sorting
+            initiatedTimestampRaw: delivery.Initiated_Timestamp,
           };
         });
 
@@ -188,6 +189,7 @@ const DeliveryList = () => {
         setDeliveries((prevDeliveries) => {
           // If it's page 0 or a new search/filter, replace the list. Otherwise, append.
           const newDeliveries = currentPage === 0 ? enrichedDeliveries : [...prevDeliveries, ...enrichedDeliveries];
+          // Ensure new deliveries are sorted every time
           return handleSort(newDeliveries);
         });
 
@@ -201,15 +203,13 @@ const DeliveryList = () => {
         setLoading(false);
       }
     },
-    // FIX: Removed BACKEND_API_BASE_URL from dependencies
     [userEmail, isAdmin, authToken, handleSort, logoutUser, navigate] 
   );
 
-  // Helper function to calculate time left
   const calculateTimeLeft = (timestamp) => {
-    const deadline = new Date(timestamp);
-    const now = new Date();
-    const diff = deadline.getTime() - now.getTime();
+    const deadline = moment(timestamp);
+    const now = moment();
+    const diff = deadline.diff(now);
 
     if (diff <= 0) return 'Deadline passed';
 
@@ -219,7 +219,6 @@ const DeliveryList = () => {
     return `${daysLeft} days ${hoursLeft} hrs left`;
   };
 
-  // Effect to load authToken from localStorage on component mount
   useEffect(() => {
     const token = localStorage.getItem('authToken');
     const email = localStorage.getItem('userEmail');
@@ -233,7 +232,7 @@ const DeliveryList = () => {
     }
   }, [navigate]);
 
-  // Effect to trigger data fetch when userEmail, authToken, debouncedSearchTerm, or selectedClient changes
+  // Effect to trigger data fetch when dependencies change (Initial/New Filter/Search)
   useEffect(() => {
     if (userEmail && authToken) {
       setDeliveries([]);
@@ -245,26 +244,26 @@ const DeliveryList = () => {
     }
   }, [fetchData, userEmail, authToken, debouncedSearchTerm, selectedClient]); 
 
-  // NEW useEffect: Re-sorts the displayed deliveries when sortOption changes
+  // Re-sorts the displayed deliveries when sortOption changes
   useEffect(() => {
     if (deliveries.length > 0 && !loading) {
       setDeliveries((currentDeliveries) => handleSort([...currentDeliveries]));
     }
-  }, [sortOption, deliveries.length, loading, handleSort]); 
+  }, [sortOption, loading, handleSort]); 
 
   const handleSearchChange = (event) => {
     const value = event.target.value;
     setSearchTerm(value);
-    // Call the debounced function via its ref
     updateSearchTerm.current(value);
   };
   
-  // Infinite scroll logic
+  // Lazy Load / Infinite Scroll Logic
   useEffect(() => {
     if (observer.current) observer.current.disconnect();
 
     const loadMoreDeliveries = (entries) => {
       const [entry] = entries;
+      // Trigger load more if intersecting, not currently loading, deliveries exist, and not all total deliveries have been loaded
       if (entry.isIntersecting && !loading && deliveries.length > 0 && deliveries.length < totalFilteredDeliveries) {
         setPage((prevPage) => prevPage + 1);
       }
@@ -280,7 +279,7 @@ const DeliveryList = () => {
     };
   }, [loading, deliveries.length, totalFilteredDeliveries]); 
 
-  // Only fetch data when page changes (for infinite scroll)
+  // Fetch next page of data when page state changes (for infinite scroll)
   useEffect(() => {
     if (page > 0) {
       fetchData(page, debouncedSearchTerm, selectedClient, false);
@@ -308,11 +307,9 @@ const DeliveryList = () => {
         <Col md={4} className="mb-3">
           <FilterDeliveryBasedOnClientSelected 
             selectedClient={selectedClient} 
-            handleClientSelect={handleClientSelect} 
-            currentUserEmail={userEmail}
-            isAdmin={isAdmin}
-            // PROP ADDED TO FIX RUNTIME ERROR
-            allClients={uniqueClients} 
+            // Matching the component's expected props
+            onClientSelect={onClientSelect} 
+            clients={allClients} 
           />
         </Col>
 
@@ -327,102 +324,105 @@ const DeliveryList = () => {
       <p>You have {deliveries.length} active deliveries (Total: {totalFilteredDeliveries})</p>
 
       <Row>
-        {deliveries.map((delivery) => {
-          const progress = delivery.progress;
-          const progressVariant = calculateProgressVariant(progress);
+        {deliveries.length > 0 ? (
+          deliveries.map((delivery) => {
+            const progress = delivery.progress;
+            const progressVariant = calculateProgressVariant(progress);
 
-          return (
-            <Col xs={12} key={delivery.delCode} className="card-wrapper">
-              <Link 
-                to={`/delivery/data/${delivery.delCode}`} 
-                style={{ textDecoration: 'none' }}
-              >
-                <Card className="task-card">
-                   {/* Shaded background for visual effect */}
-                   <div 
-                        className="shaded-bg" 
-                        style={{ width: `${100 - progress}%`, right: 0 }}
-                    ></div>
-                  <Card.Body>
-                    <div className="d-flex justify-content-between align-items-start">
-                      <div>
-                        <h5 className="mb-1">{delivery.Client}</h5>
-                        <p className="client mb-2">Delivery Code: {delivery.delCode}</p>
+            return (
+              <Col xs={12} key={delivery.DelCode_w_o__} className="card-wrapper">
+                <Link 
+                  to={`/delivery/data/${delivery.DelCode_w_o__}`} 
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Card className="task-card">
+                     <div 
+                          className="shaded-bg" 
+                          style={{ width: `${100 - progress}%`, right: 0 }}
+                      ></div>
+                    <Card.Body>
+                      <div className="d-flex justify-content-between align-items-start">
+                        <div>
+                          <h5 className="mb-1">{delivery.Client}</h5>
+                          <p className="client mb-2">Delivery Code: {delivery.DelCode_w_o__}</p>
+                        </div>
+                        
+                        {isAdmin && (
+                            <div onClick={(e) => e.preventDefault()}>
+                              <DeleteButton 
+                                  deliveryCode={delivery.DelCode_w_o__} 
+                                  onDelete={handleDeliveryDelete} 
+                              />
+                            </div>
+                        )}
                       </div>
-                      
-                      {isAdmin && (
-                          <div onClick={(e) => e.preventDefault()}>
-                            <DeleteButton 
-                                deliveryCode={delivery.delCode} 
-                                onDelete={handleDeliveryDelete} 
-                            />
-                          </div>
-                      )}
-                    </div>
 
-                    <div className="mt-2">
-                      <ProgressBar 
-                        now={progress} 
-                        label={`${progress}%`} 
-                        variant={progressVariant} 
-                      />
-                      <p className="text-muted mt-1 mb-2">
-                        {delivery.tasksPlanned} of {delivery.tasksTotal} tasks planned
-                      </p>
-                    </div>
-
-                    <div className="d-flex justify-content-between align-items-center mt-3">
-                      <div>
-                        <p className="mb-0 text-primary">
-                          <FiClock style={{ marginRight: '5px' }} /> {delivery.Current_Status}
+                      <div className="mt-2">
+                        <ProgressBar 
+                          now={progress} 
+                          label={`${progress}%`} 
+                          variant={progressVariant} 
+                        />
+                        <p className="text-muted mt-1 mb-2">
+                          {delivery.tasksPlanned} of {delivery.tasksTotal} tasks planned
                         </p>
                       </div>
-                      <div className="text-end">
-                        <p className="mb-0 text-danger">
-                          <FiFlag style={{ marginRight: '5px' }} /> {delivery.deadline}
-                        </p>
-                        <p
-                          onClick={(e) => {
-                            e.preventDefault(); // Prevent navigating to detail page on click
-                            e.stopPropagation(); // Stop event from bubbling up to Link
-                            const el = document.createElement('textarea');
-                            el.value = delivery.delCode;
-                            document.body.appendChild(el);
-                            el.select();
-                            document.execCommand('copy');
-                            document.body.removeChild(el);
-                            notification.info({
-                              message: 'Copied!',
-                              description: `Delivery Code ${delivery.delCode} copied to clipboard.`,
-                            });
-                          }}
-                          style={{ cursor: "pointer", color: "blue", textDecoration: "underline", fontSize: '0.85em' }}
-                          title="Click to copy"
-                        >
-                          Copy Code
-                        </p>
+
+                      <div className="d-flex justify-content-between align-items-center mt-3">
+                        <div>
+                          <p className="mb-0 text-primary">
+                            <FiClock style={{ marginRight: '5px' }} /> {delivery.Current_Status}
+                          </p>
+                        </div>
+                        <div className="text-end">
+                          <p className="mb-0 text-danger">
+                            <FiFlag style={{ marginRight: '5px' }} /> {delivery.deadline}
+                          </p>
+                          <p
+                            onClick={(e) => {
+                              e.preventDefault(); 
+                              e.stopPropagation(); 
+                              const el = document.createElement('textarea');
+                              el.value = delivery.DelCode_w_o__;
+                              document.body.appendChild(el);
+                              el.select();
+                              document.execCommand('copy');
+                              document.body.removeChild(el);
+                              notification.info({
+                                message: 'Copied!',
+                                description: `Delivery Code ${delivery.DelCode_w_o__} copied to clipboard.`,
+                              });
+                            }}
+                            style={{ cursor: "pointer", color: "blue", textDecoration: "underline", fontSize: '0.85em' }}
+                            title="Click to copy"
+                          >
+                            Copy Code
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </Card.Body>
-                </Card>
-              </Link>
-            </Col>
-          );
-        })}
+                    </Card.Body>
+                  </Card>
+                </Link>
+              </Col>
+            );
+          })
+        ) : (
+          <Col>
+            <p className="text-center">No deliveries found matching your criteria.</p>
+          </Col>
+        )}
       </Row>
 
-      <div className="delivery-list-end" style={{ height: '1px' }}></div>
+      {/* This element is observed by IntersectionObserver for infinite scrolling */}
+      <div className="delivery-list-end" style={{ height: '1px' }}></div> 
 
-      {loading && (
+      {loading && deliveries.length > 0 && ( 
         <div className="d-flex justify-content-center align-items-center" style={{ height: '100px' }}>
           <FaSpinner
             className="spinner-icon"
-            style={{ fontSize: '2rem', color: '#007bff', animation: 'spin 2s linear infinite' }}
+            style={{ fontSize: '2rem', color: '#007bff', animation: 'spin 10s linear infinite' }}
           />
         </div>
-      )}
-      {!loading && deliveries.length === totalFilteredDeliveries && totalFilteredDeliveries > 0 && (
-         <p className="text-center text-muted mt-3">All deliveries loaded.</p>
       )}
     </Container>
   );
