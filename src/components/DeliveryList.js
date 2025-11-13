@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useContext, useMemo } from 'react';
-import { Link } from 'react-router-dom'; // FIX: Removed useNavigate
-import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
+import { Container, Row, Col, Card, ProgressBar, Form, Button, Alert } from 'react-bootstrap';
 import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
 import { FaSpinner } from 'react-icons/fa';
 import { UserContext } from './UserContext';
@@ -8,12 +8,11 @@ import './DeliveryList.css';
 import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSelected';
 import SortDeliveriesByDate from './SortDeliveriesByDate';
 import DeleteButton from './DeleteButton';
-import { notification } from 'antd'; // Import notification from antd
-import moment from 'moment'; // Import moment for date formatting
+import { notification } from 'antd';
+import moment from 'moment';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
-// Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
     "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
@@ -24,7 +23,6 @@ const ADMIN_EMAILS_FRONTEND = [
     "arvanbir.s@brightbraintech.com"
 ];
 
-// Debounce utility function
 const debounce = (func, delay) => {
     let timeout;
     return function(...args) {
@@ -41,11 +39,10 @@ const DeliveryList = () => {
     const [error, setError] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedClient, setSelectedClient] = useState('');
-    const [clients, setClients] = useState([]); // State to store unique clients
-    const [sortOption, setSortOption] = useState('latest'); // 'earliest' or 'latest'
+    const [clients, setClients] = useState([]);
+    const [sortOption, setSortOption] = useState('latest');
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-    // Function to fetch deliveries based on current filters and search query
     const fetchDeliveries = useCallback(async () => {
         setLoading(true);
         setError(null);
@@ -66,13 +63,10 @@ const DeliveryList = () => {
             }
             const data = await response.json();
 
-            // Extract unique clients from the fetched data
             const uniqueClients = [...new Set(data.map(delivery => delivery.Client))].filter(Boolean);
             setClients(uniqueClients);
 
-            // --- FIX (Req 5): Sort by Initiated_Timestamp desc/asc ---
             const sortedData = [...data].sort((a, b) => {
-                // Safely get timestamp value for sorting
                 const timestampA = a.Initiated_Timestamp && typeof a.Initiated_Timestamp === 'object' && a.Initiated_Timestamp.value
                     ? a.Initiated_Timestamp.value
                     : a.Initiated_Timestamp || a.Created_at;
@@ -83,23 +77,13 @@ const DeliveryList = () => {
                 const dateA = moment(timestampA);
                 const dateB = moment(timestampB);
 
-                // Handle invalid dates
-                if (!dateA.isValid() && !dateB.isValid()) {
-                    return 0; 
-                }
-                if (!dateA.isValid()) {
-                    return 1; // Put invalid dates at the end
-                }
-                if (!dateB.isValid()) {
-                    return -1; // Put invalid dates at the end
-                }
+                if (!dateA.isValid() && !dateB.isValid()) return 0;
+                if (!dateA.isValid()) return 1;
+                if (!dateB.isValid()) return -1;
 
-                // Apply sort based on option
                 if (sortOption === 'latest') {
-                    // Sort by Initiated_Timestamp in descending order (latest first)
                     return dateB.diff(dateA);
-                } else { // 'earliest'
-                    // Sort by Initiated_Timestamp in ascending order (earliest first)
+                } else {
                     return dateA.diff(dateB);
                 }
             });
@@ -108,13 +92,12 @@ const DeliveryList = () => {
         } catch (err) {
             console.error("Error fetching deliveries:", err);
             setError(err.message);
-            setDeliveries([]); // Clear deliveries on error
+            setDeliveries([]);
         } finally {
             setLoading(false);
         }
-    }, [userEmail, searchQuery, selectedClient, sortOption]); // Dependencies for useCallback
+    }, [userEmail, searchQuery, selectedClient, sortOption]);
 
-    // FIX: Changed useCallback to useMemo to stabilize the debounced function instance
     const debouncedFetchDeliveries = useMemo(
         () => debounce(fetchDeliveries, 500),
         [fetchDeliveries]
@@ -122,7 +105,7 @@ const DeliveryList = () => {
 
     useEffect(() => {
         debouncedFetchDeliveries();
-    }, [debouncedFetchDeliveries]); // Trigger fetch when debounced function changes
+    }, [debouncedFetchDeliveries]);
 
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);
@@ -137,10 +120,10 @@ const DeliveryList = () => {
             message: 'Delivery Deleted',
             description: `Delivery with code ${deletedDeliveryCode} has been successfully deleted.`,
         });
-        fetchDeliveries(); // Re-fetch deliveries to update the list
+        fetchDeliveries();
     };
 
-    if (loading && deliveries.length === 0) { // Show spinner only if no data is loaded yet
+    if (loading && deliveries.length === 0) {
         return (
             <Container className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
                 <FaSpinner
@@ -198,36 +181,33 @@ const DeliveryList = () => {
                 </Col>
             </Row>
 
-            <Row xs={1} md={1} lg={1} className="g-4"> {/* Changed Col sizing to display one card per row */}
+            <Row xs={1} md={1} lg={1} className="g-4">
                 {deliveries.length > 0 ? (
                     deliveries.map((delivery) => {
-                        // Calculate progress based on Scheduled Tasks vs Total Tasks
-                        const scheduledTasks = delivery.Planned_Tasks !== undefined ? delivery.Planned_Tasks : delivery.Completed_Tasks; // Fallback
-                        const totalTasks = delivery.Total_Tasks || 1; // Avoid division by zero
+                        const scheduledTasks = delivery.Planned_Tasks !== undefined ? delivery.Planned_Tasks : delivery.Completed_Tasks;
+                        const totalTasks = delivery.Total_Tasks || 1;
 
                         const progress = (scheduledTasks / totalTasks) * 100;
-
                         let progressBarVariant = "primary";
                         if (progress === 100) {
                             progressBarVariant = "success";
-                        } else if (progress >= 50) { // Half or more planned
+                        } else if (progress >= 50) {
                             progressBarVariant = "warning";
-                        } else { // Less than half planned
+                        } else {
                             progressBarVariant = "danger";
                         }
 
-                        // Robustly parse and format Planned_Delivery_Timestamp (End Date)
                         const rawDeadlineTimestamp = delivery.Planned_Delivery_Timestamp && typeof delivery.Planned_Delivery_Timestamp === 'object' && delivery.Planned_Delivery_Timestamp.value
                             ? delivery.Planned_Delivery_Timestamp.value
-                            : delivery.Planned_Delivery_Timestamp; // Use directly if it's already a string or null/undefined
+                            : delivery.Planned_Delivery_Timestamp;
 
                         const deadlineDate = rawDeadlineTimestamp ? moment(rawDeadlineTimestamp) : null;
                         const formattedDeadline = deadlineDate && deadlineDate.isValid() ? deadlineDate.format('YYYY-MM-DD') : 'N/A';
-                        
+
                         return (
                             <Col key={delivery.Key}>
                                 <Link to={`/delivery/data/${encodeURIComponent(delivery.DelCode_w_o__)}`} className="text-decoration-none">
-                                    <Card className={`delivery-card h-100`}> 
+                                    <Card className={`delivery-card h-100`}>
                                         <Card.Body>
                                             <div className="d-flex justify-content-between align-items-start">
                                                 <div>
@@ -246,9 +226,8 @@ const DeliveryList = () => {
                                             <ProgressBar
                                                 now={progress}
                                                 className="my-3"
-                                                variant={progressBarVariant} // Dynamic variant
+                                                variant={progressBarVariant}
                                             />
-                                            {/* Moved the progress text outside the ProgressBar */}
                                             <p className="mb-0 text-center" style={{ color: 'black', fontWeight: 'bold' }}>
                                                 {`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`}
                                             </p>
@@ -261,21 +240,18 @@ const DeliveryList = () => {
                                                 </p>
                                             </div>
                                             <div className="d-flex justify-content-between align-items-center mt-2">
-                                                {/* Display Deadline date */}
                                                 <p className="mb-0 text-danger">
                                                     <FiFlag style={{ marginRight: '5px' }} /> Deadline: {formattedDeadline}
                                                 </p>
                                                 <p
                                                     onClick={(e) => {
-                                                        e.preventDefault(); // Prevent link navigation
-                                                        e.stopPropagation(); // Prevent card click
+                                                        e.preventDefault(); e.stopPropagation();
                                                         const el = document.createElement('textarea');
                                                         el.value = delivery.DelCode_w_o__;
                                                         document.body.appendChild(el);
                                                         el.select();
                                                         document.execCommand('copy');
                                                         document.body.removeChild(el);
-                                                        // Using Antd notification instead of browser alert for copy success
                                                         notification.success({
                                                             message: 'Copied!',
                                                             description: `${delivery.DelCode_w_o__} copied to clipboard.`,
@@ -303,7 +279,7 @@ const DeliveryList = () => {
 
             <div className="delivery-list-end"></div>
 
-            {loading && deliveries.length > 0 && ( // Show spinner when loading more, but preserve existing data
+            {loading && deliveries.length > 0 && (
                 <div className="d-flex justify-content-center align-items-center" style={{ height: '100px' }}>
                     <FaSpinner
                         className="spinner-icon"
