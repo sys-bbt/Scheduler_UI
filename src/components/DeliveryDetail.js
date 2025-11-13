@@ -93,10 +93,9 @@ const DeliveryDetail = () => {
         } finally {
             setLoading(false);
         }
-    }, [delCode, userEmail, isAdmin, BACKEND_API_BASE_URL]); // All dependencies for useCallback
+    }, [delCode, userEmail, isAdmin]); // FIX: Removed BACKEND_API_BASE_URL
 
     useEffect(() => {
-        // FIX: Include fetchDeliveryDetails as a dependency to satisfy react-hooks/exhaustive-deps
         fetchDeliveryDetails();
     }, [fetchDeliveryDetails]); 
 
@@ -144,7 +143,6 @@ const DeliveryDetail = () => {
         }
     };
 
-    // --- FIX: Add logic to handle timer actions (Play/Pause) ---
     const handleTimerAction = async (taskKey, action) => {
         // Send action to backend
         try {
@@ -176,12 +174,8 @@ const DeliveryDetail = () => {
         } catch (error) {
             console.error(`Error performing timer action (${action}):`, error);
             setError(`Failed to perform timer action: ${error.message}`);
-            // Consider fetching data again to revert the optimistic update if API failed
-            // fetchDeliveryDetails(); 
         }
     };
-    // -----------------------------------------------------------
-
 
     const formatTimestamp = (timestamp) => {
         if (!timestamp) return 'No start time';
@@ -211,7 +205,6 @@ const DeliveryDetail = () => {
         return <Container className="mt-5"><Alert variant="danger">{error}</Alert></Container>;
     }
     
-    // Check if delivery is still null (shouldn't happen if error check works, but for safety)
     if (!delivery) {
          return <Container className="mt-5"><Alert variant="warning">Delivery details could not be loaded.</Alert></Container>;
     }
