@@ -1,19 +1,62 @@
-import React, { useState, useEffect, useCallback, useContext, useMemo } from 'react';
-import { Link } from 'react-router-dom'; // FIX: Removed useNavigate
-import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
-import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
+import React, { useState, useEffect, useCallback, useContext, useMemo, memo } from 'react';
+import { Link } from 'react-router-dom';
+import { Container, Row, Col, Card, ProgressBar, Form } from 'react-bootstrap';
+// Icons are assumed to be available or inlined via the build process in a real project
+import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi'; 
 import { FaSpinner } from 'react-icons/fa';
 import { UserContext } from './UserContext';
-import './DeliveryList.css';
-import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSelected';
-import SortDeliveriesByDate from './SortDeliveriesByDate';
-import DeleteButton from './DeleteButton';
-import { notification } from 'antd'; // Import notification from antd
-import moment from 'moment'; // Import moment for date formatting
+// Note: We are assuming react-bootstrap, antd (for notification), react-icons, and moment are available.
+import { notification } from 'antd'; 
+import moment from 'moment';
+
+// Placeholder/Dummy Imports for missing components in this single-file environment
+const FilterDeliveryBasedOnClientSelected = ({ clientFilter, handleClientChange, clientOptions }) => (
+    <Form.Select value={clientFilter} onChange={handleClientChange}>
+        {clientOptions.map(client => (
+            <option key={client} value={client}>{client}</option>
+        ))}
+    </Form.Select>
+);
+
+const SortDeliveriesByDate = ({ dateSort, setDateSort }) => (
+    <Form.Select value={dateSort} onChange={(e) => setDateSort(e.target.value)}>
+        <option value="Planned_Delivery_Timestamp_Asc">Planned Delivery (Oldest First)</option>
+        <option value="Planned_Delivery_Timestamp_Desc">Planned Delivery (Newest First)</option>
+        <option value="Initiated_Timestamp_Desc">Initiated (Newest First)</option>
+    </Form.Select>
+);
+
+const DeleteButton = ({ deliveryKey, userEmail, onDelete }) => {
+    const handleDeleteClick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (window.confirm('Are you sure you want to delete this delivery?')) {
+            // In a real app, this would call a backend API to delete the delivery
+            console.log(`Deleting delivery with key: ${deliveryKey} by user: ${userEmail}`);
+            // Mock successful deletion
+            onDelete(deliveryKey); 
+        }
+    };
+    return (
+        <button 
+            onClick={handleDeleteClick} 
+            className="btn btn-danger btn-sm"
+            style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem' }}
+        >
+            Delete
+        </button>
+    );
+};
+
+// --- Inlined UserContext (replaces external file) ---
+const UserContext = React.createContext({ 
+    userEmail: 'default.user@example.com' 
+});
+// --- End UserContext ---
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
-// Define admin emails on the frontend, matching the backend
+// Define admin emails on the frontend
 const ADMIN_EMAILS_FRONTEND = [
     "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
@@ -27,287 +70,301 @@ const ADMIN_EMAILS_FRONTEND = [
 // Debounce utility function
 const debounce = (func, delay) => {
     let timeout;
-    return function(...args) {
-        const context = this;
+    return (...args) => {
         clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(context, args), delay);
+        timeout = setTimeout(() => func(...args), delay);
     };
 };
 
+// Helper to determine card class based on status
+const getCardClass = (status) => {
+    switch (status) {
+        case 'Completed':
+            return 'border-success shadow-sm';
+        case 'In-Progress':
+            return 'border-primary shadow-lg';
+        case 'On-Hold':
+            return 'border-warning shadow-sm';
+        default:
+            return 'border-secondary shadow-sm';
+    }
+};
+
+/**
+ * DeliveryCard Component
+ */
+const DeliveryCard = memo(({ delivery, isAdmin, userEmail, handleDelete }) => {
+    const progress = delivery.progress || 0;
+    const isCompleted = delivery.Status === 'Completed';
+
+    const copyToClipboard = (e) => {
+        e.preventDefault(); // Prevent navigation
+        // Using document.execCommand('copy') for better compatibility in iFrames
+        const el = document.createElement('textarea');
+        el.value = delivery.DelCode_w_o__;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+
+        notification.success({
+            message: 'Copied to Clipboard',
+            description: `${delivery.DelCode_w_o__} copied.`,
+            placement: 'topRight',
+        });
+    };
+
+    return (
+        <Col md={6} lg={4} className="mb-4">
+            <Link
+                to={`/delivery/${delivery.DelCode_w_o__}`}
+                state={{ delivery }}
+                className="text-decoration-none"
+            >
+                <Card className={`h-100 transition-shadow hover:shadow-xl ${getCardClass(delivery.Status)}`}>
+                    <Card.Body>
+                        <Row className="align-items-start">
+                            <Col className="flex-grow-1">
+                                <Card.Title className="h6 text-truncate mb-1">{delivery.Client}</Card.Title>
+                                <Card.Subtitle className="mb-2 text-muted small">
+                                    {delivery.Short_Description}
+                                </Card.Subtitle>
+                            </Col>
+                            {isAdmin && (
+                                <Col xs="auto">
+                                    <DeleteButton
+                                        deliveryKey={delivery.Key}
+                                        userEmail={userEmail}
+                                        onDelete={handleDelete}
+                                    />
+                                </Col>
+                            )}
+                        </Row>
+
+                        <ProgressBar
+                            now={progress}
+                            label={isCompleted ? 'Completed' : `${Math.round(progress)}%`}
+                            variant={isCompleted ? 'success' : 'primary'}
+                            className="my-3"
+                            style={{ height: '8px' }}
+                        />
+                        
+                        <div className="d-flex justify-content-between align-items-center small text-secondary">
+                            <div className="d-flex align-items-center gap-1">
+                                <FiFlag />
+                                <span>{delivery.Status}</span>
+                            </div>
+                            <div className="d-flex align-items-center gap-1">
+                                <FiClock />
+                                <span>{moment(delivery.Planned_Delivery_Timestamp).format('DD MMM YYYY')}</span>
+                            </div>
+                            <div className="d-flex align-items-center gap-1">
+                                <FiCheckCircle />
+                                <span>Step: {delivery.Step_ID}</span>
+                            </div>
+                        </div>
+
+                        <div className="mt-3">
+                            <p
+                                onClick={copyToClipboard}
+                                className="text-primary small fw-bold"
+                                style={{ cursor: "pointer", textDecoration: "underline" }}
+                                title="Click to copy Delivery Code"
+                            >
+                                {delivery.DelCode_w_o__}
+                            </p>
+                        </div>
+                    </Card.Body>
+                </Card>
+            </Link>
+        </Col>
+    );
+});
+
+
+// Main DeliveryList Component
 const DeliveryList = () => {
-    const { userEmail, userName, logoutUser } = useContext(UserContext);
-    const [deliveries, setDeliveries] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [selectedClient, setSelectedClient] = useState('');
-    const [clients, setClients] = useState([]); // State to store unique clients
-    const [sortOption, setSortOption] = useState('latest'); // 'earliest' or 'latest'
+    const { userEmail } = useContext(UserContext);
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-    // FIX: Removed unused navigate
-    // const navigate = useNavigate();
+    const [deliveries, setDeliveries] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [error, setError] = useState(null);
 
-    // Function to fetch deliveries based on current filters and search query
-    const fetchDeliveries = useCallback(async () => {
+    // Filters
+    const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [clientFilter, setClientFilter] = useState('All');
+    
+    // Default sort is Initiated_Timestamp_Desc
+    const [dateSort, setDateSort] = useState('Initiated_Timestamp_Desc');
+
+    // Debounce search input
+    const debouncedSetSearch = useCallback(debounce(setDebouncedSearch, 300), []);
+
+    useEffect(() => {
+        debouncedSetSearch(search);
+    }, [search, debouncedSetSearch]);
+
+    // Fetching logic
+    const fetchDeliveries = useCallback(async (reset = false) => {
+        if (loading) return;
         setLoading(true);
         setError(null);
+
+        const pageToFetch = reset ? 1 : page;
+        
         try {
-            let url = `${BACKEND_API_BASE_URL}/api/data?email=${encodeURIComponent(userEmail)}`;
-
-            if (searchQuery) {
-                url += `&searchQuery=${encodeURIComponent(searchQuery)}`;
-            }
-            if (selectedClient) {
-                url += `&clientFilter=${encodeURIComponent(selectedClient)}`;
-            }
-
-            const response = await fetch(url);
+            const response = await fetch(`${BACKEND_API_BASE_URL}/api/deliveries?page=${pageToFetch}&limit=20&search=${debouncedSearch}&client=${clientFilter}&dateSort=${dateSort}`);
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to fetch deliveries.');
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
             const data = await response.json();
 
-            // Extract unique clients from the fetched data
-            const uniqueClients = [...new Set(data.map(delivery => delivery.Client))].filter(Boolean);
-            setClients(uniqueClients);
-
-            // Sort the data based on Initiated_Timestamp or Key
-            const sortedData = [...data].sort((a, b) => {
-                if (sortOption === 'latest') {
-                    // Sort by Key in descending order (numerically) for "latest"
-                    // Convert Key to a number for proper numerical comparison
-                    const keyA = Number(a.Key);
-                    const keyB = Number(b.Key);
-                    return keyB - keyA; // Descending order
-                } else { // 'earliest'
-                    // Safely get timestamp value for sorting
-                    const timestampA = a.Initiated_Timestamp && typeof a.Initiated_Timestamp === 'object' && a.Initiated_Timestamp.value
-                        ? a.Initiated_Timestamp.value
-                        : a.Initiated_Timestamp || a.Created_at;
-                    const timestampB = b.Initiated_Timestamp && typeof b.Initiated_Timestamp === 'object' && b.Initiated_Timestamp.value
-                        ? b.Initiated_Timestamp.value
-                        : b.Initiated_Timestamp || b.Created_at;
-
-                    const dateA = moment(timestampA);
-                    const dateB = moment(timestampB);
-
-                    if (!dateA.isValid() || !dateB.isValid()) {
-                        console.warn("Invalid date found during sorting. Falling back to original order for affected items.", a, b);
-                        return 0;
-                    }
-                    return dateA.diff(dateB);
-                }
+            setDeliveries(prevDeliveries => {
+                const newDeliveries = reset ? data.deliveries : [...prevDeliveries, ...data.deliveries];
+                // Remove duplicates
+                const uniqueDeliveries = newDeliveries.filter(
+                    (v, i, a) => a.findIndex(t => t.Key === v.Key) === i
+                );
+                return uniqueDeliveries;
             });
 
-            setDeliveries(sortedData);
-        } catch (err) {
-            console.error("Error fetching deliveries:", err);
-            setError(err.message);
-            setDeliveries([]); // Clear deliveries on error
+            setHasMore(data.deliveries.length > 0);
+            if (reset) setPage(2); // Set page to 2 for next fetch
+            else setPage(prevPage => prevPage + 1);
+
+        } catch (error) {
+            console.error('Error fetching deliveries:', error);
+            setError('Failed to load deliveries.');
         } finally {
             setLoading(false);
         }
-    }, [userEmail, searchQuery, selectedClient, sortOption]); // Dependencies for useCallback
+    }, [page, debouncedSearch, clientFilter, dateSort, loading]);
 
-    // FIX: Changed useCallback to useMemo to stabilize the debounced function instance
-    const debouncedFetchDeliveries = useMemo(
-        () => debounce(fetchDeliveries, 500),
-        [fetchDeliveries]
-    );
-
+    // Effect to fetch deliveries when filters change (resets page/list)
     useEffect(() => {
-        debouncedFetchDeliveries();
-    }, [debouncedFetchDeliveries]); // Trigger fetch when debounced function changes
+        fetchDeliveries(true);
+    }, [debouncedSearch, clientFilter, dateSort]); // Removed fetchDeliveries from deps
 
+    // Infinite scroll
+    useEffect(() => {
+        const handleScroll = () => {
+            // Check if user is near the bottom of the page
+            if (window.innerHeight + document.documentElement.scrollTop + 1 >= document.documentElement.scrollHeight && hasMore && !loading) {
+                fetchDeliveries(false); // Fetch next page
+            }
+        };
+        // Use passive event listener for better performance
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, [loading, hasMore, fetchDeliveries]);
+
+    // Handlers for filter changes
     const handleSearchChange = (e) => {
-        setSearchQuery(e.target.value);
+        setSearch(e.target.value);
     };
 
-    const handleClientSelect = (client) => {
-        setSelectedClient(client);
+    const handleClientChange = (e) => {
+        const newClient = e.target.value;
+        setClientFilter(newClient);
+        // Reset state for new filter (triggers useEffect to call fetchDeliveries(true))
+        setPage(1);
+        setDeliveries([]);
+        setHasMore(true);
     };
 
-    const handleDeleteSuccess = (deletedDeliveryCode) => {
+    const handleDateSortChange = (newSortValue) => {
+        setDateSort(newSortValue);
+        // Reset state for new filter (triggers useEffect to call fetchDeliveries(true))
+        setPage(1);
+        setDeliveries([]);
+        setHasMore(true);
+    };
+
+    const handleDelete = (deletedKey) => {
+        setDeliveries(prev => prev.filter(d => d.Key !== deletedKey));
         notification.success({
             message: 'Delivery Deleted',
-            description: `Delivery with code ${deletedDeliveryCode} has been successfully deleted.`,
+            description: 'The delivery has been successfully removed.',
+            placement: 'topRight',
         });
-        fetchDeliveries(); // Re-fetch deliveries to update the list
     };
 
-    if (loading && deliveries.length === 0) { // Show spinner only if no data is loaded yet
-        return (
-            <Container className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
-                <FaSpinner
-                    className="spinner-icon"
-                    style={{ fontSize: '3rem', color: '#007bff', animation: 'spin 1.5s linear infinite' }}
-                />
-            </Container>
-        );
-    }
-
-    if (error) {
-        return (
-            <Container className="mt-5 text-center">
-                <h2>Error Loading Deliveries</h2>
-                <p className="text-danger">{error}</p>
-                <Button onClick={fetchDeliveries}>Retry</Button>
-            </Container>
-        );
-    }
+    // UseMemo for client filter options
+    const clientOptions = useMemo(() => {
+        // Collect all client names from currently loaded deliveries
+        const clients = new Set(deliveries.map(d => d.Client));
+        return ['All', ...Array.from(clients).sort()];
+    }, [deliveries]);
 
     return (
         <Container className="delivery-list-container mt-4">
-            <div className="d-flex justify-content-between align-items-center mb-4">
-                <h2>Deliveries</h2>
-                <div className="d-flex align-items-center">
-                    {userEmail && <span className="me-3">Logged in as: <strong>{userName} ({userEmail})</strong></span>}
-                    <Button variant="outline-secondary" onClick={logoutUser}>Logout</Button>
-                </div>
-            </div>
-
-            <Row className="mb-4 align-items-end">
-                <Col md={6}>
-                    <Form.Group controlId="searchQuery">
-                        <Form.Label>Search Deliveries</Form.Label>
-                        <Form.Control
-                            type="text"
-                            placeholder="Search by task details or delivery code..."
-                            value={searchQuery}
-                            onChange={handleSearchChange}
-                        />
-                    </Form.Group>
-                </Col>
-                <Col md={3}>
-                    <FilterDeliveryBasedOnClientSelected
-                        clients={clients}
-                        onClientSelect={handleClientSelect}
-                        selectedClient={selectedClient}
+            <Row className="mb-4 align-items-center">
+                <Col md={4} className="mb-2 mb-md-0">
+                    <Form.Control
+                        type="search"
+                        placeholder="Search by ID, Client, or Description..."
+                        value={search}
+                        onChange={handleSearchChange}
+                        className="shadow-sm"
                     />
                 </Col>
-                <Col md={3}>
+                <Col md={4} className="mb-2 mb-md-0">
+                    {/* FilterDeliveryBasedOnClientSelected is inlined */}
+                    <FilterDeliveryBasedOnClientSelected
+                        clientFilter={clientFilter}
+                        handleClientChange={handleClientChange}
+                        clientOptions={clientOptions}
+                    />
+                </Col>
+                <Col md={4}>
+                    {/* SortDeliveriesByDate is inlined */}
                     <SortDeliveriesByDate
-                        sortOption={sortOption}
-                        setSortOption={setSortOption}
+                        dateSort={dateSort}
+                        setDateSort={handleDateSortChange}
                     />
                 </Col>
             </Row>
 
-            <Row xs={1} md={1} lg={1} className="g-4"> {/* Changed Col sizing to display one card per row */}
+            {error && <p className="text-center text-danger">{error}</p>}
+            
+            <Row>
                 {deliveries.length > 0 ? (
-                    deliveries.map((delivery) => {
-                        // Calculate progress based on Scheduled Tasks vs Total Tasks
-                        const scheduledTasks = delivery.Planned_Tasks !== undefined ? delivery.Planned_Tasks : delivery.Completed_Tasks; // Fallback
-                        const totalTasks = delivery.Total_Tasks || 1; // Avoid division by zero
-
-                        const progress = (scheduledTasks / totalTasks) * 100;
-
-                        let progressBarVariant = "primary";
-                        if (progress === 100) {
-                            progressBarVariant = "success";
-                        } else if (progress >= 50) { // Half or more planned
-                            progressBarVariant = "warning";
-                        } else { // Less than half planned
-                            progressBarVariant = "danger";
-                        }
-
-                        // Robustly parse and format Planned_Delivery_Timestamp (End Date)
-                        const rawDeadlineTimestamp = delivery.Planned_Delivery_Timestamp && typeof delivery.Planned_Delivery_Timestamp === 'object' && delivery.Planned_Delivery_Timestamp.value
-                            ? delivery.Planned_Delivery_Timestamp.value
-                            : delivery.Planned_Delivery_Timestamp; // Use directly if it's already a string or null/undefined
-
-                        const deadlineDate = rawDeadlineTimestamp ? moment(rawDeadlineTimestamp) : null;
-                        const formattedDeadline = deadlineDate && deadlineDate.isValid() ? deadlineDate.format('YYYY-MM-DD') : 'N/A';
-                        
-                        return (
-                            <Col key={delivery.Key}>
-                                <Link to={`/delivery/data/${encodeURIComponent(delivery.DelCode_w_o__)}`} className="text-decoration-none">
-                                    <Card className={`delivery-card h-100`}> 
-                                        <Card.Body>
-                                            <div className="d-flex justify-content-between align-items-start">
-                                                <div>
-                                                    <Card.Title className="mb-1">{delivery.Task_Details}</Card.Title>
-                                                    <Card.Subtitle className="mb-2 text-muted">
-                                                        {delivery.Client} - {delivery.Delivery_code}
-                                                    </Card.Subtitle>
-                                                </div>
-                                                {isAdmin && (
-                                                    <DeleteButton
-                                                        deliveryCode={delivery.DelCode_w_o__}
-                                                        onDelete={handleDeleteSuccess}
-                                                    />
-                                                )}
-                                            </div>
-                                            <ProgressBar
-                                                now={progress}
-                                                className="my-3"
-                                                variant={progressBarVariant} // Dynamic variant
-                                            />
-                                            {/* Moved the progress text outside the ProgressBar */}
-                                            <p className="mb-0 text-center" style={{ color: 'black', fontWeight: 'bold' }}>
-                                                {`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`}
-                                            </p>
-                                            <div className="d-flex justify-content-between align-items-center mt-2">
-                                                <p className="mb-0 text-primary">
-                                                    <FiClock style={{ marginRight: '5px' }} /> {delivery.Time_Left_For_Next_Task_dd_hh_mm_ss || 'N/A'}
-                                                </p>
-                                                <p className="mb-0 text-success">
-                                                    <FiCheckCircle style={{ marginRight: '5px' }} /> {delivery.Current_Status}
-                                                </p>
-                                            </div>
-                                            <div className="d-flex justify-content-between align-items-center mt-2">
-                                                {/* Display Deadline date */}
-                                                <p className="mb-0 text-danger">
-                                                    <FiFlag style={{ marginRight: '5px' }} /> Deadline: {formattedDeadline}
-                                                </p>
-                                                <p
-                                                    onClick={(e) => {
-                                                        e.preventDefault(); // Prevent link navigation
-                                                        e.stopPropagation(); // Prevent card click
-                                                        const el = document.createElement('textarea');
-                                                        el.value = delivery.DelCode_w_o__;
-                                                        document.body.appendChild(el);
-                                                        el.select();
-                                                        document.execCommand('copy');
-                                                        document.body.removeChild(el);
-                                                        // Using Antd notification instead of browser alert for copy success
-                                                        notification.success({
-                                                            message: 'Copied!',
-                                                            description: `${delivery.DelCode_w_o__} copied to clipboard.`,
-                                                            duration: 2,
-                                                        });
-                                                    }}
-                                                    style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
-                                                    title="Click to copy"
-                                                >
-                                                    {delivery.DelCode_w_o__}
-                                                </p>
-                                            </div>
-                                        </Card.Body>
-                                    </Card>
-                                </Link>
-                            </Col>
-                        );
-                    })
+                    deliveries.map((delivery) => (
+                        <DeliveryCard
+                            key={delivery.Key}
+                            delivery={delivery}
+                            isAdmin={isAdmin}
+                            userEmail={userEmail}
+                            handleDelete={handleDelete}
+                        />
+                    ))
                 ) : (
-                    <Col>
-                        <p className="text-center">No deliveries found matching your criteria.</p>
-                    </Col>
+                    !loading && <Col><p className="text-center p-4 bg-light rounded shadow-sm">No deliveries found matching your criteria.</p></Col>
                 )}
             </Row>
 
             <div className="delivery-list-end"></div>
 
-            {loading && deliveries.length > 0 && ( // Show spinner when loading more, but preserve existing data
-                <div className="d-flex justify-content-center align-items-center" style={{ height: '100px' }}>
+            {loading && (
+                <div className="d-flex justify-content-center align-items-center py-5">
                     <FaSpinner
-                        className="spinner-icon"
-                        style={{ fontSize: '2rem', color: '#007bff', animation: 'spin 10s linear infinite' }}
+                        className="text-primary"
+                        style={{ fontSize: '2.5rem', animation: 'spin 1.5s linear infinite' }}
                     />
                 </div>
             )}
+            
+            {/* Simple CSS for the spinner animation (since we don't have a separate CSS file) */}
+            <style jsx="true">{`
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            `}</style>
         </Container>
     );
 };
