@@ -55,6 +55,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     // 1. Initialize formData from the task prop
     useEffect(() => {
         if (task) {
+            console.log("Task Key received by FormComponent:", task.Key, "for Step ID:", task.Step_ID);
             
             const rawStartDate = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
                 ? task.Planned_Start_Timestamp.value
