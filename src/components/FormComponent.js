@@ -46,7 +46,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [success, setSuccess] = useState(null); // State for success message
+    const [success, setSuccess] = useState(null);
     const [persons, setPersons] = useState([]);
     const [loadingPersons, setLoadingPersons] = useState(true);
     const [personError, setPersonError] = useState(null);
@@ -54,6 +54,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     // 1. Initialize formData from the task prop
     useEffect(() => {
         if (task) {
+            // DEBUG LINE
             console.log("Task Key received by FormComponent:", task.Key, "for Step ID:", task.Step_ID); 
             
             const rawStartDate = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
@@ -68,6 +69,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             const initialDeliveryDate = rawDeliveryDate ? moment(rawDeliveryDate) : null;
 
             setFormData({
+                // 🟢 FIX: Ensure Key is treated as a string, which should now contain a value from the updated backend
                 Key: String(task.Key || ''), 
                 Delivery_code: task.Delivery_code || '',
                 DelCode_w_o__: task.DelCode_w_o__ || '',
@@ -153,9 +155,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
-        setSuccess(null); // Clear previous success/error messages at start
+        setSuccess(null);
 
-        // CRITICAL VALIDATION: Check if Key is valid
+        // 🟢 CRITICAL VALIDATION: Check if Key is valid (now receiving it from the backend fix)
+        // Convert to string and trim for robustness
         const taskKey = String(formData.Key).trim(); 
         if (!taskKey || taskKey === '0') {
              setError("Cannot update task: Unique Task Key is missing or invalid. Please check backend data.");
@@ -172,7 +175,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         try {
             const mainTaskPayload = {
                 ...formData,
-                Key: taskKey,
+                Key: taskKey, // Use the validated key string
                 Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null,
                 Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
                 Updated_at: moment.utc().toISOString(), 
@@ -182,7 +185,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             
             if (formData.Planned_Start_Timestamp && formData.Planned_Start_Timestamp.isValid()) {
                 perKeyPerDayRows.push({
-                    Key: taskKey, 
+                    Key: taskKey, // Use the validated key string
                     Day: formData.Planned_Start_Timestamp.format('YYYY-MM-DD'),
                     Duration: 0,
                     Duration_Unit: 'min',
@@ -205,26 +208,16 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             });
 
             if (!response.ok) {
-                const errorData = await response.json(); 
-                const backendError = errorData.bigQueryErrorDetails || errorData.message || `HTTP error! status: ${response.status}`;
-                throw new Error(backendError);
+                const errorText = await response.text();
+                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
 
-            // ⭐ SUCCESS LOGIC ⭐
-            setSuccess('Task Scheduled Successfully'); 
+            await response.json(); 
             
-            // Call the parent function to close the form and refresh data
+            setSuccess('Task and schedule updated successfully!');
             onSubmit(formData); 
-            
-            // Clear the success message after 5 seconds
-            setTimeout(() => {
-                setSuccess(null);
-            }, 5000); 
-
         } catch (err) {
             console.error('Error updating task:', err);
-            // Clear success message in case of error
-            setSuccess(null); 
             setError(`Failed to update task: ${err.message}`);
         } finally {
             setLoading(false);
@@ -255,10 +248,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     return (
         <Form onSubmit={handleSubmit} className="p-3 border rounded shadow-sm bg-light">
-            {/* Display Success and Error Alerts */}
             {error && <Alert variant="danger">{error}</Alert>}
             {success && <Alert variant="success">{success}</Alert>}
-
             {personError && <Alert variant="warning">{personError}</Alert>}
 
             <Form.Group className="mb-3">
