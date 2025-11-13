@@ -3,21 +3,25 @@ import { useLocation, Link } from 'react-router-dom';
 import { Container, Card, ListGroup, Row, Col, Spinner, Alert } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
-import { FaPause, FaPlay, FaStop, FaCalendarAlt } from 'react-icons/fa';
+import { FaPause, FaPlay, FaStop, FaEllipsisV } from 'react-icons/fa';
 import FormComponent from './FormComponent';
 import { UserContext } from './UserContext';
 import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
+import moment from 'moment';
+import { notification } from 'antd';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 const COMPLETED_TASK_STATUS = 'Completed'; 
 
 const ADMIN_EMAILS_FRONTEND = [
+    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
+    "divya.s@brightbraintech.com",
     "zoya.a@brightbraintech.com",
-    "shweta.g@brightbraintech.com",
-    "hitesh.r@brightbraintech.com"
+    "altaf.s@brightbraintech.com",
+    "arvanbir.s@brightbraintech.com"
 ];
 
 const DeliveryDetail = () => {
@@ -74,7 +78,9 @@ const DeliveryDetail = () => {
 
                         return {
                             ...task,
-                            scheduled: !!task.Planned_Delivery_Timestamp && (typeof task.Planned_Delivery_Timestamp === 'string' ? task.Planned_Delivery_Timestamp !== "NULL" : task.Planned_Delivery_Timestamp.value !== null),
+                            // isTaskScheduled is a better name for checking if planned dates exist
+                            isTaskScheduled: !!task.Planned_Delivery_Timestamp && 
+                                (typeof task.Planned_Delivery_Timestamp === 'string' ? task.Planned_Delivery_Timestamp !== "NULL" : task.Planned_Delivery_Timestamp.value !== null),
                             personResponsible: task.Responsibility || 'Unassigned',
                             totalTime: taskDurationInMinutes,
                             formattedDuration,
@@ -92,32 +98,35 @@ const DeliveryDetail = () => {
         } finally {
             setLoading(false);
         }
-    }, [delCode, userEmail, isAdmin]); // FIX: Removed BACKEND_API_BASE_URL
+    }, [delCode, userEmail, isAdmin]);
 
     useEffect(() => {
         fetchDeliveryDetails();
     }, [fetchDeliveryDetails]); 
 
+    
     const handleTaskClick = (task) => {
-        if (!task.scheduled) {
-            setActionType('Schedule');
-            setActiveTaskKey(task.Key);
-        }
+        // Do nothing on card click, form is only opened via the dropdown menu for reassign.
     };
 
     const handleMenuClick = (task, { key }) => {
-        if (key === 'reschedule') {
-            setActionType('Reschedule');
-        } else if (key === 'reassign') {
+        if (key === 'reassign' && isAdmin) {
             setActionType('Reassign');
+            setActiveTaskKey(task.Key);
+        } else if (key === 'reschedule' || key === 'schedule') {
+             // Block the old scheduling/rescheduling actions, as the form is removed
+             notification.warning({
+                message: 'Action Not Available',
+                description: 'Scheduling/Rescheduling is disabled. Use this interface for Reassign only.',
+            });
         }
-        setActiveTaskKey(task.Key);
     };
+    
 
     const handleFormSubmit = async (formData) => {
+        // REVERTED: Use the original /api/schedule-task endpoint to ensure BQ Per_Key_per_Day logic is triggered
         try {
-            // API call to submit the scheduled data
-            const response = await fetch(`${BACKEND_API_BASE_URL}/api/schedule-task`, {
+            const response = await fetch(`${BACKEND_API_BASE_URL}/api/schedule-task`, { 
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -127,8 +136,13 @@ const DeliveryDetail = () => {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || `Failed to submit form: ${response.status}`);
+                throw new Error(errorData.error || `Failed to update task: ${response.status}`);
             }
+            
+            notification.success({
+                message: 'Task Updated',
+                description: `Responsibility for task ${formData.taskKey} has been updated. (BQ record created).`,
+            });
 
             // After a successful submission, clear the form and refresh the data
             setActiveTaskKey(null);
@@ -137,13 +151,12 @@ const DeliveryDetail = () => {
 
         } catch (error) {
             console.error('Error submitting form:', error);
-            setError(`Failed to save task schedule: ${error.message}`);
-            // Do not clear form/task if there was an error
+            setError(`Failed to save task update: ${error.message}`);
         }
     };
 
     const handleTimerAction = async (taskKey, action) => {
-        // Send action to backend
+        // Timer action logic remains the same
         try {
             const response = await fetch(`${BACKEND_API_BASE_URL}/api/timer-action`, {
                 method: 'POST',
@@ -160,6 +173,11 @@ const DeliveryDetail = () => {
                  const errorText = await response.text();
                  throw new Error(`Timer action failed: ${response.status} - ${errorText}`);
             }
+            
+            notification.info({
+                message: 'Timer Action',
+                description: `Timer for task ${taskKey} ${action}ed.`,
+            });
             
             // Optimistic UI update
             setTasks((currentTasks) =>
@@ -178,15 +196,17 @@ const DeliveryDetail = () => {
 
     const formatTimestamp = (timestamp) => {
         if (!timestamp) return 'No start time';
-        // Handle BigQuery-style object or raw timestamp
-        const date = new Date(timestamp?.value || timestamp); 
-        return isNaN(date.getTime()) ? 'Invalid date' : date.toLocaleString();
+        const date = moment(timestamp?.value || timestamp);
+        return date.isValid() ? date.format('YYYY-MM-DD HH:mm') : 'Invalid date';
     };
 
     const taskMenu = (task) => (
         <Menu onClick={(info) => handleMenuClick(task, info)}>
-            <MenuItem key="reschedule">Reschedule Task</MenuItem>
-            <MenuItem key="reassign" disabled={!isAdmin}>Reassign Task</MenuItem>
+            {/* Disabled Reschedule/Schedule option */}
+            <MenuItem key="schedule" disabled={task.isTaskScheduled}>Schedule Task (Disabled)</MenuItem> 
+            <MenuItem key="reschedule" disabled={!task.isTaskScheduled}>Reschedule Task (Disabled)</MenuItem> 
+            {/* Only Reassign is now active/useful */}
+            <MenuItem key="reassign" disabled={!isAdmin}>Reassign Task</MenuItem> 
         </Menu>
     );
 
@@ -221,77 +241,78 @@ const DeliveryDetail = () => {
                 {tasks.length > 0 ? (
                     tasks.map((task) => (
                         <Col xs={12} key={task.Key}>
-                            <Dropdown
-                                trigger={['contextMenu']}
-                                overlay={taskMenu(task)}
-                                animation="slide-up"
-                            >
-                                <div onClick={() => handleTaskClick(task)}>
-                                    <Card className={`task-card mb-3 ${!task.scheduled ? 'bg-warning-subtle' : ''}`}>
-                                        <Card.Body>
-                                            <Row className="align-items-center">
-                                                <Col xs={8}>
-                                                    <h5 className="task-title">{task.Task_Details}</h5>
-                                                    <p className="task-meta mb-1">
-                                                        Assigned to: <strong>{task.personResponsible}</strong>
-                                                    </p>
-                                                    <p className="task-meta mb-1">
-                                                        Start: {formatTimestamp(task.Planned_Start_Timestamp)} | 
-                                                        End: {formatTimestamp(task.Planned_Delivery_Timestamp)}
-                                                    </p>
-                                                    <p className="task-status">
-                                                        Status: <strong>{task.Current_Status}</strong> | 
-                                                        Total Time: <strong>{task.formattedDuration}</strong>
-                                                    </p>
-                                                </Col>
+                            
+                            <Card className={`task-card mb-3 ${!task.isTaskScheduled ? 'bg-warning-subtle' : ''}`}>
+                                <Card.Body onClick={() => handleTaskClick(task)}>
+                                    <Row className="align-items-center">
+                                        <Col xs={8}>
+                                            <h5 className="task-title">{task.Task_Details}</h5>
+                                            <p className="task-meta mb-1">
+                                                Assigned to: <strong>{task.personResponsible}</strong>
+                                            </p>
+                                            <p className="task-meta mb-1">
+                                                Start: {formatTimestamp(task.Planned_Start_Timestamp)} | 
+                                                End: {formatTimestamp(task.Planned_Delivery_Timestamp)}
+                                            </p>
+                                            <p className="task-status">
+                                                Status: <strong>{task.Current_Status}</strong> | 
+                                                Total Time: <strong>{task.formattedDuration}</strong>
+                                            </p>
+                                        </Col>
 
-                                                <Col xs={4} className="text-end timer-controls">
-                                                    {!task.scheduled && (
-                                                        <FaCalendarAlt 
-                                                            className="text-primary me-3" 
-                                                            title="Click to Schedule" 
+                                        <Col xs={4} className="text-end timer-controls">
+                                            
+                                            {/* Timer Controls */}
+                                            {task.isTaskScheduled && (
+                                                <>
+                                                    {task.isPlaying ? (
+                                                        <FaPause
+                                                            className="text-primary me-3"
+                                                            onClick={(e) => { e.stopPropagation(); handleTimerAction(task.Key, 'pause'); }}
+                                                            style={{ cursor: 'pointer' }}
+                                                        />
+                                                    ) : (
+                                                        <FaPlay
+                                                            className="text-success me-3"
+                                                            onClick={(e) => { e.stopPropagation(); handleTimerAction(task.Key, 'start'); }}
+                                                            style={{ cursor: 'pointer' }}
                                                         />
                                                     )}
-                                                    
-                                                    {task.scheduled && (
-                                                        <>
-                                                            {task.isPlaying ? (
-                                                                <FaPause
-                                                                    className="text-primary me-3"
-                                                                    onClick={(e) => { e.stopPropagation(); handleTimerAction(task.Key, 'pause'); }}
-                                                                    style={{ cursor: 'pointer' }}
-                                                                />
-                                                            ) : (
-                                                                <FaPlay
-                                                                    className="text-success me-3"
-                                                                    onClick={(e) => { e.stopPropagation(); handleTimerAction(task.Key, 'start'); }}
-                                                                    style={{ cursor: 'pointer' }}
-                                                                />
-                                                            )}
-                                                            <FaStop
-                                                                className="text-danger"
-                                                                onClick={(e) => { e.stopPropagation(); /* Implement stop/complete logic */ }}
-                                                                style={{ cursor: 'pointer' }}
-                                                            />
-                                                        </>
-                                                    )}
-                                                </Col>
-                                            </Row>
-                                            
-                                            {activeTaskKey === task.Key && actionType && (
-                                                <div className="mt-3">
-                                                    <h6>{actionType} Task: {task.Task_Details}</h6>
-                                                    <FormComponent
-                                                        onSubmit={handleFormSubmit}
-                                                        task={task}
-                                                        currentUserEmail={userEmail}
+                                                    <FaStop
+                                                        className="text-danger me-3"
+                                                        onClick={(e) => { e.stopPropagation(); /* Implement stop/complete logic */ }}
+                                                        style={{ cursor: 'pointer' }}
                                                     />
-                                                </div>
+                                                </>
                                             )}
-                                        </Card.Body>
-                                    </Card>
-                                </div>
-                            </Dropdown>
+                                            
+                                            {/* Dropdown Menu (for Reassign) */}
+                                            <Dropdown
+                                                trigger={['click']}
+                                                overlay={taskMenu(task)}
+                                                animation="slide-up"
+                                                placement="bottomRight"
+                                            >
+                                                <FaEllipsisV style={{ cursor: 'pointer' }} />
+                                            </Dropdown>
+
+                                        </Col>
+                                    </Row>
+                                    
+                                    {activeTaskKey === task.Key && actionType && (
+                                        <div className="mt-3">
+                                            <h6>{actionType} Task: {task.Task_Details}</h6>
+                                            <FormComponent
+                                                onSubmit={handleFormSubmit}
+                                                task={task}
+                                                currentUserEmail={userEmail}
+                                                actionType={actionType}
+                                            />
+                                        </div>
+                                    )}
+                                </Card.Body>
+                            </Card>
+                            
                         </Col>
                     ))
                 ) : (
