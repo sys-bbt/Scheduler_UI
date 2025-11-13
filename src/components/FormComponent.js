@@ -306,7 +306,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     readOnly // This field is pre-filled from task data
                     disabled={true} // Disabled as requested
                 />
-            </Form.Grup>
+            </Form.Group>
 
             <Form.Group className="mb-3">
                 <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
