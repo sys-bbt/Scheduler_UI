@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useContext, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-// 🛑 REMOVED 'Alert' from the line below
-import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap'; 
+import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
 import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
 import { FaSpinner } from 'react-icons/fa';
 import { UserContext } from './UserContext';
