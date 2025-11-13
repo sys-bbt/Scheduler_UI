@@ -57,6 +57,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     useEffect(() => {
         if (task) {
+            
+            // --- START DEBUG LOGS ---
+            console.log("--- FormComponent Debug ---");
+            console.log("Task object received:", JSON.parse(JSON.stringify(task)));
+            console.log("Raw task.Planned_Delivery_Timestamp:", task.Planned_Delivery_Timestamp);
+            // --- END DEBUG LOGS ---
+
             // FIX: Add logic to safely extract timestamp, checking if it's an object with a .value property
             const rawStartDate = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
                 ? task.Planned_Start_Timestamp.value
@@ -69,6 +76,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
             const initialStartDate = rawStartDate ? moment(rawStartDate) : null;
             const initialDeliveryDate = rawDeliveryDate ? moment(rawDeliveryDate) : null;
+
+            // --- START DEBUG LOGS ---
+            console.log("Parsed initialDeliveryDate (what will be set in state):", initialDeliveryDate);
+            // --- END DEBUG LOGS ---
 
             setFormData({
                 Key: task.Key || '',
