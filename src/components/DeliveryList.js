@@ -45,9 +45,6 @@ const DeliveryList = () => {
     const [sortOption, setSortOption] = useState('latest'); // 'earliest' or 'latest'
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-    // FIX: Removed unused navigate
-    // const navigate = useNavigate();
-
     // Function to fetch deliveries based on current filters and search query
     const fetchDeliveries = useCallback(async () => {
         setLoading(true);
@@ -73,30 +70,36 @@ const DeliveryList = () => {
             const uniqueClients = [...new Set(data.map(delivery => delivery.Client))].filter(Boolean);
             setClients(uniqueClients);
 
-            // Sort the data based on Initiated_Timestamp or Key
+            // --- FIX (Req 5): Sort by Initiated_Timestamp desc/asc ---
             const sortedData = [...data].sort((a, b) => {
+                // Safely get timestamp value for sorting
+                const timestampA = a.Initiated_Timestamp && typeof a.Initiated_Timestamp === 'object' && a.Initiated_Timestamp.value
+                    ? a.Initiated_Timestamp.value
+                    : a.Initiated_Timestamp || a.Created_at;
+                const timestampB = b.Initiated_Timestamp && typeof b.Initiated_Timestamp === 'object' && b.Initiated_Timestamp.value
+                    ? b.Initiated_Timestamp.value
+                    : b.Initiated_Timestamp || b.Created_at;
+
+                const dateA = moment(timestampA);
+                const dateB = moment(timestampB);
+
+                // Handle invalid dates
+                if (!dateA.isValid() && !dateB.isValid()) {
+                    return 0; 
+                }
+                if (!dateA.isValid()) {
+                    return 1; // Put invalid dates at the end
+                }
+                if (!dateB.isValid()) {
+                    return -1; // Put invalid dates at the end
+                }
+
+                // Apply sort based on option
                 if (sortOption === 'latest') {
-                    // Sort by Key in descending order (numerically) for "latest"
-                    // Convert Key to a number for proper numerical comparison
-                    const keyA = Number(a.Key);
-                    const keyB = Number(b.Key);
-                    return keyB - keyA; // Descending order
+                    // Sort by Initiated_Timestamp in descending order (latest first)
+                    return dateB.diff(dateA);
                 } else { // 'earliest'
-                    // Safely get timestamp value for sorting
-                    const timestampA = a.Initiated_Timestamp && typeof a.Initiated_Timestamp === 'object' && a.Initiated_Timestamp.value
-                        ? a.Initiated_Timestamp.value
-                        : a.Initiated_Timestamp || a.Created_at;
-                    const timestampB = b.Initiated_Timestamp && typeof b.Initiated_Timestamp === 'object' && b.Initiated_Timestamp.value
-                        ? b.Initiated_Timestamp.value
-                        : b.Initiated_Timestamp || b.Created_at;
-
-                    const dateA = moment(timestampA);
-                    const dateB = moment(timestampB);
-
-                    if (!dateA.isValid() || !dateB.isValid()) {
-                        console.warn("Invalid date found during sorting. Falling back to original order for affected items.", a, b);
-                        return 0;
-                    }
+                    // Sort by Initiated_Timestamp in ascending order (earliest first)
                     return dateA.diff(dateB);
                 }
             });
