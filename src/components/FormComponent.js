@@ -31,7 +31,7 @@ const PERSON_EMAIL_DATA_MAP = {
 const ALL_AVAILABLE_PERSONS_HARDCODED = [
     "Abhinav Verma", "Aishwarya Mulay", "Akanksha Bhande", "Aniruddh Pachupate", "Arvanbir Sandhu", 
     "Divya Sharma", "Divyanshi Agarwal", "Hitesh Rattesar", "HR", "Jairaj Shetty", "Josika Bhattacharjee", 
-    "Manish Hodlur", "Megha Vyas", "Meghna Jalali", "Nasir Ali  Shaikh", "Neelam Purohit", 
+    "Manish Hodlur", "Megha Vyas", "Meghna Jalali", "Nasir Ali Shaikh", "Neelam Purohit", 
     "Neha Saraogi", "Nikhil Surve", "Nirali Shah", "Pooja Rane", "Prashant Shaharkar", 
     "Pratham Kotian", "Ranjeet Bubber", "Sarthak Chauhan", "Shameen Bajaj", "Shayesha Lobo", 
     "Shumael Nawaz", "Shweta Gaikwad", "Suhail Bajaj", "System", "Viraj Chindarkar", "Zoya Ansari"
@@ -53,7 +53,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     );
 
     const [personResponsible, setPersonResponsible] = useState('');
-    const [numberOfDays, setNumberOfDays] = useState(0);
+    // FIX: Removed unused state variable 'numberOfDays'
     const [existingSchedules, setExistingSchedules] = useState({});
 
     const isAdmin = ADMIN_EMAILS.includes(currentUserEmail);
@@ -71,34 +71,26 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     
     // Logic for handling daily time allocation and checking against max capacity
     const handleSliderChange = useCallback((index, value) => {
-        const numericValue = value || 0; // Ensure it's a number, default to 0
+        const numericValue = value || 0; 
         const currentDay = moment(startDate).add(index, 'days').format('YYYY-MM-DD');
-        const maxAllowedMinutes = 480; // 8 hours * 60 minutes
+        const maxAllowedMinutes = 480; 
 
-        // Calculate minutes already scheduled for this person on this day
         const alreadyScheduledMinutes = existingSchedules[personResponsible]?.[currentDay] || 0;
         
-        // Calculate remaining capacity for this person on this day
-        // This is the max capacity MINUS the time already scheduled by OTHERS/PREVIOUS tasks on that day
         const remainingMinutes = maxAllowedMinutes - alreadyScheduledMinutes;
         
-        // The value to set, capped at the remaining capacity
         let effectiveValue = numericValue;
         
-        // Only apply cap if the slider is not for the current task's *existing* schedule
-        // and if it exceeds the remaining minutes.
         if (effectiveValue > remainingMinutes) {
-            effectiveValue = remainingMinutes; // Cap the value
+            effectiveValue = remainingMinutes; 
             notification.warning({
                 message: 'Time Limit Reached',
                 description: `Cannot schedule more than ${maxAllowedMinutes - alreadyScheduledMinutes} minutes for ${personResponsible} on ${currentDay} due to existing tasks.`,
             });
         }
         
-        // Update the state for the specific day
         setHours((prev) => ({ ...prev, [index]: effectiveValue }));
         
-        // Return the capped value to update the slider/input visually
         return effectiveValue;
     }, [startDate, personResponsible, existingSchedules]);
 
@@ -108,7 +100,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         if (isNaN(numericValue) || numericValue < 0) {
             numericValue = 0;
         }
-        // Use the core logic to update the state and handle validation
         handleSliderChange(index, numericValue);
     };
 
@@ -123,6 +114,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 });
 
                 // 1. Fetch task-specific duration data
+                // BACKEND_API_BASE_URL is a constant, safe to use inside without being a dependency.
                 const taskResponse = await fetch(`${BACKEND_API_BASE_URL}/api/per-key-per-day`);
                 if (!taskResponse.ok) throw new Error(`HTTP error! status: ${taskResponse.status}`);
                 const taskData = await taskResponse.json();
@@ -171,7 +163,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         };
 
         fetchTaskAndScheduleData();
-    }, [task, form, startDate, BACKEND_API_BASE_URL]);
+    }, [task, form, startDate]); // FIX: Removed BACKEND_API_BASE_URL
 
     // --- EFFECT HOOK 2: SET INITIAL DATES AND PERSON RESPONSIBLE ---
     useEffect(() => {
@@ -196,10 +188,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         // Calculate initial days difference if both dates are valid
         if (startDate && endDate && endDate.isSameOrAfter(startDate, 'day')) {
             const daysDiff = endDate.diff(startDate, 'days') + 1;
-            setNumberOfDays(daysDiff);
             setSliderCount(daysDiff);
         } else {
-            setNumberOfDays(0);
             setSliderCount(0);
         }
 
@@ -213,10 +203,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         // Recalculate days and slider count based on new start date
         if (date && endDate && endDate.isSameOrAfter(date, 'day')) {
             const daysDiff = endDate.diff(date, 'days') + 1;
-            setNumberOfDays(daysDiff);
             setSliderCount(daysDiff);
         } else {
-            setNumberOfDays(0);
             setSliderCount(0);
         }
         setHours({}); // Clear hours on start date change to avoid misalignment
@@ -227,158 +215,145 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         // Recalculate days and slider count based on new end date
         if (date && startDate && date.isSameOrAfter(startDate, 'day')) {
             const daysDiff = date.diff(startDate, 'days') + 1;
-            setNumberOfDays(daysDiff);
             setSliderCount(daysDiff);
         } else {
-            setNumberOfDays(0);
             setSliderCount(0);
         }
     };
 
-    const handleSubmit = () => {
-        form.validateFields()
-            .then(async (values) => {
-                const totalTime = calculateTotalTime();
-                if (totalTime <= 0) {
-                    notification.error({
-                        message: 'Missing Allocation',
-                        description: 'Please allocate total time to days.',
-                    });
-                    return;
-                }
-                
-                const plannedStartTimestamp = startDate ? moment(startDate).startOf('day').utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC" : null;
-                const plannedDeliveryTimestamp = endDate ? moment(endDate).endOf('day').utc().format("YYYY-MM-DD HH:mm:ss.SSSSSS") + " UTC" : null;
+    const handleSubmit = async () => {
+        try {
+            const values = await form.validateFields();
 
-                const slidersData = Array.from({ length: sliderCount }).map((_, index) => {
-                    const calculatedDay = moment(startDate).add(index, 'days');
-                    const formattedDay = calculatedDay.isValid() ? calculatedDay.format('YYYY-MM-DD') : null;
-                    return {
-                        day: formattedDay,
-                        duration: hours[index] || 0,
-                        slot: "Null",
-                        personResponsible: personResponsible,
-                    };
-                }).filter(data => data.duration > 0); // Only send days with allocated time
-
-                const selectedPersonEmailData = PERSON_EMAIL_DATA_MAP[personResponsible];
-                
-                const scheduledData = {
-                    Key: task.Key,
-                    Delivery_code: task.Delivery_code,
-                    DelCode_w_o__: task.DelCode_w_o__,
-                    Step_ID: task.Step_ID,
-                    Task_Details: values.name,
-                    Frequency___Timeline: task.Frequency___Timeline,
-                    Client: task.Client,
-                    Short_Description: task.Short_Description,
-                    Planned_Start_Timestamp: plannedStartTimestamp,
-                    Planned_Delivery_Timestamp: plannedDeliveryTimestamp,
-                    Responsibility: personResponsible,
-                    Current_Status: "Scheduled", // Assuming status changes to 'Scheduled'
-                    Email: selectedPersonEmailData ? selectedPersonEmailData.primaryEmail : null,
-                    Emails: selectedPersonEmailData ? selectedPersonEmailData.allEmails : null,
-                    totalTime: totalTime,
-                    schedule: slidersData,
-                };
-                
-                // Pass the complete scheduledData to the parent's onSubmit handler
-                await onSubmit(scheduledData); 
-
-                // Reset form state after successful submission
-                form.resetFields();
-                setStartDate(null);
-                setEndDate(null);
-                setHours({});
-                setPersonResponsible('');
-                setSliderCount(0);
-
-            })
-            .catch((info) => {
-                console.log('Validate Failed:', info);
+            const totalTimeMinutes = calculateTotalTime();
+            if (totalTimeMinutes <= 0) {
                 notification.error({
                     message: 'Validation Error',
-                    description: 'Please complete all required fields and check your time allocations.',
+                    description: 'Total time allocated must be greater than zero.',
                 });
-            });
+                return;
+            }
+
+            const formattedHours = Object.keys(hours).map((index) => ({
+                Day: moment(startDate).add(parseInt(index, 10), 'days').format('YYYY-MM-DD'),
+                Duration: hours[index],
+            }));
+            
+            const personName = values.personResponsible;
+            const personEmailData = PERSON_EMAIL_DATA_MAP[personName];
+
+            if (!personEmailData) {
+                 notification.error({
+                    message: 'Validation Error',
+                    description: `Could not find email data for person: ${personName}.`,
+                });
+                return;
+            }
+
+            const payload = {
+                taskKey: task.Key,
+                taskDetails: values.name,
+                startDate: startDate.format('YYYY-MM-DD HH:mm:ss'),
+                endDate: endDate.format('YYYY-MM-DD HH:mm:ss'),
+                totalTime: totalTimeMinutes,
+                dailyAllocations: formattedHours,
+                personResponsible: personName,
+                personEmail: personEmailData.primaryEmail,
+                personAllEmails: personEmailData.allEmails,
+                userEmail: currentUserEmail,
+            };
+
+            onSubmit(payload);
+        } catch (error) {
+            console.error('Validation Failed:', error);
+            if (error.errorFields) {
+                notification.error({
+                    message: 'Validation Error',
+                    description: 'Please correct the highlighted fields.',
+                });
+            } else {
+                 notification.error({
+                    message: 'Submission Error',
+                    description: 'An unexpected error occurred during form submission.',
+                });
+            }
+        }
     };
-
-    const personsToDisplay = isAdmin 
-        ? ALL_AVAILABLE_PERSONS_HARDCODED 
-        : ALL_AVAILABLE_PERSONS_HARDCODED.filter(p => p === personResponsible || p === getPersonNameFromEmail(currentUserEmail));
-
-    const disabledDate = (current) => {
-        // Cannot select days before today
-        return current && current < moment().startOf('day');
-    };
-
-    const disabledEndDate = (current) => {
-        // Cannot select days before the start date
-        return current && current < startDate;
-    };
-
+    
+    // Filter persons to display based on whether they are in the hardcoded list
+    const personsToDisplay = ALL_AVAILABLE_PERSONS_HARDCODED.filter(person => 
+        // Only show persons with email data (for safety), or the currently assigned person if not in the map
+        PERSON_EMAIL_DATA_MAP[person] || person === task?.Responsibility
+    ).sort();
 
     return (
         <Form
             form={form}
             layout="vertical"
             onFinish={handleSubmit}
-            initialValues={{ name: task?.Task_Details || '' }}
+            initialValues={{ 
+                name: task?.Task_Details || '',
+                // Set initial date/time fields to moment objects if they exist
+                startDate: startDate,
+                endDate: endDate,
+                personResponsible: personResponsible
+            }}
+            className="schedule-form"
         >
-            <Form.Item
-                label="Task Name"
-                name="name"
-                rules={[{ required: true, message: 'Please input the task name!' }]}
-            >
-                <Input disabled={!isAdmin} />
+            <Form.Item label="Task Name (Read Only)" name="name">
+                <Input disabled />
             </Form.Item>
 
             <Row gutter={16}>
                 <Col span={12}>
                     <Form.Item
-                        label="Planned Start Date"
-                        name="plannedStartDate"
-                        rules={[{ required: true, message: 'Please select start date!' }]}
-                        initialValue={startDate}
+                        label="Start Date & Time"
+                        name="startDate"
+                        rules={[{ required: true, message: 'Please select a start date!' }]}
                     >
-                        <DatePicker 
-                            onChange={handleStartDateChange} 
-                            disabledDate={disabledDate} 
+                        <DatePicker
+                            showTime
+                            format="YYYY-MM-DD HH:mm:ss"
                             style={{ width: '100%' }}
+                            onChange={handleStartDateChange}
+                            disabledDate={(current) => current && current < moment().startOf('day')}
                         />
                     </Form.Item>
                 </Col>
                 <Col span={12}>
                     <Form.Item
-                        label="Planned Delivery Date"
-                        name="plannedDeliveryDate"
-                        rules={[{ required: true, message: 'Please select delivery date!' }]}
-                        initialValue={endDate}
+                        label="End Date & Time"
+                        name="endDate"
+                        rules={[{ required: true, message: 'Please select an end date!' }]}
                     >
-                        <DatePicker 
-                            onChange={handleEndDateChange} 
-                            disabledDate={disabledEndDate} 
+                        <DatePicker
+                            showTime
+                            format="YYYY-MM-DD HH:mm:ss"
                             style={{ width: '100%' }}
+                            onChange={handleEndDateChange}
+                            disabledDate={(current) => current && current < moment(startDate).startOf('day')}
                         />
                     </Form.Item>
                 </Col>
             </Row>
 
-            {/* Daily Time Allocation Sliders */}
-            {Array.from({ length: sliderCount }).map((_, index) => (
+            <h6 className="mt-3">Daily Time Allocation (Total: {Math.round(calculateTotalTime() / 60)}h {calculateTotalTime() % 60}m)</h6>
+            
+            {[...Array(sliderCount)].map((_, index) => (
                 <Form.Item
                     key={index}
-                    label={`Day ${index + 1}: ${moment(startDate).add(index, 'days').format('YYYY-MM-DD')}`}
-                    required
+                    label={`Day ${index + 1} (${moment(startDate).add(index, 'days').format('ddd, MMM DD')})`}
+                    className="slider-item"
                 >
-                    <Row gutter={8} align="middle">
+                    <Row gutter={16} align="middle">
                         <Col span={18}>
                             <Slider
                                 min={0}
-                                max={480} // Max 8 hours (480 minutes)
-                                step={5}
-                                value={hours[index] || 0}
+                                max={480} // 8 hours in minutes
+                                step={15} // 15-minute increments
                                 onChange={(value) => handleSliderChange(index, value)}
+                                value={hours[index] || 0}
+                                tooltip={{ formatter: (value) => `${value} min` }}
                             />
                         </Col>
                         <Col span={6}>
@@ -406,8 +381,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     filterOption={(input, option) =>
                         (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
                     }
-                    // Disable if the user is not an admin, or if a person is already assigned and it's not the current user
-                    disabled={!isAdmin && personResponsible !== getPersonNameFromEmail(currentUserEmail)}
+                    // Disable if the user is not an admin
+                    disabled={!isAdmin}
                 >
                     {personsToDisplay.map((person) => (
                         <Option key={person} value={person}>
@@ -418,7 +393,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             </Form.Item>
 
             <Form.Item>
-                <Button type="primary" htmlType="submit">
+                <Button type="primary" htmlType="submit" onClick={handleSubmit}>
                     Submit
                 </Button>
             </Form.Item>
