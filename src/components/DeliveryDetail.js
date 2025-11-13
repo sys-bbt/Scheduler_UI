@@ -22,7 +22,6 @@ const ADMIN_EMAILS_FRONTEND = [
 
 const DeliveryDetail = () => {
     const location = useLocation();
-    // Using regex to extract the delCode from the path /delivery/data/DELIVERY_CODE
     const delCodeMatch = location.pathname.match(/\/delivery\/data\/(.*)/);
     const delCode = delCodeMatch ? delCodeMatch[1] : null;
 
