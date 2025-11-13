@@ -200,7 +200,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
 
-            // 🟢 FIXED: Consuming the response without assigning it to an unused variable
+            // FIXED: Consuming the response without assigning it to an unused variable
             await response.json(); 
             
             setSuccess('Task and schedule updated successfully!');
@@ -220,11 +220,27 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         label: p.Current_Employes 
     }));
 
-    // Find the selected person based on the email/ID stored in formData.Emails
-    const selectedPerson = personsToDisplay.find(p => p.value === formData.Emails);
+    // 1. Try to find the person based on the email/ID stored in formData.Emails
+    let selectedPerson = personsToDisplay.find(p => p.value === formData.Emails);
     
+    // 2. If no email is found, check if the Responsibility is explicitly "System" or any non-email value
+    if (!selectedPerson && formData.Responsibility) {
+        // If Responsibility is set but no email match (e.g., "System" or an unmapped name),
+        // create a custom selection object to display the name/responsibility.
+        selectedPerson = { 
+            value: formData.Responsibility, 
+            label: formData.Responsibility 
+        };
+    }
+
+
     // NEW DISABLING LOGIC for Non-Admins:
-    const isAssigned = !!formData.Emails && formData.Emails !== "systems@brightbraintech.com";
+    // Task is considered assigned if Responsibility is set (and not blank).
+    // The "System" assignment means a person has not yet been assigned.
+    const isAssigned = !!formData.Responsibility && formData.Responsibility !== "System";
+
+    // The field should be disabled if:
+    //    - The user is NOT an admin AND the task is already assigned (to a non-System user).
     const isFieldDisabled = !isAdmin && isAssigned;
 
 
