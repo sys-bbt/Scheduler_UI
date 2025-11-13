@@ -57,9 +57,18 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     useEffect(() => {
         if (task) {
-            const initialStartDate = task.Planned_Start_Timestamp ? moment(task.Planned_Start_Timestamp) : null;
-            // Fetch and set Planned_Delivery_Timestamp (End Date) from task data, it will be disabled.
-            const initialDeliveryDate = task.Planned_Delivery_Timestamp ? moment(task.Planned_Delivery_Timestamp) : null;
+            // FIX: Add logic to safely extract timestamp, checking if it's an object with a .value property
+            const rawStartDate = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
+                ? task.Planned_Start_Timestamp.value
+                : task.Planned_Start_Timestamp;
+
+            // FIX: Add logic to safely extract timestamp for Delivery Date
+            const rawDeliveryDate = task.Planned_Delivery_Timestamp && typeof task.Planned_Delivery_Timestamp === 'object' && task.Planned_Delivery_Timestamp.value
+                ? task.Planned_Delivery_Timestamp.value
+                : task.Planned_Delivery_Timestamp;
+
+            const initialStartDate = rawStartDate ? moment(rawStartDate) : null;
+            const initialDeliveryDate = rawDeliveryDate ? moment(rawDeliveryDate) : null;
 
             setFormData({
                 Key: task.Key || '',
