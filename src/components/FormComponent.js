@@ -58,8 +58,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             // --- START DEBUG LOGS ---
             console.log("--- FormComponent Debug ---");
             console.log("Task object received:", JSON.parse(JSON.stringify(task)));
-            console.log("Raw task.Planned_Delivery_Timestamp (Original):", task.Planned_Delivery_Timestamp);
-            console.log("Raw task.Initiated_Timestamp (New End Date Source):", task.Initiated_Timestamp); // New Log
+            console.log("Raw task.Planned_Delivery_Timestamp (End Date Source):", task.Planned_Delivery_Timestamp); // Updated Log
+            console.log("Raw task.Initiated_Timestamp (Original):", task.Initiated_Timestamp); 
             // --- END DEBUG LOGS ---
 
             // FIX: Add logic to safely extract timestamp, checking if it's an object with a .value property
@@ -67,10 +67,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 ? task.Planned_Start_Timestamp.value
                 : task.Planned_Start_Timestamp;
 
-            // CHANGE: Use Initiated_Timestamp for the End Date field as requested
-            const rawDeliveryDate = task.Initiated_Timestamp && typeof task.Initiated_Timestamp === 'object' && task.Initiated_Timestamp.value
-                ? task.Initiated_Timestamp.value
-                : task.Initiated_Timestamp;
+            // CHANGE (Revert to Planned_Delivery_Timestamp): Use Planned_Delivery_Timestamp for the End Date field
+            const rawDeliveryDate = task.Planned_Delivery_Timestamp && typeof task.Planned_Delivery_Timestamp === 'object' && task.Planned_Delivery_Timestamp.value
+                ? task.Planned_Delivery_Timestamp.value
+                : task.Planned_Delivery_Timestamp;
 
             const initialStartDate = rawStartDate ? moment(rawStartDate) : null;
             const initialDeliveryDate = rawDeliveryDate ? moment(rawDeliveryDate) : null;
@@ -188,7 +188,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Short_Description: formData.Short_Description,
                 // Convert moment objects to ISO strings for backend
                 Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null,
-                // Planned_Delivery_Timestamp is sent back as loaded (the fixed end date, now from Initiated_Timestamp)
+                // Planned_Delivery_Timestamp is sent back as loaded
                 Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
                 Responsibility: formData.Responsibility,
                 Current_Status: formData.Current_Status,
@@ -280,10 +280,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             </Form.Group>
 
             <Form.Group className="mb-3">
-                <Form.Label>Start Date<span className="text-danger">*</span></Form.Label>
+                <Form.Label>Start Date<span className="text-danger">*</span></Form.Label> {/* Renamed Label */}
                 <Form.Control
                     type="date"
-                    name="Start Date"
+                    name="Planned_Start_Timestamp"
                     // Format moment object for display
                     value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
                     onChange={handleStartDateChange}
@@ -293,10 +293,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             </Form.Group>
 
             <Form.Group className="mb-3">
-                <Form.Label>Planned Delivery Date (End Date)</Form.Label>
+                <Form.Label>End Date</Form.Label> {/* Renamed Label */}
                 <Form.Control
                     type="date"
-                    name="End Date"
+                    name="Planned_Delivery_Timestamp"
                     // Format moment object for display
                     value={formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : ''}
                     readOnly // This field is pre-filled from task data
