@@ -8,15 +8,7 @@ import './DeliveryList.css'; // Assuming you have a CSS file
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
-const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
-    "neelam.p@brightbraintech.com",
-    "meghna.j@brightbraintech.com",
-    "divya.s@brightbraintech.com",
-    "zoya.a@brightbraintech.com",
-    "altaf.s@brightbraintech.com",
-    "arvanbir.s@brightbraintech.com"
-];
+// 🛑 REMOVED: ADMIN_EMAILS_FRONTEND array was unused and causing the error
 
 const TaskCard = React.memo(({ delivery }) => {
     const deliveryCode = encodeURIComponent(delivery.DelCode_w_o__);
