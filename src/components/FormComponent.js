@@ -30,277 +30,162 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         Frequency___Timeline: '',
         Client: '',
         Short_Description: '',
-        Planned_Start_Timestamp: null, // Stores moment object or null
-        Planned_Delivery_Timestamp: null, // Stores pre-filled moment object (End Date)
+        Planned_Start_Timestamp: null, // Stored as moment object
+        Planned_Delivery_Timestamp: null, // Stored as moment object
         Responsibility: '',
-        Current_Status: '',
-        Email: '',
-        Emails: '',
-        Total_Tasks: 0,
-        Completed_Tasks: 0,
-        Planned_Tasks: 0,
-        Percent_Tasks_Completed: 0,
-        Created_at: null,
-        Updated_at: null,
-        Time_Left_For_Next_Task_dd_hh_mm_ss: '',
-        Card_Corner_Status: '',
+        User_ID: '', // New field for the ID of the person responsible
     });
+
     const [loading, setLoading] = useState(false);
+    const [loadingPersons, setLoadingPersons] = useState(false);
+    const [personsToDisplay, setPersonsToDisplay] = useState([]);
+    const [selectedPerson, setSelectedPerson] = useState(null);
     const [error, setError] = useState(null);
-    const [success, setSuccess] = useState(null);
-    const [persons, setPersons] = useState([]);
-    const [loadingPersons, setLoadingPersons] = useState(true);
-    const [personError, setPersonError] = useState(null);
+
+    // Determines if non-admin users can modify the task
+    const isFieldDisabledForNonAdmin = 
+        !isAdmin && 
+        task.Responsibility && 
+        task.Responsibility !== userEmail &&
+        task.Responsibility !== 'systems@brightbraintech.com'; // Allow non-admins to claim tasks from System
 
     useEffect(() => {
+        // Initialize form data from task prop
         if (task) {
-            
-            // --- START DEBUG LOGS ---
-            console.log("--- FormComponent Debug ---");
-            console.log("Task object received:", JSON.parse(JSON.stringify(task)));
-            console.log("Raw task.Planned_Delivery_Timestamp (End Date Source):", task.Planned_Delivery_Timestamp); // Updated Log
-            console.log("Raw task.Initiated_Timestamp (Original):", task.Initiated_Timestamp); 
-            // --- END DEBUG LOGS ---
-
-            // FIX: Add logic to safely extract timestamp, checking if it's an object with a .value property
-            const rawStartDate = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
-                ? task.Planned_Start_Timestamp.value
-                : task.Planned_Start_Timestamp;
-
-            // CHANGE (Revert to Planned_Delivery_Timestamp): Use Planned_Delivery_Timestamp for the End Date field
-            const rawDeliveryDate = task.Planned_Delivery_Timestamp && typeof task.Planned_Delivery_Timestamp === 'object' && task.Planned_Delivery_Timestamp.value
-                ? task.Planned_Delivery_Timestamp.value
-                : task.Planned_Delivery_Timestamp;
-
-            const initialStartDate = rawStartDate ? moment(rawStartDate) : null;
-            const initialDeliveryDate = rawDeliveryDate ? moment(rawDeliveryDate) : null;
-
-            // --- START DEBUG LOGS ---
-            console.log("Parsed initialDeliveryDate (what will be set in state):", initialDeliveryDate);
-            // --- END DEBUG LOGS ---
-
             setFormData({
-                Key: task.Key || '',
-                Delivery_code: task.Delivery_code || '',
-                DelCode_w_o__: task.DelCode_w_o__ || '',
-                Step_ID: task.Step_ID || 0,
-                Task_Details: task.Task_Details || '',
-                Frequency___Timeline: task.Frequency___Timeline || '',
-                Client: task.Client || '',
-                Short_Description: task.Short_Description || '',
-                Planned_Start_Timestamp: initialStartDate, // Store as moment object
-                Planned_Delivery_Timestamp: initialDeliveryDate, // Store as moment object (End Date)
+                Key: task.Key,
+                Delivery_code: task.Delivery_code,
+                DelCode_w_o__: task.DelCode_w_o__,
+                Step_ID: task.Step_ID,
+                Task_Details: task.Task_Details,
+                Frequency___Timeline: task.Frequency___Timeline,
+                Client: task.Client,
+                Short_Description: task.Short_Description,
+                // Convert timestamps to moment objects for easier handling
+                Planned_Start_Timestamp: task.Planned_Start_Timestamp ? moment(task.Planned_Start_Timestamp) : null,
+                Planned_Delivery_Timestamp: task.Planned_Delivery_Timestamp ? moment(task.Planned_Delivery_Timestamp) : null,
                 Responsibility: task.Responsibility || '',
-                Email: task.Email || '',
-                Emails: task.Emails || '',
-                Current_Status: task.Current_Status || '',
-                Total_Tasks: task.Total_Tasks || 0,
-                Completed_Tasks: task.Completed_Tasks || 0,
-                Planned_Tasks: task.Planned_Tasks || 0,
-                Percent_Tasks_Completed: task.Percent_Tasks_Completed || 0,
-                Created_at: task.Created_at || null,
-                Updated_at: task.Updated_at || null,
-                Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss || '',
-                Card_Corner_Status: task.Card_Corner_Status || '',
+                User_ID: task.User_ID || '',
             });
-            
+
+            // Set the selected person for the react-select component
+            if (task.Responsibility) {
+                setSelectedPerson({
+                    value: task.Responsibility,
+                    label: task.Responsibility,
+                });
+            } else {
+                setSelectedPerson(null);
+            }
         }
-    }, [task]); // Dependencies: task only
+    }, [task]);
 
-
-    // Fetch people mapping data
+    // Fetch list of persons (users)
     useEffect(() => {
-        const fetchPeopleMapping = async () => {
+        const fetchPersons = async () => {
             setLoadingPersons(true);
-            setPersonError(null);
             try {
-                const response = await fetch(`${BACKEND_API_BASE_URL}/api/people-mapping`);
+                const response = await fetch(`${BACKEND_API_BASE_URL}/users`);
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to fetch people mapping data.');
+                    throw new Error('Failed to fetch user list.');
                 }
                 const data = await response.json();
-                setPersons(data);
+                
+                // Map API data to react-select format { value: email, label: email }
+                const options = data.map(person => ({
+                    value: person.Email,
+                    label: person.Email
+                }));
+
+                // Add "systems" option if not already present
+                const systemOption = { value: "systems@brightbraintech.com", label: "System (Automation)" };
+                if (!options.some(opt => opt.value === systemOption.value)) {
+                    options.unshift(systemOption);
+                }
+
+                setPersonsToDisplay(options);
             } catch (err) {
-                console.error("Failed to load person data:", err);
-                setPersonError(`Failed to load person data: ${err.message}. Please ensure the backend endpoint /api/people-mapping is correctly configured.`);
+                console.error("Error fetching persons:", err);
+                setError("Could not load assignable persons.");
             } finally {
                 setLoadingPersons(false);
             }
         };
-        fetchPeopleMapping();
-    }, []);
 
+        if (isAdmin || !task.Responsibility || task.Responsibility === 'systems@brightbraintech.com') {
+            fetchPersons();
+        }
+    }, [isAdmin, task.Responsibility]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
+        // For date inputs, moment() automatically handles the conversion from 'YYYY-MM-DD' string
         setFormData(prevData => ({
             ...prevData,
-            [name]: value
+            [name]: name.endsWith('_Timestamp') && value ? moment(value) : value
         }));
-    };
-
-    const handleStartDateChange = (e) => { // e.target.value is string 'YYYY-MM-DD'
-        const dateString = e.target.value;
-        const dateMoment = moment(dateString); // Convert string to moment object
-        setFormData(prevData => {
-            const updatedData = {
-                ...prevData,
-                Planned_Start_Timestamp: dateMoment.isValid() ? dateMoment : null // Store moment object directly
-            };
-            // Planned_Delivery_Timestamp (End Date) is not recalculated.
-            return updatedData;
-        });
     };
 
     const handlePersonSelect = (selectedOption) => {
+        setSelectedPerson(selectedOption);
         setFormData(prevData => ({
             ...prevData,
-            Responsibility: selectedOption ? selectedOption.label : '',
-            Emails: selectedOption ? selectedOption.value : '' // Assuming value is the email
+            Responsibility: selectedOption ? selectedOption.value : '',
+            // Note: User_ID logic is more complex and depends on backend; we default to email for now
+            User_ID: selectedOption ? selectedOption.value : '', 
         }));
     };
 
-
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
-        setLoading(true);
         setError(null);
-        setSuccess(null);
+        setLoading(true);
 
-        // Basic validation for required fields: Start Date and Responsibility
-        if (!formData.Planned_Start_Timestamp || !formData.Planned_Start_Timestamp.isValid() || !formData.Responsibility) {
-            setError("Please fill all required fields: Start Date and Person Responsible.");
+        // Basic validation
+        if (!formData.Planned_Start_Timestamp || !formData.Planned_Delivery_Timestamp || !formData.Responsibility) {
+            setError("Please fill out all required fields (Start Date, End Date, and Person Responsible).");
             setLoading(false);
             return;
         }
 
-        try {
-            // Prepare data for the main task table update
-            const mainTaskPayload = {
-                Key: formData.Key,
-                Delivery_code: formData.Delivery_code,
-                DelCode_w_o__: formData.DelCode_w_o__,
-                Step_ID: formData.Step_ID,
-                Task_Details: formData.Task_Details,
-                Frequency___Timeline: formData.Frequency___Timeline,
-                Client: formData.Client,
-                Short_Description: formData.Short_Description,
-                // Convert moment objects to ISO strings for backend
-                Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null,
-                // Planned_Delivery_Timestamp is sent back as loaded
-                Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
-                Responsibility: formData.Responsibility,
-                Current_Status: formData.Current_Status,
-                Email: formData.Email,
-                Emails: formData.Emails,
-                Total_Tasks: formData.Total_Tasks,
-                Completed_Tasks: formData.Completed_Tasks,
-                Planned_Tasks: formData.Planned_Tasks,
-                Percent_Tasks_Completed: formData.Percent_Tasks_Completed,
-                Created_at: formData.Created_at || null, // Preserve existing or set null
-                Updated_at: moment.utc().toISOString(), // Always update Updated_at
-                Time_Left_For_Next_Task_dd_hh_mm_ss: formData.Time_Left_For_Next_Task_dd_hh_mm_ss,
-                Card_Corner_Status: formData.Card_Corner_Status,
-            };
-
-            // Prepare data for Per_Key_Per_Day table (Simplified to a single entry based on new requirements)
-            const perKeyPerDayRows = [];
-            
-            if (formData.Planned_Start_Timestamp && formData.Planned_Start_Timestamp.isValid()) {
-                perKeyPerDayRows.push({
-                    Key: mainTaskPayload.Key,
-                    Day: formData.Planned_Start_Timestamp.format('YYYY-MM-DD'), // Key = task key, Day = Start date value
-                    Duration: 0, // NEW REQUIREMENT: Duration = 0
-                    Duration_Unit: 'min', // NEW REQUIREMENT: Duration_Unit = min
-                    Planned_Delivery_Slot: null, // NEW REQUIREMENT: Planned_Delivery_Slot = null
-                    Responsibility: mainTaskPayload.Responsibility, // Responsibility = if any in the DD.
-                });
-            }
-
-
-            const payload = {
-                mainTask: mainTaskPayload,
-                perKeyPerDayRows: perKeyPerDayRows // Array with zero or one entry
-            };
-
-            const response = await fetch(`${BACKEND_API_BASE_URL}/api/post`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload),
+        // Pass the data (including moment objects) up to the parent component for API call
+        onSubmit(formData)
+            .finally(() => {
+                setLoading(false);
             });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
-            }
-
-            const result = await response.json();
-            setSuccess('Task and schedule updated successfully!');
-            console.log('Task and schedule updated successfully:', result);
-            onSubmit(formData); // Pass updated data back to parent
-        } catch (err) {
-            console.error('Error updating task:', err);
-            setError(`Failed to update task: ${err.message}`);
-        } finally {
-            setLoading(false);
-        }
     };
 
-
-    // Filter persons for dropdown based on admin status (Logic unchanged)
-    const personsToDisplay = isAdmin
-        ? persons.map(p => ({ value: p.Emp_Emails, label: p.Current_Employes }))
-        : persons.filter(p => p.Emp_Emails === currentUserEmail)
-                  .map(p => ({ value: p.Emp_Emails, label: p.Current_Employes }));
-
-    const selectedPerson = personsToDisplay.find(p => p.value === formData.Emails);
-
-    // Determine if fields should be disabled for non-admins (Logic unchanged)
-    const isFieldDisabledForNonAdmin = !isAdmin && (formData.Emails !== currentUserEmail && formData.Emails !== "systems@brightbraintech.com");
+    if (error && !loadingPersons) {
+        return <Alert variant="danger" className="mt-3">{error}</Alert>;
+    }
 
     return (
-        <Form onSubmit={handleSubmit} className="p-3 border rounded shadow-sm bg-light">
-            {error && <Alert variant="danger">{error}</Alert>}
-            {success && <Alert variant="success">{success}</Alert>}
-            {personError && <Alert variant="warning">{personError}</Alert>}
-
+        <Form onSubmit={handleSubmit}>
             <Form.Group className="mb-3">
-                <Form.Label>Task Details</Form.Label>
-                <Form.Control
-                    type="text"
-                    name="Task_Details"
-                    value={formData.Task_Details}
-                    onChange={handleChange}
-                    disabled={true} // Disabled as requested
-                    required
-                />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-                <Form.Label>Start Date<span className="text-danger">*</span></Form.Label> {/* Renamed Label */}
+                {/* Updated Label */}
+                <Form.Label>Start Date<span className="text-danger">*</span></Form.Label>
                 <Form.Control
                     type="date"
                     name="Planned_Start_Timestamp"
                     // Format moment object for display
                     value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
-                    onChange={handleStartDateChange}
+                    onChange={handleChange}
                     disabled={isFieldDisabledForNonAdmin}
                     required
                 />
             </Form.Group>
 
             <Form.Group className="mb-3">
-                <Form.Label>End Date</Form.Label> {/* Renamed Label */}
+                {/* Updated Label */}
+                <Form.Label>End Date<span className="text-danger">*</span></Form.Label>
                 <Form.Control
                     type="date"
                     name="Planned_Delivery_Timestamp"
                     // Format moment object for display
                     value={formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : ''}
-                    readOnly // This field is pre-filled from task data
-                    disabled={true} // Disabled as requested
+                    onChange={handleChange}
+                    disabled={isFieldDisabledForNonAdmin}
+                    required
                 />
             </Form.Group>
 
