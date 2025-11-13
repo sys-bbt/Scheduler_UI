@@ -1,26 +1,19 @@
 import React, { useState, useEffect, useCallback, useContext, useMemo } from 'react';
-import { Container, Row, Col, Card, ProgressBar, Form, Button, Spinner, Alert, ListGroup } from 'react-bootstrap';
-import Dropdown from 'rc-dropdown';
-import Menu, { Item as MenuItem } from 'rc-menu';
-import 'rc-dropdown/assets/index.css';
+import { Link } from 'react-router-dom'; // FIX: Removed useNavigate
+import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
+import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
+import { FaSpinner } from 'react-icons/fa';
+import { UserContext } from './UserContext';
+import './DeliveryList.css';
+import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSelected';
+import SortDeliveriesByDate from './SortDeliveriesByDate';
+import DeleteButton from './DeleteButton';
+import { notification } from 'antd'; // Import notification from antd
+import moment from 'moment'; // Import moment for date formatting
 
-// --- Single File Constraint Fixes ---
-// 1. Replaced react-icons/fa, react-icons/fi with Emojis/CSS Spinner
-// 2. Replaced moment with native Date/Intl methods
-// 3. Merged all components (Context, Filters, DeleteButton, FormComponent, DeliveryDetail, DeliveryList) into this single file.
-// 4. Used conditional rendering instead of react-router-dom for single-page flow.
+const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
-// Helper function to format date without moment
-const formatDate = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    // Use Intl for better date formatting if needed, but simple slicing is often enough for YYYY-MM-DD
-    const date = new Date(timestamp);
-    if (isNaN(date)) return 'N/A';
-    return date.toISOString().split('T')[0];
-};
-
-// --- CONSTANTS AND MOCK DATA/CONTEXT ---
-const BACKEND_API_BASE_URL = 'http://localhost:3001'; // Mock URL
+// Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
     "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
@@ -31,482 +24,270 @@ const ADMIN_EMAILS_FRONTEND = [
     "arvanbir.s@brightbraintech.com"
 ];
 
-// 1. UserContext (Replacement for ./UserContext)
-const UserContext = React.createContext({ userEmail: ADMIN_EMAILS_FRONTEND[0], userName: 'Admin User' }); // Mock default admin user
-
 // Debounce utility function
 const debounce = (func, delay) => {
     let timeout;
-    return (...args) => {
+    return function(...args) {
+        const context = this;
         clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), delay);
+        timeout = setTimeout(() => func.apply(context, args), delay);
     };
 };
 
-// Placeholder for notification from antd (using console log/Alert instead)
-const showNotification = (type, message, description) => {
-    console.log(`Notification (${type}): ${message} - ${description}`);
-    // In a real app, you'd use a UI component here. We'll use a simple Alert state.
-};
-
-// --- HELPER COMPONENTS (Merged from separate files) ---
-
-// 2. DeleteButton (Replacement for ./DeleteButton)
-const DeleteButton = ({ delivery, onDeleteSuccess }) => {
-    const handleDelete = async () => {
-        if (!window.confirm(`Are you sure you want to delete delivery code ${delivery.DelCode_w_o__}?`)) {
-            return;
-        }
-
-        try {
-            console.log('Attempting to delete:', delivery.Delivery_Code);
-            // Mock API call
-            await new Promise(resolve => setTimeout(resolve, 500));
-
-            onDeleteSuccess(delivery.Delivery_Code);
-            showNotification('success', 'Delete Successful', `Delivery ${delivery.DelCode_w_o__} has been removed.`);
-        } catch (error) {
-            console.error('Delete failed:', error);
-            showNotification('error', 'Delete Failed', `Could not delete delivery ${delivery.DelCode_w_o__}.`);
-        }
-    };
-
-    return (
-        <Button variant="danger" size="sm" onClick={handleDelete} className="ml-2">
-            Delete
-        </Button>
-    );
-};
-
-// 3. FilterDeliveryBasedOnClientSelected (Replacement for ./FilterDeliveryBasedOnClientSelected)
-const FilterDeliveryBasedOnClientSelected = ({ clients, selectedClient, onClientSelect, onClearFilter }) => (
-    <Form.Group controlId="clientFilter" className="mb-3">
-        <Form.Label>Filter by Client</Form.Label>
-        <Form.Select value={selectedClient} onChange={(e) => onClientSelect(e.target.value)}>
-            <option value="">All Clients</option>
-            {clients.map(client => (
-                <option key={client} value={client}>{client}</option>
-            ))}
-        </Form.Select>
-        {selectedClient && (
-            <Button variant="outline-secondary" size="sm" className="mt-2" onClick={onClearFilter}>
-                Clear Filter
-            </Button>
-        )}
-    </Form.Group>
-);
-
-// 4. SortDeliveriesByDate (Replacement for ./SortDeliveriesByDate)
-const SortDeliveriesByDate = ({ sortType, onSortChange }) => (
-    <Form.Group controlId="sortOrder" className="mb-3">
-        <Form.Label>Sort Order</Form.Label>
-        <Form.Select value={sortType} onChange={(e) => onSortChange(e.target.value)}>
-            <option value="asc">Earliest Delivery First (ASC)</option>
-            <option value="desc">Latest Delivery First (DESC)</option>
-        </Form.Select>
-    </Form.Group>
-);
-
-// 5. FormComponent (Replacement for ./FormComponent)
-const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
-    const { userEmail } = useContext(UserContext);
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
-
-    const [formData, setFormData] = useState({
-        Key: task?.Key || '',
-        Planned_Delivery_Timestamp: new Date(task?.Planned_Delivery_Timestamp || Date.now()),
-        Responsibility: task?.Responsibility || '',
-        Schedule_Details: task?.Schedule_Details || '',
-        // Initialize other fields based on the task structure, but keeping it minimal for the fix
-    });
-    const [loading, setLoading] = useState(false);
-    const [personsToDisplay, setPersonsToDisplay] = useState([
-        { value: 'user@example.com', label: 'User Example' },
-        { value: 'systems@brightbraintech.com', label: 'Systems' }
-    ]);
-
-    const isFieldDisabledForNonAdmin = task?.Responsibility !== 'systems@brightbraintech.com' && task?.Responsibility !== '';
-    const selectedPerson = personsToDisplay.find(p => p.value === formData.Responsibility) || null;
-
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handlePersonSelect = (selectedOption) => {
-        setFormData(prev => ({ ...prev, Responsibility: selectedOption ? selectedOption.value : '' }));
-    };
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        setLoading(true);
-        // Mock submission logic
-        setTimeout(() => {
-            onSubmit(formData);
-            setLoading(false);
-        }, 1000);
-    };
-
-    return (
-        <Form onSubmit={handleSubmit}>
-            <Form.Group className="mb-3">
-                <Form.Label>Schedule Details (Optional)</Form.Label>
-                <Form.Control
-                    as="textarea"
-                    rows={3}
-                    name="Schedule_Details"
-                    value={formData.Schedule_Details}
-                    onChange={handleChange}
-                    disabled={loading || isFieldDisabledForNonAdmin}
-                    placeholder="Enter any specific scheduling details or notes."
-                />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-                <Form.Label>Planned Delivery Date</Form.Label>
-                <Form.Control
-                    type="date"
-                    name="Planned_Delivery_Timestamp"
-                    // Use native JS date formatting
-                    value={formatDate(formData.Planned_Delivery_Timestamp)}
-                    readOnly
-                    disabled={true}
-                />
-            </Form.Group>
-
-            {/* Using a standard select for the mock to avoid external react-select dependency */}
-            <Form.Group className="mb-3">
-                <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
-                <Form.Select
-                    name="Responsibility"
-                    value={formData.Responsibility}
-                    onChange={handleChange}
-                    disabled={!isAdmin || loading || isFieldDisabledForNonAdmin}
-                    required
-                >
-                    <option value="">Select Person</option>
-                    {personsToDisplay.map(p => (
-                        <option key={p.value} value={p.value}>{p.label}</option>
-                    ))}
-                </Form.Select>
-            </Form.Group>
-
-            <Button variant="primary" type="submit" disabled={loading || isFieldDisabledForNonAdmin}>
-                {loading ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" /> : 'Update Task'}
-            </Button>
-        </Form>
-    );
-};
-
-// 6. DeliveryDetail Component (Replacement for delivery details.txt view)
-const DeliveryDetail = ({ delivery, navigateToHome }) => {
-    const { userEmail } = useContext(UserContext);
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
-
-    const [loading, setLoading] = useState(false);
-    const [actionType, setActionType] = useState(null); // 'edit' or 'action'
-    const [activeTaskKey, setActiveTaskKey] = useState(null);
-
-    const handleActionClick = (key, type) => {
-        setActiveTaskKey(key);
-        setActionType(type);
-    };
-
-    const handleTaskAction = async (taskKey, action) => {
-        console.log(`Task ${taskKey} action: ${action}`);
-        // Mock API call for task action
-        setLoading(true);
-        try {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            showNotification('info', 'Task Action', `${action} submitted for task ${taskKey}.`);
-            // In a real app, you'd update the delivery state here
-        } catch (error) {
-            showNotification('error', 'Task Action Failed', 'Could not perform task action.');
-        } finally {
-            setLoading(false);
-            setActiveTaskKey(null);
-            setActionType(null);
-        }
-    };
-
-    const handleFormSubmit = (formData) => {
-        console.log('Form submitted with data:', formData);
-        // Mock API call for form update
-        handleTaskAction(formData.Key, 'Update Schedule');
-    };
-
-    const menu = (task) => (
-        <Menu onClick={({ key }) => handleTaskAction(task.Key, key)}>
-            <MenuItem key="Start" disabled={task.Status === 'InProgress'}>
-                {/* ⏯️ or use simple text */}
-                Start Task
-            </MenuItem>
-            <MenuItem key="Pause" disabled={task.Status === 'Paused' || task.Status === 'Completed'}>
-                {/* ⏸️ */}
-                Pause Task
-            </MenuItem>
-            <MenuItem key="Stop" disabled={task.Status === 'Completed'}>
-                {/* ⏹️ */}
-                Stop/Complete Task
-            </MenuItem>
-            {isAdmin && (
-                <MenuItem key="edit" onClick={(e) => { e.domEvent.stopPropagation(); handleActionClick(task.Key, 'edit'); }}>
-                    {/* ✏️ */}
-                    Edit Schedule
-                </MenuItem>
-            )}
-        </Menu>
-    );
-
-    const COMPLETED_TASK_STATUS = 'Completed';
-    const filteredTasks = delivery.Tasks.filter(task => task.Status !== COMPLETED_TASK_STATUS);
-
-    return (
-        <Container className="my-5">
-            <h2 className="text-xl font-bold mb-4">Delivery Details: {delivery.DelCode_w_o__}</h2>
-            <p><strong>Client:</strong> {delivery.Client}</p>
-            <p><strong>Planned Delivery:</strong> {formatDate(delivery.Planned_Delivery_Date)}</p>
-
-            <Row className="mt-4">
-                {filteredTasks.length > 0 ? (
-                    filteredTasks.map((task, index) => {
-                        const statusColor = task.Status === 'InProgress' ? 'border-primary' :
-                            task.Status === 'Completed' ? 'border-success' : 'border-warning';
-
-                        return (
-                            <Col md={6} lg={4} key={task.Key} className="mb-4">
-                                <Card className={`shadow-sm ${statusColor}`}>
-                                    <Card.Body>
-                                        <div className="d-flex justify-content-between align-items-center mb-2">
-                                            <h5 className="text-lg font-semibold">{task.Task_Details}</h5>
-                                            <span className={`badge ${task.Status === 'Completed' ? 'bg-success' : task.Status === 'InProgress' ? 'bg-primary' : 'bg-warning'}`}>
-                                                {task.Status}
-                                            </span>
-                                        </div>
-                                        <p className="text-sm mb-1">
-                                            <strong>Person:</strong> {task.Responsibility}
-                                        </p>
-                                        <p className="text-sm mb-3">
-                                            <strong>Planned:</strong> {formatDate(task.Planned_Delivery_Timestamp)}
-                                        </p>
-
-                                        <div className="d-flex justify-content-end">
-                                            <Dropdown
-                                                trigger={['click']}
-                                                overlay={menu(task)}
-                                                animation="slide-up"
-                                                placement="bottomRight"
-                                            >
-                                                <Button variant="outline-secondary" size="sm">
-                                                    {/* Using an emoji for the icon */}
-                                                    ⋮
-                                                </Button>
-                                            </Dropdown>
-                                        </div>
-
-                                        {/* Display FormComponent ONLY if the task is the active one and the action is 'edit' */}
-                                        {activeTaskKey === task.Key && actionType === 'edit' && (
-                                            <div className="mt-3">
-                                                <h6>Schedule Task: {task.Task_Details}</h6>
-                                                <FormComponent
-                                                    onSubmit={handleFormSubmit}
-                                                    task={task}
-                                                    currentUserEmail={userEmail}
-                                                />
-                                            </div>
-                                        )}
-                                    </Card.Body>
-                                </Card>
-                            </Col>
-                        );
-                    })
-                ) : (
-                    <Col>
-                        <ListGroup.Item>No active tasks available for this delivery.</ListGroup.Item>
-                    </Col>
-                )}
-            </Row>
-
-            <Button variant="primary" className="mt-4" onClick={navigateToHome}>
-                Back to Deliveries
-            </Button>
-        </Container>
-    );
-};
-
-
-// 7. DeliveryList Component (Replacement for Delivery list.txt view)
-const DeliveryList = ({ onDeliverySelect, onDeliveryDataUpdate }) => {
-    const { userEmail } = useContext(UserContext);
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
-
+const DeliveryList = () => {
+    const { userEmail, userName, logoutUser } = useContext(UserContext);
     const [deliveries, setDeliveries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
     const [selectedClient, setSelectedClient] = useState('');
-    const [sortType, setSortType] = useState('asc'); // 'asc' or 'desc'
-    const [clients, setClients] = useState([]);
+    const [clients, setClients] = useState([]); // State to store unique clients
+    const [sortOption, setSortOption] = useState('latest'); // 'earliest' or 'latest'
+    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-    // Mock initial data fetching
-    useEffect(() => {
-        const mockFetch = async () => {
-            setLoading(true);
-            try {
-                // Mock API call to fetch deliveries
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                const mockData = [
-                    { Delivery_Code: 'D123', DelCode_w_o__: '123', Client: 'Client A', Planned_Delivery_Date: new Date(Date.now() + 86400000).toISOString(), Progress: 50, Status: 'InProgress', Tasks: [{ Key: 'T1', Task_Details: 'Design', Responsibility: 'systems@brightbraintech.com', Status: 'InProgress', Planned_Delivery_Timestamp: new Date(Date.now() + 86400000).toISOString() }] },
-                    { Delivery_Code: 'D456', DelCode_w_o__: '456', Client: 'Client B', Planned_Delivery_Date: new Date(Date.now() + 3 * 86400000).toISOString(), Progress: 10, Status: 'NotStarted', Tasks: [{ Key: 'T2', Task_Details: 'Testing', Responsibility: 'user@example.com', Status: 'Pending', Planned_Delivery_Timestamp: new Date(Date.now() + 3 * 86400000).toISOString() }] },
-                    { Delivery_Code: 'D789', DelCode_w_o__: '789', Client: 'Client A', Planned_Delivery_Date: new Date(Date.now() - 86400000).toISOString(), Progress: 100, Status: 'Completed', Tasks: [{ Key: 'T3', Task_Details: 'Deploy', Responsibility: 'user@example.com', Status: 'Completed', Planned_Delivery_Timestamp: new Date(Date.now() - 86400000).toISOString() }] },
-                ];
-                setDeliveries(mockData);
-                const uniqueClients = [...new Set(mockData.map(d => d.Client))].sort();
-                setClients(uniqueClients);
-                onDeliveryDataUpdate(mockData); // Update parent state with fetched data
-            } catch (err) {
-                setError('Failed to fetch deliveries.');
-                console.error(err);
-            } finally {
-                setLoading(false);
+    // FIX: Removed unused navigate
+    // const navigate = useNavigate();
+
+    // Function to fetch deliveries based on current filters and search query
+    const fetchDeliveries = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            let url = `${BACKEND_API_BASE_URL}/api/data?email=${encodeURIComponent(userEmail)}`;
+
+            if (searchQuery) {
+                url += `&searchQuery=${encodeURIComponent(searchQuery)}`;
             }
-        };
-
-        mockFetch();
-    }, [onDeliveryDataUpdate]);
-
-    // Handlers
-    const handleSearchChange = useMemo(() => debounce(setSearchTerm, 300), []);
-    const handleClientSelect = (client) => setSelectedClient(client);
-    const handleClearFilter = () => setSelectedClient('');
-    const handleSortChange = (sort) => setSortType(sort);
-
-    const handleDeleteSuccess = useCallback((deletedCode) => {
-        setDeliveries(prev => prev.filter(d => d.Delivery_Code !== deletedCode));
-    }, []);
-
-    // Filter and Sort Logic
-    const filteredAndSortedDeliveries = useMemo(() => {
-        let filtered = deliveries.filter(delivery => {
-            const matchesSearch = delivery.DelCode_w_o__.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                 delivery.Client.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesClient = !selectedClient || delivery.Client === selectedClient;
-            return matchesSearch && matchesClient;
-        });
-
-        filtered.sort((a, b) => {
-            const dateA = new Date(a.Planned_Delivery_Date);
-            const dateB = new Date(b.Planned_Delivery_Date);
-            if (sortType === 'asc') {
-                return dateA - dateB;
-            } else {
-                return dateB - dateA;
+            if (selectedClient) {
+                url += `&clientFilter=${encodeURIComponent(selectedClient)}`;
             }
-        });
 
-        return filtered;
-    }, [deliveries, searchTerm, selectedClient, sortType]);
+            const response = await fetch(url);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to fetch deliveries.');
+            }
+            const data = await response.json();
 
-    // Icon helper function (using Emojis)
-    const getStatusIcon = (status) => {
-        switch (status) {
-            case 'Completed':
-                return <span role="img" aria-label="Completed" className="text-green-500">✅</span>; // CheckCircle
-            case 'InProgress':
-                return <span role="img" aria-label="In Progress" className="text-blue-500">🕒</span>; // Clock
-            case 'NotStarted':
-            default:
-                return <span role="img" aria-label="Not Started" className="text-red-500">🚩</span>; // Flag
+            // Extract unique clients from the fetched data
+            const uniqueClients = [...new Set(data.map(delivery => delivery.Client))].filter(Boolean);
+            setClients(uniqueClients);
+
+            // Sort the data based on Initiated_Timestamp or Key
+            const sortedData = [...data].sort((a, b) => {
+                if (sortOption === 'latest') {
+                    // Sort by Key in descending order (numerically) for "latest"
+                    // Convert Key to a number for proper numerical comparison
+                    const keyA = Number(a.Key);
+                    const keyB = Number(b.Key);
+                    return keyB - keyA; // Descending order
+                } else { // 'earliest'
+                    // Safely get timestamp value for sorting
+                    const timestampA = a.Initiated_Timestamp && typeof a.Initiated_Timestamp === 'object' && a.Initiated_Timestamp.value
+                        ? a.Initiated_Timestamp.value
+                        : a.Initiated_Timestamp || a.Created_at;
+                    const timestampB = b.Initiated_Timestamp && typeof b.Initiated_Timestamp === 'object' && b.Initiated_Timestamp.value
+                        ? b.Initiated_Timestamp.value
+                        : b.Initiated_Timestamp || b.Created_at;
+
+                    const dateA = moment(timestampA);
+                    const dateB = moment(timestampB);
+
+                    if (!dateA.isValid() || !dateB.isValid()) {
+                        console.warn("Invalid date found during sorting. Falling back to original order for affected items.", a, b);
+                        return 0;
+                    }
+                    return dateA.diff(dateB);
+                }
+            });
+
+            setDeliveries(sortedData);
+        } catch (err) {
+            console.error("Error fetching deliveries:", err);
+            setError(err.message);
+            setDeliveries([]); // Clear deliveries on error
+        } finally {
+            setLoading(false);
         }
+    }, [userEmail, searchQuery, selectedClient, sortOption]); // Dependencies for useCallback
+
+    // FIX: Changed useCallback to useMemo to stabilize the debounced function instance
+    const debouncedFetchDeliveries = useMemo(
+        () => debounce(fetchDeliveries, 500),
+        [fetchDeliveries]
+    );
+
+    useEffect(() => {
+        debouncedFetchDeliveries();
+    }, [debouncedFetchDeliveries]); // Trigger fetch when debounced function changes
+
+    const handleSearchChange = (e) => {
+        setSearchQuery(e.target.value);
     };
 
+    const handleClientSelect = (client) => {
+        setSelectedClient(client);
+    };
+
+    const handleDeleteSuccess = (deletedDeliveryCode) => {
+        notification.success({
+            message: 'Delivery Deleted',
+            description: `Delivery with code ${deletedDeliveryCode} has been successfully deleted.`,
+        });
+        fetchDeliveries(); // Re-fetch deliveries to update the list
+    };
+
+    if (loading && deliveries.length === 0) { // Show spinner only if no data is loaded yet
+        return (
+            <Container className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
+                <FaSpinner
+                    className="spinner-icon"
+                    style={{ fontSize: '3rem', color: '#007bff', animation: 'spin 1.5s linear infinite' }}
+                />
+            </Container>
+        );
+    }
+
+    if (error) {
+        return (
+            <Container className="mt-5 text-center">
+                <h2>Error Loading Deliveries</h2>
+                <p className="text-danger">{error}</p>
+                <Button onClick={fetchDeliveries}>Retry</Button>
+            </Container>
+        );
+    }
+
     return (
-        <Container className="my-5">
-            <h1 className="text-2xl font-bold mb-4">Delivery List ({deliveries.length})</h1>
+        <Container className="delivery-list-container mt-4">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+                <h2>Deliveries</h2>
+                <div className="d-flex align-items-center">
+                    {userEmail && <span className="me-3">Logged in as: <strong>{userName} ({userEmail})</strong></span>}
+                    <Button variant="outline-secondary" onClick={logoutUser}>Logout</Button>
+                </div>
+            </div>
 
-            {error && <Alert variant="danger">{error}</Alert>}
-
-            <Row className="mb-4 bg-gray-100 p-4 rounded-lg shadow-inner">
-                <Col md={4} className="mb-3">
-                    <Form.Group controlId="searchBar">
-                        <Form.Label>Search Delivery Code/Client</Form.Label>
+            <Row className="mb-4 align-items-end">
+                <Col md={6}>
+                    <Form.Group controlId="searchQuery">
+                        <Form.Label>Search Deliveries</Form.Label>
                         <Form.Control
                             type="text"
-                            placeholder="Type to search..."
-                            onChange={(e) => handleSearchChange(e.target.value)}
+                            placeholder="Search by task details or delivery code..."
+                            value={searchQuery}
+                            onChange={handleSearchChange}
                         />
                     </Form.Group>
                 </Col>
-                <Col md={4} className="mb-3">
+                <Col md={3}>
                     <FilterDeliveryBasedOnClientSelected
                         clients={clients}
-                        selectedClient={selectedClient}
                         onClientSelect={handleClientSelect}
-                        onClearFilter={handleClearFilter}
+                        selectedClient={selectedClient}
                     />
                 </Col>
-                <Col md={4} className="mb-3">
+                <Col md={3}>
                     <SortDeliveriesByDate
-                        sortType={sortType}
-                        onSortChange={handleSortChange}
+                        sortOption={sortOption}
+                        setSortOption={setSortOption}
                     />
                 </Col>
             </Row>
 
-            {loading && deliveries.length === 0 && (
-                <div className="d-flex justify-content-center align-items-center" style={{ height: '200px' }}>
-                    <Spinner animation="border" role="status">
-                        <span className="visually-hidden">Loading...</span>
-                    </Spinner>
-                </div>
-            )}
+            <Row xs={1} md={1} lg={1} className="g-4"> {/* Changed Col sizing to display one card per row */}
+                {deliveries.length > 0 ? (
+                    deliveries.map((delivery) => {
+                        // Calculate progress based on Scheduled Tasks vs Total Tasks
+                        const scheduledTasks = delivery.Planned_Tasks !== undefined ? delivery.Planned_Tasks : delivery.Completed_Tasks; // Fallback
+                        const totalTasks = delivery.Total_Tasks || 1; // Avoid division by zero
 
-            <Row>
-                {filteredAndSortedDeliveries.length > 0 ? (
-                    filteredAndSortedDeliveries.map(delivery => {
-                        const progressVariant = delivery.Progress < 50 ? 'danger' : delivery.Progress < 100 ? 'warning' : 'success';
+                        const progress = (scheduledTasks / totalTasks) * 100;
 
+                        let progressBarVariant = "primary";
+                        if (progress === 100) {
+                            progressBarVariant = "success";
+                        } else if (progress >= 50) { // Half or more planned
+                            progressBarVariant = "warning";
+                        } else { // Less than half planned
+                            progressBarVariant = "danger";
+                        }
+
+                        // Robustly parse and format Planned_Delivery_Timestamp (End Date)
+                        const rawDeadlineTimestamp = delivery.Planned_Delivery_Timestamp && typeof delivery.Planned_Delivery_Timestamp === 'object' && delivery.Planned_Delivery_Timestamp.value
+                            ? delivery.Planned_Delivery_Timestamp.value
+                            : delivery.Planned_Delivery_Timestamp; // Use directly if it's already a string or null/undefined
+
+                        const deadlineDate = rawDeadlineTimestamp ? moment(rawDeadlineTimestamp) : null;
+                        const formattedDeadline = deadlineDate && deadlineDate.isValid() ? deadlineDate.format('YYYY-MM-DD') : 'N/A';
+                        
                         return (
-                            <Col md={6} lg={4} key={delivery.Delivery_Code} className="mb-4">
-                                {/* Use simple click handler instead of Link */}
-                                <Card
-                                    className="shadow-md hover:shadow-lg transition cursor-pointer h-full"
-                                    onClick={() => onDeliverySelect(delivery)}
-                                >
-                                    <Card.Body>
-                                        <div className="flex justify-between items-start mb-2">
-                                            <h5 className="text-xl font-bold text-blue-700">
-                                                {getStatusIcon(delivery.Status)} {delivery.Client}
-                                            </h5>
-                                            {isAdmin && (
-                                                <DeleteButton delivery={delivery} onDeleteSuccess={handleDeleteSuccess} />
-                                            )}
-                                        </div>
-
-                                        <p className="text-sm text-gray-500 mb-1">
-                                            Planned Date: <strong>{formatDate(delivery.Planned_Delivery_Date)}</strong>
-                                        </p>
-
-                                        <ProgressBar now={delivery.Progress} label={`${delivery.Progress}%`} variant={progressVariant} className="mb-3" />
-
-                                        <div className="flex justify-between items-center mt-2">
-                                            <p
-                                                className="text-sm text-blue-600 font-medium hover:text-blue-800"
-                                                onClick={(e) => {
-                                                    e.stopPropagation(); // Prevent card click
-                                                    // Mock copy to clipboard functionality
-                                                    navigator.clipboard.writeText(delivery.DelCode_w_o__).then(() => {
-                                                        showNotification('info', 'Copied!', `Code ${delivery.DelCode_w_o__} copied to clipboard.`);
-                                                    });
-                                                }}
-                                                style={{ cursor: "pointer", textDecoration: "underline" }}
-                                                title="Click to copy"
-                                            >
-                                                Code: {delivery.DelCode_w_o__}
+                            <Col key={delivery.Key}>
+                                <Link to={`/delivery/data/${encodeURIComponent(delivery.DelCode_w_o__)}`} className="text-decoration-none">
+                                    <Card className={`delivery-card h-100`}> 
+                                        <Card.Body>
+                                            <div className="d-flex justify-content-between align-items-start">
+                                                <div>
+                                                    <Card.Title className="mb-1">{delivery.Task_Details}</Card.Title>
+                                                    <Card.Subtitle className="mb-2 text-muted">
+                                                        {delivery.Client} - {delivery.Delivery_code}
+                                                    </Card.Subtitle>
+                                                </div>
+                                                {isAdmin && (
+                                                    <DeleteButton
+                                                        deliveryCode={delivery.DelCode_w_o__}
+                                                        onDelete={handleDeleteSuccess}
+                                                    />
+                                                )}
+                                            </div>
+                                            <ProgressBar
+                                                now={progress}
+                                                className="my-3"
+                                                variant={progressBarVariant} // Dynamic variant
+                                            />
+                                            {/* Moved the progress text outside the ProgressBar */}
+                                            <p className="mb-0 text-center" style={{ color: 'black', fontWeight: 'bold' }}>
+                                                {`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`}
                                             </p>
-                                        </div>
-                                    </Card.Body>
-                                </Card>
+                                            <div className="d-flex justify-content-between align-items-center mt-2">
+                                                <p className="mb-0 text-primary">
+                                                    <FiClock style={{ marginRight: '5px' }} /> {delivery.Time_Left_For_Next_Task_dd_hh_mm_ss || 'N/A'}
+                                                </p>
+                                                <p className="mb-0 text-success">
+                                                    <FiCheckCircle style={{ marginRight: '5px' }} /> {delivery.Current_Status}
+                                                </p>
+                                            </div>
+                                            <div className="d-flex justify-content-between align-items-center mt-2">
+                                                {/* Display Deadline date */}
+                                                <p className="mb-0 text-danger">
+                                                    <FiFlag style={{ marginRight: '5px' }} /> Deadline: {formattedDeadline}
+                                                </p>
+                                                <p
+                                                    onClick={(e) => {
+                                                        e.preventDefault(); // Prevent link navigation
+                                                        e.stopPropagation(); // Prevent card click
+                                                        const el = document.createElement('textarea');
+                                                        el.value = delivery.DelCode_w_o__;
+                                                        document.body.appendChild(el);
+                                                        el.select();
+                                                        document.execCommand('copy');
+                                                        document.body.removeChild(el);
+                                                        // Using Antd notification instead of browser alert for copy success
+                                                        notification.success({
+                                                            message: 'Copied!',
+                                                            description: `${delivery.DelCode_w_o__} copied to clipboard.`,
+                                                            duration: 2,
+                                                        });
+                                                    }}
+                                                    style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+                                                    title="Click to copy"
+                                                >
+                                                    {delivery.DelCode_w_o__}
+                                                </p>
+                                            </div>
+                                        </Card.Body>
+                                    </Card>
+                                </Link>
                             </Col>
                         );
                     })
@@ -517,71 +298,18 @@ const DeliveryList = ({ onDeliverySelect, onDeliveryDataUpdate }) => {
                 )}
             </Row>
 
-            {loading && deliveries.length > 0 && (
+            <div className="delivery-list-end"></div>
+
+            {loading && deliveries.length > 0 && ( // Show spinner when loading more, but preserve existing data
                 <div className="d-flex justify-content-center align-items-center" style={{ height: '100px' }}>
-                    {/* Simple CSS Spinner as FaSpinner replacement */}
-                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                    <FaSpinner
+                        className="spinner-icon"
+                        style={{ fontSize: '2rem', color: '#007bff', animation: 'spin 10s linear infinite' }}
+                    />
                 </div>
             )}
         </Container>
     );
 };
 
-
-// 8. Main App Component to handle routing
-const App = () => {
-    const [view, setView] = useState('list'); // 'list' or 'detail'
-    const [selectedDelivery, setSelectedDelivery] = useState(null);
-    const [allDeliveries, setAllDeliveries] = useState([]); // State to hold all delivery data
-
-    const handleDeliverySelect = useCallback((delivery) => {
-        setSelectedDelivery(delivery);
-        setView('detail');
-    }, []);
-
-    const navigateToHome = useCallback(() => {
-        setView('list');
-        setSelectedDelivery(null);
-    }, []);
-
-    // Function to update the parent state with the fetched delivery data
-    const handleDeliveryDataUpdate = useCallback((data) => {
-        setAllDeliveries(data);
-    }, []);
-
-    return (
-        <UserContext.Provider value={{ userEmail: ADMIN_EMAILS_FRONTEND[0], userName: 'Admin User' }}>
-            <div className="App min-h-screen bg-gray-50">
-                <header className="bg-white shadow-sm p-4 sticky top-0 z-10">
-                    <h1 className="text-3xl font-extrabold text-gray-900 text-center">Delivery Management System</h1>
-                </header>
-                <main className="pb-10">
-                    {view === 'list' && (
-                        <DeliveryList
-                            onDeliverySelect={handleDeliverySelect}
-                            onDeliveryDataUpdate={handleDeliveryDataUpdate}
-                        />
-                    )}
-                    {view === 'detail' && selectedDelivery && (
-                        <DeliveryDetail
-                            delivery={selectedDelivery}
-                            navigateToHome={navigateToHome}
-                        />
-                    )}
-                </main>
-                {/* Tailwind CSS spinner animation (for FaSpinner replacement) */}
-                <style>{`
-                    @keyframes spin {
-                        from { transform: rotate(0deg); }
-                        to { transform: rotate(360deg); }
-                    }
-                    .animate-spin {
-                        animation: spin 1s linear infinite;
-                    }
-                `}</style>
-            </div>
-        </UserContext.Provider>
-    );
-};
-
-export default App;
+export default DeliveryList;
