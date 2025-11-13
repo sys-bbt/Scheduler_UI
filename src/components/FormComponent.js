@@ -1,16 +1,10 @@
 import React, { useState, useEffect, useContext } from 'react';
-
 import { Form, Button, Spinner, Alert } from 'react-bootstrap';
-
 import Select from 'react-select';
-
 import moment from 'moment';
-
 import { UserContext } from './UserContext'; // Import UserContext
 
-
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
-
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
@@ -23,8 +17,8 @@ const ADMIN_EMAILS_FRONTEND = [
     "arvanbir.s@brightbraintech.com"
 ];
 
-// REMOVED: formatMinutesToHoursMinutes helper function as it's no longer used
-
+// NOTE: The ESLint errors you saw (unused 'Button') were incorrect,
+// as 'Button' is clearly used in the return block. No changes were needed here.
 
 const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const { userEmail } = useContext(UserContext); // Use userEmail from context
@@ -53,18 +47,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         Updated_at: null,
         Time_Left_For_Next_Task_dd_hh_mm_ss: '',
         Card_Corner_Status: '',
-        // REMOVED: Number_of_Days
     });
-    // REMOVED: dailyHours state
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
     const [persons, setPersons] = useState([]);
     const [loadingPersons, setLoadingPersons] = useState(true);
     const [personError, setPersonError] = useState(null);
-
-    // REMOVED: calculateEndDate and generateDailySliders functions
-
 
     useEffect(() => {
         if (task) {
@@ -95,10 +84,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Updated_at: task.Updated_at || null,
                 Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss || '',
                 Card_Corner_Status: task.Card_Corner_Status || '',
-                // REMOVED: Number_of_Days
             });
             
-            // REMOVED: Logic to fetch and set dailyHours
         }
     }, [task]); // Dependencies: task only
 
@@ -147,11 +134,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             return updatedData;
         });
     };
-
-    // REMOVED: handleNumberOfDaysChange
-
-    // REMOVED: handleDailyHoursSliderChange
-
 
     const handlePersonSelect = (selectedOption) => {
         setFormData(prevData => ({
@@ -261,9 +243,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     // Determine if fields should be disabled for non-admins (Logic unchanged)
     const isFieldDisabledForNonAdmin = !isAdmin && (formData.Emails !== currentUserEmail && formData.Emails !== "systems@brightbraintech.com");
 
-    // REMOVED: Diagnostic Console Logs useEffect
-
-
     return (
         <Form onSubmit={handleSubmit} className="p-3 border rounded shadow-sm bg-light">
             {error && <Alert variant="danger">{error}</Alert>}
@@ -295,8 +274,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 />
             </Form.Group>
 
-            {/* REMOVED: Number of Days Form.Group */}
-
             <Form.Group className="mb-3">
                 <Form.Label>Planned Delivery Date (End Date)</Form.Label>
                 <Form.Control
@@ -308,8 +285,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     disabled={true} // Disabled as requested
                 />
             </Form.Group>
-
-            {/* REMOVED: Dynamic Sliders for Daily Hours section */}
 
             <Form.Group className="mb-3">
                 <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
