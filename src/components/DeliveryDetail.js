@@ -1,13 +1,13 @@
-import React, { useEffect, useState, useContext, useCallback } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import React, { useEffect, useState, useContext, memo } from 'react';
+import { useLocation, Link, useParams } from 'react-router-dom';
 import { Container, Card, Row, Col, Spinner, Alert, ListGroup } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
 import { FaPause, FaPlay, FaStop, FaCalendarAlt, FaEllipsisV } from 'react-icons/fa';
-import FormComponent from './FormComponent';
+import FormComponent from './FormComponent'; // This will be the memoized version
 import { UserContext } from './UserContext';
 import 'rc-dropdown/assets/index.css';
-import './DeliveryDetail.css';
+import './DeliveryDetail.css'; // Assuming you have this CSS file
 import moment from 'moment';
 import { notification } from 'antd';
 
@@ -28,135 +28,243 @@ const ADMIN_EMAILS_FRONTEND = [
     "arvanbir.s@brightbraintech.com"
 ];
 
+/**
+ * Memoized TaskCard Component
+ * This component is wrapped in React.memo to prevent unnecessary re-renders.
+ * It will only re-render if its props (task, userEmail, etc.) change.
+ */
+const TaskCard = memo(({ 
+    task, 
+    userEmail, 
+    isAdmin, 
+    activeTaskKey, 
+    actionType, 
+    handleMenuSelect, 
+    handleFormSubmit 
+}) => {
+
+    // Define the menu for this specific task
+    const menu = (
+        <Menu onClick={({ key }) => handleMenuSelect(key, task)}>
+            <MenuItem key="edit" disabled={!isAdmin && task.Responsibility !== userEmail}>
+                <FaCalendarAlt /> Schedule Task
+            </MenuItem>
+            <MenuItem key="In-Progress" disabled={!isAdmin && task.Responsibility !== userEmail}>
+                <FaPlay /> Start Task
+            </MenuItem>
+            <MenuItem key="Paused" disabled={!isAdmin && task.Responsibility !== userEmail}>
+                <FaPause /> Pause Task
+            </MenuItem>
+            <MenuItem key="Completed" disabled={!isAdmin && task.Responsibility !== userEmail}>
+                <FaStop /> Complete Task
+            </MenuItem>
+        </Menu>
+    );
+
+    return (
+        <Col md={6} lg={4} className="mb-4">
+            <Card className={`task-card task-status-${task.Status.replace(/\s+/g, '-')}`}>
+                <Card.Body>
+                    <Row>
+                        <Col>
+                            <Card.Title>{task.Task_Details}</Card.Title>
+                        </Col>
+                        <Col xs="auto">
+                            <Dropdown
+                                trigger={['click']}
+                                overlay={menu}
+                                animation="slide-up"
+                            >
+                                <FaEllipsisV style={{ cursor: 'pointer', color: '#007bff' }} />
+                            </Dropdown>
+                        </Col>
+                    </Row>
+                    <Card.Text>{task.Short_Description}</Card.Text>
+                    <Row className="task-details-row">
+                        <Col md={6}>
+                            <p><strong>Status:</strong> {task.Status}</p>
+                        </Col>
+                        <Col md={6}>
+                            <p><strong>Responsible:</strong> {task.Responsibility.split('@')[0]}</p>
+                        </Col>
+                    </Row>
+                    <Row className="task-details-row">
+                        <Col md={6}>
+                            <p><strong>Planned Delivery:</strong> {moment(task.Planned_Delivery_Timestamp).format('YYYY-MM-DD')}</p>
+                        </Col>
+                        {/* REQ 1: "Initiated Timestamp" display has been removed from here.
+                        */}
+                    </Row>
+
+                    {/* REQ 3 & 4: FormComponent is displayed conditionally.
+                      Because this TaskCard is memoized, this check is efficient and won't
+                      cause other cards to re-evaluate or re-render.
+                    */}
+                    {activeTaskKey === task.Key && actionType === 'edit' && (
+                        <div className="mt-3">
+                            <hr />
+                            <h6>Schedule Task: {task.Task_Details}</h6>
+                            <FormComponent
+                                onSubmit={handleFormSubmit}
+                                task={task}
+                                currentUserEmail={userEmail}
+                            />
+                        </div>
+                    )}
+                </Card.Body>
+            </Card>
+        </Col>
+    );
+});
+
+// Main DeliveryDetail Component
 const DeliveryDetail = () => {
+    const { deliveryId } = useParams();
     const location = useLocation();
     const { userEmail } = useContext(UserContext);
+
+    // Calculate isAdmin once and pass it down
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-    const [delivery, setDelivery] = useState(null);
+    const [delivery, setDelivery] = useState(location.state?.delivery || null);
+    const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [activeTaskKey, setActiveTaskKey] = useState(null); // Holds the Key of the task whose form is active
-    const [actionType, setActionType] = useState(null); // 'edit', 'pause', 'play', 'stop'
 
-    // Extract delivery ID from route state
-    const deliveryId = location.state?.deliveryId;
+    // State for managing which task form is open
+    const [activeTaskKey, setActiveTaskKey] = useState(null);
+    const [actionType, setActionType] = useState(null); // 'edit' or 'status'
 
-    // Fetch delivery details on component mount or when deliveryId changes
+    // Fetch Delivery Details
     useEffect(() => {
-        if (!deliveryId) {
-            setError("No delivery ID provided.");
-            setLoading(false);
-            return;
+        if (!delivery) {
+            console.log('Fetching delivery details for:', deliveryId);
+            fetch(`${BACKEND_API_BASE_URL}/api/deliveries/${deliveryId}`)
+                .then(res => {
+                    if (!res.ok) {
+                        throw new Error(`HTTP error! status: ${res.status}`);
+                    }
+                    return res.json();
+                })
+                .then(data => setDelivery(data))
+                .catch(err => {
+                    console.error('Error fetching delivery details:', err);
+                    setError(err.message);
+                });
         }
+    }, [delivery, deliveryId]);
 
-        const fetchDeliveryDetails = async () => {
-            setLoading(true);
-            setError(null);
-            try {
-                const response = await fetch(`${BACKEND_API_BASE_URL}/delivery/${deliveryId}`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+    // Fetch Tasks
+    useEffect(() => {
+        console.log('Fetching tasks for:', deliveryId);
+        setLoading(true);
+        fetch(`${BACKEND_API_BASE_URL}/api/tasks/${deliveryId}`)
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error(`HTTP error! status: ${res.status}`);
                 }
-                const data = await response.json();
-                setDelivery(data);
-            } catch (err) {
-                console.error("Failed to fetch delivery details:", err);
-                setError("Failed to load delivery details. Please try again.");
-            } finally {
+                return res.json();
+            })
+            .then(data => {
+                setTasks(data);
                 setLoading(false);
-            }
-        };
-
-        fetchDeliveryDetails();
+            })
+            .catch(err => {
+                console.error('Error fetching tasks:', err);
+                setError(err.message);
+                setLoading(false);
+            });
     }, [deliveryId]);
 
-    // Function to handle the task action (Edit, Pause, Play, Stop)
-    const handleAction = useCallback((taskKey, action) => {
-        setActionType(action);
+    // Handler for form submission
+    const handleFormSubmit = (updatedTask) => {
+        // Update the task in the local state
+        const updatedTasks = tasks.map(t => (t.Key === updatedTask.Key ? updatedTask : t));
+        setTasks(updatedTasks);
         
-        if (action === 'edit') {
-            // New logic: Toggle the form display for the specific task
-            if (activeTaskKey === taskKey) {
-                // If the same task is clicked again, close the form
+        // Close the form
+        setActiveTaskKey(null);
+        setActionType(null);
+
+        notification.success({
+            message: 'Task Updated',
+            description: `Task "${updatedTask.Task_Details}" has been successfully scheduled.`,
+            placement: 'topRight',
+        });
+    };
+
+    // Handler for status updates (play, pause, stop)
+    const updateTaskStatus = (task, newStatus) => {
+        console.log(`Updating status for task ${task.Key} to ${newStatus}`);
+        
+        fetch(`${BACKEND_API_BASE_URL}/api/tasks/update-status`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                Key: task.Key,
+                Delivery_code: task.Delivery_code,
+                Step_ID: task.Step_ID,
+                newStatus: newStatus,
+                userEmail: userEmail,
+            }),
+        })
+        .then(res => {
+            if (!res.ok) {
+                return res.json().then(err => { throw new Error(err.error || 'Failed to update status'); });
+            }
+            return res.json();
+        })
+        .then(updatedTask => {
+            // Update local state
+            const updatedTasks = tasks.map(t => (t.Key === updatedTask.Key ? updatedTask : t));
+            setTasks(updatedTasks);
+            
+            notification.info({
+                message: 'Task Status Updated',
+                description: `Task "${updatedTask.Task_Details}" is now ${updatedTask.Status}.`,
+                placement: 'topRight',
+            });
+        })
+        .catch(err => {
+            console.error('Error updating task status:', err);
+            notification.error({
+                message: 'Update Failed',
+                description: err.message || 'Could not update task status.',
+                placement: 'topRight',
+            });
+        });
+    };
+
+    // Handler for menu item selection
+    const handleMenuSelect = (key, task) => {
+        if (key === 'edit') {
+            // REQ 3: Toggle logic
+            // If clicking 'edit' on the *same task* that is already active, close it.
+            if (activeTaskKey === task.Key && actionType === 'edit') {
                 setActiveTaskKey(null);
                 setActionType(null);
             } else {
-                // Otherwise, open the form for the new task
-                setActiveTaskKey(taskKey);
+                // Otherwise, open the new task's form.
+                setActiveTaskKey(task.Key);
+                setActionType('edit');
             }
         } else {
-            // Logic for other actions (Pause, Play, Stop)
-            // For now, we only handle 'edit' for the form display
-            setActiveTaskKey(null);
-            console.log(`Action: ${action} triggered for task: ${taskKey}`);
-            // TODO: Implement API call for Pause, Play, Stop
-            notification.info({
-                message: 'Action Triggered',
-                description: `Action: ${action} triggered for task: ${taskKey}. (Implementation pending)`,
-            });
-        }
-    }, [activeTaskKey]); // Dependency on activeTaskKey to correctly check and toggle
-
-    // Function to handle form submission
-    const handleFormSubmit = useCallback(async (formData) => {
-        // Implement the logic to send the updated task data to the backend
-        console.log("Form submitted with data:", formData);
-
-        // Prepare data for API (e.g., convert moment objects back to string if needed)
-        const dataToSend = {
-            ...formData,
-            Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null,
-            Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
-            // Assuming Responsibility is an object from react-select, extract the value (email)
-            Responsibility: formData.Responsibility?.value || formData.Responsibility, 
-        };
-
-        try {
-            const response = await fetch(`${BACKEND_API_BASE_URL}/task/${formData.Key}/schedule`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(dataToSend),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-            }
-
-            // Success feedback
-            notification.success({
-                message: 'Task Scheduled Successfully',
-                description: `Task ${formData.Task_Details} updated.`,
-            });
-
-            // Close the form upon successful submission
-            setActiveTaskKey(null);
+            // Handle status changes (play, pause, stop)
+            setActiveTaskKey(null); // Hide form
             setActionType(null);
-            
-            // Re-fetch the delivery details to update the UI
-            // This is crucial for real-time updates without a live connection
-            // The existing useEffect dependency on deliveryId will handle this if we trigger a re-fetch, but for simplicity, we'll ask the user to refresh/navigate back for now, or implement a local state update for tasks.
-            // For now, let's just close the form and rely on a full page navigation/refresh if critical.
-
-        } catch (err) {
-            console.error("Task scheduling failed:", err);
-            notification.error({
-                message: 'Scheduling Failed',
-                description: err.message,
-                duration: 5,
-            });
+            updateTaskStatus(task, key);
         }
-    }, []);
+    };
 
     if (loading) {
         return (
-            <Container className="d-flex justify-content-center align-items-center" style={{ minHeight: '80vh' }}>
+            <Container className="text-center mt-5">
                 <Spinner animation="border" role="status">
                     <span className="visually-hidden">Loading...</span>
                 </Spinner>
+                <p>Loading delivery details...</p>
             </Container>
         );
     }
@@ -164,121 +272,55 @@ const DeliveryDetail = () => {
     if (error) {
         return (
             <Container className="mt-5">
-                <Alert variant="danger">{error}</Alert>
-                <Link to="/" className="btn btn-primary mt-4">Back to Deliveries</Link>
+                <Alert variant="danger">
+                    <Alert.Heading>Error</Alert.Heading>
+                    <p>Failed to load delivery details: {error}</p>
+                    <Link to="/" className="btn btn-primary">Back to Deliveries</Link>
+                </Alert>
             </Container>
         );
     }
 
-    const filteredTasks = delivery.Tasks
-        ? delivery.Tasks.filter(task => task.Status !== COMPLETED_TASK_STATUS)
-        : [];
-    
-    // Sort tasks by Step_ID for consistent order
-    filteredTasks.sort((a, b) => a.Step_ID - b.Step_ID);
-
     return (
-        <Container className="mt-5">
-            <h2 className="mb-4">Delivery Details: {delivery.Delivery_code}</h2>
-            
-            <Card className="mb-4 shadow-sm">
-                <Card.Body>
-                    <Card.Title>{delivery.Client}</Card.Title>
-                    <Card.Subtitle className="mb-2 text-muted">
-                        Delivery Code: {delivery.DelCode_w_o__}
-                    </Card.Subtitle>
-                    <Card.Text>
-                        <strong>Description:</strong> {delivery.Description}
-                    </Card.Text>
-                    <Card.Text>
-                        <strong>Planned Delivery Date:</strong> 
-                        {moment(delivery.Planned_Delivery_Timestamp).isValid() 
-                            ? moment(delivery.Planned_Delivery_Timestamp).format('YYYY-MM-DD HH:mm:ss')
-                            : 'N/A'
+        <Container className="delivery-detail-container mt-4">
+            {delivery && (
+                <div className="delivery-header mb-4">
+                    <h2>{delivery.DelCode_w_o__}</h2>
+                    <p><strong>Client:</strong> {delivery.Client}</p>
+                    <p><strong>Description:</strong> {delivery.Short_Description}</p>
+                </div>
+            )}
+
+            <h4 className="mb-3">Tasks</h4>
+            <Row>
+                {tasks.length > 0 ? (
+                    tasks.map((task) => {
+                        // Filter out completed tasks from display
+                        if (task.Status === COMPLETED_TASK_STATUS) {
+                            return null;
                         }
-                    </Card.Text>
-                    <Card.Text>
-                        <strong>Current Status:</strong> <span className={`badge ${delivery.Status === 'InProgress' ? 'bg-primary' : 'bg-success'}`}>{delivery.Status}</span>
-                    </Card.Text>
-                </Card.Body>
-            </Card>
-
-            <h3 className="mt-5 mb-3">Tasks</h3>
-            <Row xs={1} md={2} lg={3} className="g-4">
-                {filteredTasks.length > 0 ? (
-                    filteredTasks.map((task) => {
-                        // Use task.Key as the unique identifier for the card and the form
-                        const isTaskActive = activeTaskKey === task.Key;
-
+                        // Render the memoized TaskCard component
                         return (
-                            <Col key={task.Key}>
-                                <Card className={`shadow-sm h-100 task-card ${isTaskActive ? 'border-primary' : ''}`}>
-                                    <Card.Body>
-                                        <div className="d-flex justify-content-between align-items-start">
-                                            <Card.Title className="mb-1">
-                                                {task.Step_ID}. {task.Task_Details}
-                                            </Card.Title>
-                                            <span className={`badge ${task.Status === 'Pending' ? 'bg-warning' : task.Status === 'InProgress' ? 'bg-primary' : 'bg-secondary'}`}>
-                                                {task.Status}
-                                            </span>
-                                        </div>
-                                        <Card.Subtitle className="mb-2 text-muted">
-                                            Assigned to: {task.Responsibility || 'System'}
-                                        </Card.Subtitle>
-                                        
-                                        {/* Updated to use Planned_Delivery_Timestamp */}
-                                        <Card.Text className="small">
-                                            <FaCalendarAlt className="me-1 text-info" />
-                                            <strong>Planned End:</strong> 
-                                            {moment(task.Planned_Delivery_Timestamp).isValid()
-                                                ? moment(task.Planned_Delivery_Timestamp).format('YYYY-MM-DD')
-                                                : 'TBD'
-                                            }
-                                        </Card.Text>
-                                        
-                                        <div className="d-flex justify-content-end">
-                                            <Dropdown
-                                                trigger={['click']}
-                                                overlay={
-                                                    <Menu onClick={({ key }) => handleAction(task.Key, key)}>
-                                                        <MenuItem key="edit">Schedule/Edit</MenuItem>
-                                                        <MenuItem key="play"><FaPlay className="me-2 text-success" />Start</MenuItem>
-                                                        <MenuItem key="pause"><FaPause className="me-2 text-warning" />Pause</MenuItem>
-                                                        <MenuItem key="stop"><FaStop className="me-2 text-danger" />Stop</MenuItem>
-                                                    </Menu>
-                                                }
-                                                animation="slide-up"
-                                            >
-                                                <Button variant="light" size="sm" className="btn-icon">
-                                                    <FaEllipsisV />
-                                                </Button>
-                                            </Dropdown>
-                                        </div>
-
-                                        {/* Display FormComponent ONLY if the task is the active one and the action is 'edit' */}
-                                        {isTaskActive && actionType === 'edit' && (
-                                            <div className="mt-3 p-3 border rounded bg-light">
-                                                <h6>Schedule Task: {task.Task_Details}</h6>
-                                                <FormComponent
-                                                    onSubmit={handleFormSubmit}
-                                                    task={task}
-                                                    currentUserEmail={userEmail}
-                                                />
-                                            </div>
-                                        )}
-                                    </Card.Body>
-                                </Card>
-                            </Col>
+                            <TaskCard
+                                key={task.Key}
+                                task={task}
+                                userEmail={userEmail}
+                                isAdmin={isAdmin}
+                                activeTaskKey={activeTaskKey}
+                                actionType={actionType}
+                                handleMenuSelect={handleMenuSelect}
+                                handleFormSubmit={handleFormSubmit}
+                            />
                         );
                     })
                 ) : (
                     <Col>
-                        <ListGroup.Item>No tasks available for this delivery or all tasks are completed.</ListGroup.Item>
+                        <ListGroup.Item>No tasks available for this delivery.</ListGroup.Item>
                     </Col>
                 )}
             </Row>
 
-            <Link to="/" className="btn btn-primary mt-4">
+            <Link to="/" className="btn btn-primary mt-4 mb-4">
                 Back to Deliveries
             </Link>
         </Container>
