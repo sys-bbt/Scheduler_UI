@@ -68,7 +68,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             const initialDeliveryDate = rawDeliveryDate ? moment(rawDeliveryDate) : null;
 
             setFormData({
-                Key: task.Key || '',
+                // 🟢 FIX: Ensure Key is converted to a string to prevent it from being '' (empty string) 
+                // in the payload if it originated as null/undefined. BigQuery is strict.
+                Key: String(task.Key || ''), 
                 Delivery_code: task.Delivery_code || '',
                 DelCode_w_o__: task.DelCode_w_o__ || '',
                 Step_ID: task.Step_ID || 0,
@@ -155,6 +157,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         setError(null);
         setSuccess(null);
 
+        // 🟢 CRITICAL VALIDATION: Check if Key is valid before proceeding
+        if (!formData.Key || formData.Key === '0') {
+             setError("Cannot update task: Unique Task Key is missing or invalid.");
+             setLoading(false);
+             return;
+        }
+
         if (!formData.Planned_Start_Timestamp || !formData.Planned_Start_Timestamp.isValid() || !formData.Responsibility) {
             setError("Please fill all required fields: Start Date and Person Responsible.");
             setLoading(false);
@@ -173,7 +182,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             
             if (formData.Planned_Start_Timestamp && formData.Planned_Start_Timestamp.isValid()) {
                 perKeyPerDayRows.push({
-                    Key: mainTaskPayload.Key,
+                    Key: mainTaskPayload.Key, // 🟢 This Key must be a non-empty string of an integer
                     Day: formData.Planned_Start_Timestamp.format('YYYY-MM-DD'),
                     Duration: 0,
                     Duration_Unit: 'min',
@@ -197,10 +206,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
             if (!response.ok) {
                 const errorText = await response.text();
+                // 🟢 Updated error logging to show the actual backend error details
                 throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
 
-            // FIXED: Consuming the response without assigning it to an unused variable
             await response.json(); 
             
             setSuccess('Task and schedule updated successfully!');
@@ -220,27 +229,18 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         label: p.Current_Employes 
     }));
 
-    // 1. Try to find the person based on the email/ID stored in formData.Emails
+    // Logic for pre-populating the selected person
     let selectedPerson = personsToDisplay.find(p => p.value === formData.Emails);
     
-    // 2. If no email is found, check if the Responsibility is explicitly "System" or any non-email value
     if (!selectedPerson && formData.Responsibility) {
-        // If Responsibility is set but no email match (e.g., "System" or an unmapped name),
-        // create a custom selection object to display the name/responsibility.
         selectedPerson = { 
             value: formData.Responsibility, 
             label: formData.Responsibility 
         };
     }
 
-
-    // NEW DISABLING LOGIC for Non-Admins:
-    // Task is considered assigned if Responsibility is set (and not blank).
-    // The "System" assignment means a person has not yet been assigned.
+    // Disabling logic
     const isAssigned = !!formData.Responsibility && formData.Responsibility !== "System";
-
-    // The field should be disabled if:
-    //    - The user is NOT an admin AND the task is already assigned (to a non-System user).
     const isFieldDisabled = !isAdmin && isAssigned;
 
 
@@ -249,6 +249,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             {error && <Alert variant="danger">{error}</Alert>}
             {success && <Alert variant="success">{success}</Alert>}
             {personError && <Alert variant="warning">{personError}</Alert>}
+            
+            {/* Displaying Key for debugging, optional to keep */}
+            {/* {!formData.Key && <Alert variant="warning">Warning: Task Key is missing!</Alert>} */}
 
             <Form.Group className="mb-3">
                 <Form.Label>Task Details</Form.Label>
