@@ -283,7 +283,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 <Form.Label>Start Date<span className="text-danger">*</span></Form.Label>
                 <Form.Control
                     type="date"
-                    name="Planned_Start_Timestamp"
+                    name="Start Date"
                     // Format moment object for display
                     value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
                     onChange={handleStartDateChange}
@@ -296,7 +296,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 <Form.Label>Planned Delivery Date (End Date)</Form.Label>
                 <Form.Control
                     type="date"
-                    name="Planned_Delivery_Timestamp"
+                    name="End Date"
                     // Format moment object for display
                     value={formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : ''}
                     readOnly // This field is pre-filled from task data
@@ -305,7 +305,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             </Form.Group>
 
             <Form.Group className="mb-3">
-                <Form.Label>Person Responsible<span className="text-danger">*</span></This Form.Label>
+                <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
                 <Select
                     name="Responsibility"
                     options={personsToDisplay}
