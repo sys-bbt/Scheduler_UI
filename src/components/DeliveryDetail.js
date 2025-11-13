@@ -173,28 +173,20 @@ const DeliveryDetail = () => {
     }, [deliveryCode, userEmail, isAdmin, refreshKey]);
 
     const handleFormSubmit = useCallback((updatedTaskData) => {
-    // Optimistic update of tasks
-    setTasks(prevTasks =>
-        prevTasks.map(task =>
-            task.Key === updatedTaskData.Key
-                ? { ...task, ...updatedTaskData }
-                : task
-        )
-    );
-    
-    // 🛑 REMOVE or COMMENT OUT THESE LINES:
-    // setActiveTaskKey(null); 
-    // setActionType(null);
-    
-    // 🟢 NEW LOGIC: Wait 2 seconds, then close the form and refresh.
-    // This gives the user time to see the success message displayed by FormComponent.
-    setTimeout(() => {
+        // Optimistic update of tasks
+        setTasks(prevTasks =>
+            prevTasks.map(task =>
+                task.Key === updatedTaskData.Key
+                    ? { ...task, ...updatedTaskData }
+                    : task
+            )
+        );
+        // 🟢 Close the form after submission
         setActiveTaskKey(null); 
         setActionType(null);
         // 🟢 Trigger re-fetch for fresh data and accurate status display
         setRefreshKey(prev => prev + 1); 
-    }, 2000); // Wait 2 seconds
-}, []);
+    }, []);
 
     // 🟢 CLICK HANDLER: Controls the activeTaskKey state
     const handleCardClick = useCallback((taskKey, displayStatus) => {
