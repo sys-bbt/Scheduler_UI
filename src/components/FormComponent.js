@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Form, Button, Spinner, Alert } from 'react-bootstrap';
 import Select from 'react-select';
 import moment from 'moment';
-import { UserContext } from './UserContext'; // Import UserContext
+import { UserContext } from './UserContext'; 
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
@@ -18,7 +18,6 @@ const ADMIN_EMAILS_FRONTEND = [
 ];
 
 const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
-    // Note: 'currentUserEmail' passed via prop is already available in context via 'userEmail'.
     const { userEmail } = useContext(UserContext); 
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
@@ -31,8 +30,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         Frequency___Timeline: '',
         Client: '',
         Short_Description: '',
-        Planned_Start_Timestamp: null, // Stores moment object or null
-        Planned_Delivery_Timestamp: null, // Stores pre-filled moment object (End Date)
+        Planned_Start_Timestamp: null, 
+        Planned_Delivery_Timestamp: null, 
         Responsibility: '',
         Current_Status: '',
         Email: '',
@@ -77,12 +76,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Frequency___Timeline: task.Frequency___Timeline || '',
                 Client: task.Client || '',
                 Short_Description: task.Short_Description || '',
-                Planned_Start_Timestamp: initialStartDate, // Store as moment object
-                Planned_Delivery_Timestamp: initialDeliveryDate, // Store as moment object (End Date)
-                // 🟢 Ensure Responsibility and Emails are pre-populated
+                Planned_Start_Timestamp: initialStartDate, 
+                Planned_Delivery_Timestamp: initialDeliveryDate, 
                 Responsibility: task.Responsibility || '',
                 Email: task.Email || '',
-                Emails: task.Emails || '', // Emails is usually the assigned user's email/ID
+                Emails: task.Emails || '', 
                 Current_Status: task.Current_Status || '',
                 Total_Tasks: task.Total_Tasks || 0,
                 Completed_Tasks: task.Completed_Tasks || 0,
@@ -145,9 +143,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const handlePersonSelect = (selectedOption) => {
         setFormData(prevData => ({
             ...prevData,
-            // Responsibility is the name/label
             Responsibility: selectedOption ? selectedOption.label : '', 
-            // Emails is the email/ID, used for database storage and disabling logic
             Emails: selectedOption ? selectedOption.value : '' 
         }));
     };
@@ -167,8 +163,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
         try {
             const mainTaskPayload = {
-                // ... (all other formData fields)
-                ...formData, // Spread all fields to be sent
+                ...formData,
                 Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null,
                 Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
                 Updated_at: moment.utc().toISOString(), 
@@ -205,9 +200,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
 
-            const result = await response.json();
+            // 🟢 FIXED: Consuming the response without assigning it to an unused variable
+            await response.json(); 
+            
             setSuccess('Task and schedule updated successfully!');
-            onSubmit(formData); // Pass updated data back to parent
+            onSubmit(formData); 
         } catch (err) {
             console.error('Error updating task:', err);
             setError(`Failed to update task: ${err.message}`);
@@ -217,21 +214,17 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     };
 
 
-    // 🟢 Filter persons for dropdown based on admin status
+    // Filter persons for dropdown
     const personsToDisplay = persons.map(p => ({ 
         value: p.Emp_Emails, 
         label: p.Current_Employes 
     }));
 
-    // 🟢 Find the selected person based on the email/ID stored in formData.Emails
+    // Find the selected person based on the email/ID stored in formData.Emails
     const selectedPerson = personsToDisplay.find(p => p.value === formData.Emails);
     
-    // 🟢 NEW DISABLING LOGIC for Non-Admins:
-    // 1. Task is considered assigned if formData.Emails has a value (and it's not the system account).
+    // NEW DISABLING LOGIC for Non-Admins:
     const isAssigned = !!formData.Emails && formData.Emails !== "systems@brightbraintech.com";
-
-    // 2. The field should be disabled if:
-    //    - The user is NOT an admin AND the task is already assigned.
     const isFieldDisabled = !isAdmin && isAssigned;
 
 
@@ -260,7 +253,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     name="Planned_Start_Timestamp"
                     value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
                     onChange={handleStartDateChange}
-                    // 🟢 Start Date is disabled if the Person Responsible is disabled
                     disabled={isFieldDisabled} 
                     required
                 />
@@ -282,9 +274,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 <Select
                     name="Responsibility"
                     options={personsToDisplay}
-                    value={selectedPerson} // 🟢 Uses the `selectedPerson` derived from pre-populated email/ID
+                    value={selectedPerson} 
                     onChange={handlePersonSelect}
-                    // 🟢 Field is disabled if the user is not an admin AND the task is assigned
                     isDisabled={isFieldDisabled || loadingPersons} 
                     placeholder="Select Person"
                     isClearable
