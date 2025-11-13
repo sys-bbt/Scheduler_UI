@@ -62,8 +62,8 @@ const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemC
         <Col>
             <Card
                 className={`task-card ${isTaskCompleted ? 'task-completed' : ''} ${isActive ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
-                // 🛑 The click handler that triggers the form toggle
                 style={{ cursor: isTaskScheduled ? 'default' : 'pointer' }}
+                // 🟢 The click handler that triggers the form toggle
                 onClick={() => onCardClick(task.Key, displayStatus)} 
             >
                 <Card.Body>
@@ -89,9 +89,9 @@ const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemC
                         </Dropdown>
                     </div>
 
-                    {/* 🟢 CONDITIONAL FORM RENDERING: ONLY displays when isActive is true */}
+                    {/* 🟢 CONDITIONAL FORM RENDERING: Only displays when isActive is true */}
                     {isActive && (
-                        <div className="mt-3" onClick={(e) => e.stopPropagation()}> {/* Prevent form click from closing form */}
+                        <div className="mt-3" onClick={(e) => e.stopPropagation()}> 
                             <h6>Schedule Task: {task.Task_Details}</h6>
                             <FormComponent
                                 onSubmit={onFormSubmit}
@@ -192,6 +192,7 @@ const DeliveryDetail = () => {
     const handleCardClick = useCallback((taskKey, displayStatus) => {
         const isScheduled = displayStatus === 'Scheduled';
         
+        // This check is important to prevent opening the form for scheduled tasks
         if (isScheduled) { 
             notification.info({
                 message: 'Task Already Scheduled',
@@ -211,7 +212,7 @@ const DeliveryDetail = () => {
             setActiveTaskKey(taskKey);
             setActionType('edit');
         }
-    }, [activeTaskKey]); // Depends on activeTaskKey for the toggle logic
+    }, [activeTaskKey]); 
 
     const handleMenuItemClick = useCallback((taskKey, type) => {
         // Temporary block for P/P/S actions
