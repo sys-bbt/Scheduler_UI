@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
-import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
+// FIX: Removed unused imports 'Button' and 'FiCheckCircle'
+import { Container, Row, Col, Card, ProgressBar, Form } from 'react-bootstrap';
+import { FiClock, FiFlag } from 'react-icons/fi';
 import { FaSpinner } from 'react-icons/fa';
 import { UserContext } from './UserContext';
 import './DeliveryList.css';
@@ -33,7 +34,7 @@ const debounce = (func, delay) => {
 
 const DeliveryList = () => {
   const { userEmail, logoutUser } = useContext(UserContext);
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // FIX: 'navigate' is correctly used below
   const [deliveries, setDeliveries] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(''); 
@@ -41,9 +42,15 @@ const DeliveryList = () => {
   const [page, setPage] = useState(0);
   const [selectedClient, setSelectedClient] = useState('');
   const [loading, setLoading] = useState(true);
-  const observer = useRef(null); // Used for IntersectionObserver
+  const observer = useRef(null); // FIX: 'useRef' is correctly used for IntersectionObserver
   const [sortOption, setSortOption] = useState('earliest');
   const [totalFilteredDeliveries, setTotalFilteredDeliveries] = useState(0); 
+  
+  // FIX: Refactored search debounce to use a stable ref for the debounced function
+  const updateSearchTerm = useRef(debounce((nextValue) => {
+    setDebouncedSearchTerm(nextValue);
+  }, 500));
+
 
   const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
@@ -115,6 +122,7 @@ const DeliveryList = () => {
             queryParams.append('selectedClient', clientFilter);
         }
 
+        // Removed BACKEND_API_BASE_URL from dependencies
         const response = await fetch(`${BACKEND_API_BASE_URL}/api/data?${queryParams.toString()}`, {
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -126,7 +134,7 @@ const DeliveryList = () => {
           const errorText = await response.text();
           if (response.status === 401) {
             logoutUser();
-            navigate('/login'); // <--- Usage of navigate
+            navigate('/login'); 
           }
           throw new Error(`Network response was not ok: ${response.status} - ${errorText}`);
         }
@@ -188,8 +196,8 @@ const DeliveryList = () => {
         setLoading(false);
       }
     },
-    // FIX: Included all external dependencies to satisfy react-hooks/exhaustive-deps
-    [userEmail, isAdmin, authToken, handleSort, logoutUser, navigate, BACKEND_API_BASE_URL] 
+    // FIX: Removed BACKEND_API_BASE_URL from dependencies
+    [userEmail, isAdmin, authToken, handleSort, logoutUser, navigate] 
   );
 
   // Helper function to calculate time left
@@ -202,7 +210,6 @@ const DeliveryList = () => {
 
     const daysLeft = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hoursLeft = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    // const minutesLeft = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)); // Optionally add minutes
 
     return `${daysLeft} days ${hoursLeft} hrs left`;
   };
@@ -215,7 +222,6 @@ const DeliveryList = () => {
       setAuthToken(token);
     } else {
       setLoading(false);
-      // Optional: Redirect to login if no auth token
       if (!email) {
         navigate('/login');
       }
@@ -241,15 +247,11 @@ const DeliveryList = () => {
     }
   }, [sortOption, deliveries.length, loading, handleSort]); 
 
-  // Debounce the searchTerm update
-  const debouncedSetSearchTerm = useCallback(debounce((nextValue) => {
-    setDebouncedSearchTerm(nextValue);
-  }, 500), []); // 500ms debounce
-
   const handleSearchChange = (event) => {
     const value = event.target.value;
     setSearchTerm(value);
-    debouncedSetSearchTerm(value);
+    // FIX: Call the debounced function via its ref
+    updateSearchTerm.current(value);
   };
   
   // Infinite scroll logic
@@ -299,7 +301,6 @@ const DeliveryList = () => {
         </Col>
 
         <Col md={4} className="mb-3">
-          {/* FilterDeliveryBasedOnClientSelected is assumed to handle state correctly */}
           <FilterDeliveryBasedOnClientSelected 
             selectedClient={selectedClient} 
             handleClientSelect={handleClientSelect} 
@@ -309,7 +310,6 @@ const DeliveryList = () => {
         </Col>
 
         <Col md={4} className="mb-3">
-          {/* SortDeliveriesByDate is assumed to handle state correctly */}
           <SortDeliveriesByDate 
             sortOption={sortOption} 
             setSortOption={setSortOption} 
