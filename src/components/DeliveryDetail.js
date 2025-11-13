@@ -1,21 +1,21 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { Container, Card, ListGroup, Row, Col, Spinner, Alert } from 'react-bootstrap';
+import { Container, Card, Row, Col, Spinner, Alert, ListGroup } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
-import { FaPause, FaPlay, FaStop, FaCalendarAlt, FaEllipsisV } from 'react-icons/fa'; // Added FaEllipsisV for dropdown trigger
+import { FaPause, FaPlay, FaStop, FaCalendarAlt, FaEllipsisV } from 'react-icons/fa';
 import FormComponent from './FormComponent';
 import { UserContext } from './UserContext';
 import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
 import moment from 'moment';
-import { notification } from 'antd'; // Import notification from antd
+import { notification } from 'antd';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 
 // Define the status value that indicates a task is completed and should be hidden
-const COMPLETED_TASK_STATUS = 'Completed'; // Adjust this string to match your BigQuery 'Current_Status' for completed tasks
+const COMPLETED_TASK_STATUS = 'Completed'; 
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
@@ -39,66 +39,67 @@ const DeliveryDetail = () => {
     const [error, setError] = useState(null);
     const [activeTaskKey, setActiveTaskKey] = useState(null);
     const [actionType, setActionType] = useState(null); // 'edit', 'pause', 'play', 'stop'
+    
+    // State added to trigger re-fetch after form submission (Fixes ESLint missing dependency)
+    const [refreshKey, setRefreshKey] = useState(0); 
 
     const { userEmail } = useContext(UserContext); // Get userEmail from context
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-
-    const fetchDeliveryDetails = async () => {
-        if (!deliveryCode) {
-            setError("Delivery code not found in URL.");
-            setLoading(false);
-            return;
-        }
-
-        setLoading(true);
-        setError(null);
-        try {
-            // UPDATED API ENDPOINT: Fetch all tasks for this workflow
-            const response = await fetch(`${BACKEND_API_BASE_URL}/api/workflow-details/${encodeURIComponent(deliveryCode)}`);
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Failed to fetch workflow details for ${deliveryCode}.`);
-            }
-            const data = await response.json();
-            
-            if (data.length === 0) {
-                setError(`Workflow with code "${deliveryCode}" not found or has no tasks.`);
+    // FIX: Moved fetch logic inside useEffect and added refreshKey to dependencies.
+    useEffect(() => {
+        const fetchDeliveryDetails = async () => {
+            if (!deliveryCode) {
+                setError("Delivery code not found in URL.");
                 setLoading(false);
                 return;
             }
 
-            // Assuming the first item with Step_ID=0 is the main workflow detail
-            const mainDeliveryDetail = data.find(task => task.Step_ID === 0);
-            setDeliveryDetails(mainDeliveryDetail || data[0]); // Fallback if no Step_ID=0
+            setLoading(true);
+            setError(null);
+            try {
+                // Fetch all tasks for this workflow
+                const response = await fetch(`${BACKEND_API_BASE_URL}/api/workflow-details/${encodeURIComponent(deliveryCode)}`);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Failed to fetch workflow details for ${deliveryCode}.`);
+                }
+                const data = await response.json();
+                
+                if (data.length === 0) {
+                    setError(`Workflow with code "${deliveryCode}" not found or has no tasks.`);
+                    setLoading(false);
+                    return;
+                }
 
-            // Filter out Step_ID = 0 from the tasks array for display
-            const tasksToDisplay = data.filter(task => task.Step_ID !== 0);
+                // Assuming the first item with Step_ID=0 is the main workflow detail
+                const mainDeliveryDetail = data.find(task => task.Step_ID === 0);
+                setDeliveryDetails(mainDeliveryDetail || data[0]); // Fallback if no Step_ID=0
 
-            // All tasks received from the /api/workflow-details/:deliveryCode endpoint will be displayed.
-            const sortedTasks = tasksToDisplay.sort((a, b) => {
-                // Sort by Step_ID ascending for the remaining tasks.
-                return a.Step_ID - b.Step_ID;
-            });
+                // Filter out Step_ID = 0 from the tasks array for display
+                const tasksToDisplay = data.filter(task => task.Step_ID !== 0);
 
-            setTasks(sortedTasks);
+                // Sort by Step_ID ascending
+                const sortedTasks = tasksToDisplay.sort((a, b) => {
+                    return a.Step_ID - b.Step_ID;
+                });
 
-        } catch (err) {
-            console.error("Error fetching delivery details:", err);
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+                setTasks(sortedTasks);
 
-    useEffect(() => {
+            } catch (err) {
+                console.error("Error fetching delivery details:", err);
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
         fetchDeliveryDetails();
-    }, [deliveryCode, userEmail, isAdmin]);
-
+    }, [deliveryCode, userEmail, isAdmin, refreshKey]); // Now includes refreshKey as a dependency
 
     const handleFormSubmit = (updatedTaskData) => {
-        // Find the task by key and update its properties
+        // Optimistic update of tasks
         setTasks(prevTasks =>
             prevTasks.map(task =>
                 task.Key === updatedTaskData.Key
@@ -108,15 +109,12 @@ const DeliveryDetail = () => {
         );
         setActiveTaskKey(null); // Close the form after submission
         setActionType(null); // Clear action type
-        fetchDeliveryDetails(); // Re-fetch all details to ensure consistency
+        setRefreshKey(prev => prev + 1); // Trigger the useEffect to re-fetch with fresh data
     };
 
-    // Modified handleActionClick to always set actionType to 'edit' when card is clicked
     const handleCardClick = (taskKey, displayStatus) => { 
-        // Log the exact status and the comparison result
         const isScheduled = displayStatus === 'Scheduled';
-        console.log(`Task Key: ${taskKey}, Status on click: "${displayStatus}", isScheduled check: ${isScheduled}`);
-
+        
         // Only open the form for scheduling/editing if the task is NOT 'Scheduled'
         if (!isScheduled) { 
             setActiveTaskKey(taskKey);
@@ -134,26 +132,19 @@ const DeliveryDetail = () => {
 
     // New handler for dropdown menu item clicks (for Pause/Play/Stop)
     const handleMenuItemClick = (taskKey, type) => {
-        // Temporarily block P/P/S actions, as FormComponent only handles scheduling, 
-        // and dedicated API endpoints are needed for P/P/S.
+        // Temporarily block P/P/S actions, as API is not yet ready.
         notification.info({
             message: 'Status Change Disabled',
             description: `API for ${type} is not yet implemented.`,
         });
         setActiveTaskKey(null);
         setActionType(null);
-        
-        // Uncomment the following block when P/P/S functionality is implemented:
-        /*
-        setActiveTaskKey(taskKey);
-        setActionType(type);
-        */
     };
 
     const onVisibleChange = (visible) => {
         // Keeps the form open if the dropdown closes but the form is open for 'edit'
         if (!visible && activeTaskKey && actionType !== 'edit') {
-             // setActiveTaskKey(null); // Only clear if we were using the dropdown for state-based forms
+             // Logic to handle closing when not in edit mode
         }
     };
 
@@ -175,7 +166,6 @@ const DeliveryDetail = () => {
                     <FaStop style={{ marginRight: '5px' }} /> Stop
                 </MenuItem>
             )}
-            {/* Removed "Mark as Completed" button */}
         </Menu>
     );
 
@@ -226,11 +216,12 @@ const DeliveryDetail = () => {
                     tasks.map((task) => {
                         const isTaskCompleted = task.Current_Status === COMPLETED_TASK_STATUS;
                         
-                        // Determine the status to display: If it has a planned start timestamp AND is not 'Completed', show 'Scheduled'
+                        // Safely extract the timestamp value
                         const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
                             ? task.Planned_Start_Timestamp.value
                             : task.Planned_Start_Timestamp;
                         
+                        // Determine the status to display
                         const displayStatus = (rawPlannedStartTimestamp && task.Current_Status !== COMPLETED_TASK_STATUS)
                             ? 'Scheduled'
                             : task.Current_Status;
@@ -241,7 +232,6 @@ const DeliveryDetail = () => {
                             <Col key={task.Key}>
                                 <Card
                                     className={`task-card ${isTaskCompleted ? 'task-completed' : ''} ${task.Key === activeTaskKey ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
-                                    // Use pointer cursor only if not scheduled, otherwise show default or blocked cursor
                                     style={{ cursor: isTaskScheduled ? 'default' : 'pointer' }}
                                     onClick={() => handleCardClick(task.Key, displayStatus)} // Pass displayStatus
                                 >
@@ -282,8 +272,6 @@ const DeliveryDetail = () => {
                                                 />
                                             </div>
                                         )}
-                                        {/* NOTE: P/P/S action forms are disabled until implemented on the backend/in FormComponent */}
-
                                     </Card.Body>
                                 </Card>
                             </Col>
