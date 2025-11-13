@@ -6,7 +6,6 @@ import { UserContext } from './UserContext';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
-// Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
     "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
@@ -47,7 +46,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [success, setSuccess] = useState(null);
+    const [success, setSuccess] = useState(null); // State for success message
     const [persons, setPersons] = useState([]);
     const [loadingPersons, setLoadingPersons] = useState(true);
     const [personError, setPersonError] = useState(null);
@@ -55,7 +54,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     // 1. Initialize formData from the task prop
     useEffect(() => {
         if (task) {
-            console.log("Task Key received by FormComponent:", task.Key, "for Step ID:", task.Step_ID);
+            console.log("Task Key received by FormComponent:", task.Key, "for Step ID:", task.Step_ID); 
             
             const rawStartDate = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
                 ? task.Planned_Start_Timestamp.value
@@ -69,8 +68,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             const initialDeliveryDate = rawDeliveryDate ? moment(rawDeliveryDate) : null;
 
             setFormData({
-                // 🟢 FIX: Ensure Key is converted to a string to prevent it from being '' (empty string) 
-                // in the payload if it originated as null/undefined. BigQuery is strict.
                 Key: String(task.Key || ''), 
                 Delivery_code: task.Delivery_code || '',
                 DelCode_w_o__: task.DelCode_w_o__ || '',
@@ -156,11 +153,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
-        setSuccess(null);
+        setSuccess(null); // Clear previous success/error messages at start
 
-        // 🟢 CRITICAL VALIDATION: Check if Key is valid before proceeding
-        if (!formData.Key || formData.Key === '0') {
-             setError("Cannot update task: Unique Task Key is missing or invalid.");
+        // CRITICAL VALIDATION: Check if Key is valid
+        const taskKey = String(formData.Key).trim(); 
+        if (!taskKey || taskKey === '0') {
+             setError("Cannot update task: Unique Task Key is missing or invalid. Please check backend data.");
              setLoading(false);
              return;
         }
@@ -174,6 +172,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         try {
             const mainTaskPayload = {
                 ...formData,
+                Key: taskKey,
                 Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null,
                 Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
                 Updated_at: moment.utc().toISOString(), 
@@ -183,7 +182,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             
             if (formData.Planned_Start_Timestamp && formData.Planned_Start_Timestamp.isValid()) {
                 perKeyPerDayRows.push({
-                    Key: mainTaskPayload.Key, // 🟢 This Key must be a non-empty string of an integer
+                    Key: taskKey, 
                     Day: formData.Planned_Start_Timestamp.format('YYYY-MM-DD'),
                     Duration: 0,
                     Duration_Unit: 'min',
@@ -206,17 +205,26 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                // 🟢 Updated error logging to show the actual backend error details
-                throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+                const errorData = await response.json(); 
+                const backendError = errorData.bigQueryErrorDetails || errorData.message || `HTTP error! status: ${response.status}`;
+                throw new Error(backendError);
             }
 
-            await response.json(); 
+            // ⭐ SUCCESS LOGIC ⭐
+            setSuccess('Task Scheduled Successfully'); 
             
-            setSuccess('Task and schedule updated successfully!');
+            // Call the parent function to close the form and refresh data
             onSubmit(formData); 
+            
+            // Clear the success message after 5 seconds
+            setTimeout(() => {
+                setSuccess(null);
+            }, 5000); 
+
         } catch (err) {
             console.error('Error updating task:', err);
+            // Clear success message in case of error
+            setSuccess(null); 
             setError(`Failed to update task: ${err.message}`);
         } finally {
             setLoading(false);
@@ -247,12 +255,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     return (
         <Form onSubmit={handleSubmit} className="p-3 border rounded shadow-sm bg-light">
+            {/* Display Success and Error Alerts */}
             {error && <Alert variant="danger">{error}</Alert>}
             {success && <Alert variant="success">{success}</Alert>}
+
             {personError && <Alert variant="warning">{personError}</Alert>}
-            
-            {/* Displaying Key for debugging, optional to keep */}
-            {/* {!formData.Key && <Alert variant="warning">Warning: Task Key is missing!</Alert>} */}
 
             <Form.Group className="mb-3">
                 <Form.Label>Task Details</Form.Label>
