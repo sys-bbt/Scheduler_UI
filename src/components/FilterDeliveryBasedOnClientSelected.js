@@ -1,7 +1,8 @@
 import React from 'react';
 import { Dropdown } from 'react-bootstrap';
 
-const FilterDeliveryBasedOnClientSelected = ({ clients, onClientSelect, selectedClient }) => {
+// FIX: Renamed props to match DeliveryList.js and added default empty array to allClients to prevent runtime error
+const FilterDeliveryBasedOnClientSelected = ({ allClients = [], handleClientSelect, selectedClient }) => {
   return (
     <div>
       <Dropdown>
@@ -9,9 +10,11 @@ const FilterDeliveryBasedOnClientSelected = ({ clients, onClientSelect, selected
           {selectedClient || 'Filter by Client'}
         </Dropdown.Toggle>
         <Dropdown.Menu>
-          <Dropdown.Item onClick={() => onClientSelect('')}>All Clients</Dropdown.Item>
-          {clients.map((client, index) => (
-            <Dropdown.Item key={index} onClick={() => onClientSelect(client)}>
+          {/* FIX: Changed handler name to handleClientSelect */}
+          <Dropdown.Item onClick={() => handleClientSelect('')}>All Clients</Dropdown.Item>
+          {/* FIX: Now safely mapping over allClients */}
+          {allClients.map((client, index) => (
+            <Dropdown.Item key={index} onClick={() => handleClientSelect(client)}>
               {client}
             </Dropdown.Item>
           ))}
