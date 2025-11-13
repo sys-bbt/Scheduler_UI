@@ -18,7 +18,8 @@ const ADMIN_EMAILS_FRONTEND = [
 ];
 
 const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
-    const { userEmail } = useContext(UserContext); // Use userEmail from context
+    // Note: 'currentUserEmail' passed via prop is already available in context via 'userEmail'.
+    const { userEmail } = useContext(UserContext); 
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
     const [formData, setFormData] = useState({
@@ -52,34 +53,20 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const [loadingPersons, setLoadingPersons] = useState(true);
     const [personError, setPersonError] = useState(null);
 
+    // 1. Initialize formData from the task prop
     useEffect(() => {
         if (task) {
             
-            // --- START DEBUG LOGS ---
-            console.log("--- FormComponent Debug ---");
-            console.log("Task object received:", JSON.parse(JSON.stringify(task)));
-            // --- FIX (Req 1) ---
-            console.log("Raw task.Planned_Delivery_Timestamp (End Date Source):", task.Planned_Delivery_Timestamp); 
-            console.log("Raw task.Initiated_Timestamp (Original - No longer used for End Date):", task.Initiated_Timestamp); 
-            // --- END DEBUG LOGS ---
-
-            // FIX: Add logic to safely extract timestamp, checking if it's an object with a .value property
             const rawStartDate = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
                 ? task.Planned_Start_Timestamp.value
                 : task.Planned_Start_Timestamp;
 
-            // --- FIX (Req 1) ---
-            // Use Planned_Delivery_Timestamp for the End Date field
             const rawDeliveryDate = task.Planned_Delivery_Timestamp && typeof task.Planned_Delivery_Timestamp === 'object' && task.Planned_Delivery_Timestamp.value
                 ? task.Planned_Delivery_Timestamp.value
                 : task.Planned_Delivery_Timestamp;
 
             const initialStartDate = rawStartDate ? moment(rawStartDate) : null;
-            const initialDeliveryDate = rawDeliveryDate ? moment(rawDeliveryDate) : null; // Use the correct raw date
-
-            // --- START DEBUG LOGS ---
-            console.log("Parsed initialDeliveryDate (what will be set in state):", initialDeliveryDate);
-            // --- END DEBUG LOGS ---
+            const initialDeliveryDate = rawDeliveryDate ? moment(rawDeliveryDate) : null;
 
             setFormData({
                 Key: task.Key || '',
@@ -92,9 +79,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Short_Description: task.Short_Description || '',
                 Planned_Start_Timestamp: initialStartDate, // Store as moment object
                 Planned_Delivery_Timestamp: initialDeliveryDate, // Store as moment object (End Date)
+                // 🟢 Ensure Responsibility and Emails are pre-populated
                 Responsibility: task.Responsibility || '',
                 Email: task.Email || '',
-                Emails: task.Emails || '',
+                Emails: task.Emails || '', // Emails is usually the assigned user's email/ID
                 Current_Status: task.Current_Status || '',
                 Total_Tasks: task.Total_Tasks || 0,
                 Completed_Tasks: task.Completed_Tasks || 0,
@@ -107,10 +95,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             });
             
         }
-    }, [task]); // Dependencies: task only
+    }, [task]); 
 
 
-    // Fetch people mapping data
+    // 2. Fetch people mapping data
     useEffect(() => {
         const fetchPeopleMapping = async () => {
             setLoadingPersons(true);
@@ -142,15 +130,14 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         }));
     };
 
-    const handleStartDateChange = (e) => { // e.target.value is string 'YYYY-MM-DD'
+    const handleStartDateChange = (e) => {
         const dateString = e.target.value;
-        const dateMoment = moment(dateString); // Convert string to moment object
+        const dateMoment = moment(dateString);
         setFormData(prevData => {
             const updatedData = {
                 ...prevData,
-                Planned_Start_Timestamp: dateMoment.isValid() ? dateMoment : null // Store moment object directly
+                Planned_Start_Timestamp: dateMoment.isValid() ? dateMoment : null 
             };
-            // Planned_Delivery_Timestamp (End Date) is not recalculated.
             return updatedData;
         });
     };
@@ -158,8 +145,10 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const handlePersonSelect = (selectedOption) => {
         setFormData(prevData => ({
             ...prevData,
-            Responsibility: selectedOption ? selectedOption.label : '',
-            Emails: selectedOption ? selectedOption.value : '' // Assuming value is the email
+            // Responsibility is the name/label
+            Responsibility: selectedOption ? selectedOption.label : '', 
+            // Emails is the email/ID, used for database storage and disabling logic
+            Emails: selectedOption ? selectedOption.value : '' 
         }));
     };
 
@@ -170,7 +159,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         setError(null);
         setSuccess(null);
 
-        // Basic validation for required fields: Start Date and Responsibility
         if (!formData.Planned_Start_Timestamp || !formData.Planned_Start_Timestamp.isValid() || !formData.Responsibility) {
             setError("Please fill all required fields: Start Date and Person Responsible.");
             setLoading(false);
@@ -178,52 +166,30 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         }
 
         try {
-            // Prepare data for the main task table update
             const mainTaskPayload = {
-                Key: formData.Key,
-                Delivery_code: formData.Delivery_code,
-                DelCode_w_o__: formData.DelCode_w_o__,
-                Step_ID: formData.Step_ID,
-                Task_Details: formData.Task_Details,
-                Frequency___Timeline: formData.Frequency___Timeline,
-                Client: formData.Client,
-                Short_Description: formData.Short_Description,
-                // Convert moment objects to ISO strings for backend
+                // ... (all other formData fields)
+                ...formData, // Spread all fields to be sent
                 Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null,
-                // Planned_Delivery_Timestamp is sent back as loaded
                 Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
-                Responsibility: formData.Responsibility,
-                Current_Status: formData.Current_Status,
-                Email: formData.Email,
-                Emails: formData.Emails,
-                Total_Tasks: formData.Total_Tasks,
-                Completed_Tasks: formData.Completed_Tasks,
-                Planned_Tasks: formData.Planned_Tasks,
-                Percent_Tasks_Completed: formData.Percent_Tasks_Completed,
-                Created_at: formData.Created_at || null, // Preserve existing or set null
-                Updated_at: moment.utc().toISOString(), // Always update Updated_at
-                Time_Left_For_Next_Task_dd_hh_mm_ss: formData.Time_Left_For_Next_Task_dd_hh_mm_ss,
-                Card_Corner_Status: formData.Card_Corner_Status,
+                Updated_at: moment.utc().toISOString(), 
             };
 
-            // Prepare data for Per_Key_Per_Day table (Simplified to a single entry based on new requirements)
             const perKeyPerDayRows = [];
             
             if (formData.Planned_Start_Timestamp && formData.Planned_Start_Timestamp.isValid()) {
                 perKeyPerDayRows.push({
                     Key: mainTaskPayload.Key,
-                    Day: formData.Planned_Start_Timestamp.format('YYYY-MM-DD'), // Key = task key, Day = Start date value
-                    Duration: 0, // NEW REQUIREMENT: Duration = 0
-                    Duration_Unit: 'min', // NEW REQUIREMENT: Duration_Unit = min
-                    Planned_Delivery_Slot: null, // NEW REQUIREMENT: Planned_Delivery_Slot = null
-                    Responsibility: mainTaskPayload.Responsibility, // Responsibility = if any in the DD.
+                    Day: formData.Planned_Start_Timestamp.format('YYYY-MM-DD'),
+                    Duration: 0,
+                    Duration_Unit: 'min',
+                    Planned_Delivery_Slot: null,
+                    Responsibility: mainTaskPayload.Responsibility,
                 });
             }
 
-
             const payload = {
                 mainTask: mainTaskPayload,
-                perKeyPerDayRows: perKeyPerDayRows // Array with zero or one entry
+                perKeyPerDayRows: perKeyPerDayRows
             };
 
             const response = await fetch(`${BACKEND_API_BASE_URL}/api/post`, {
@@ -241,7 +207,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
             const result = await response.json();
             setSuccess('Task and schedule updated successfully!');
-            console.log('Task and schedule updated successfully:', result);
             onSubmit(formData); // Pass updated data back to parent
         } catch (err) {
             console.error('Error updating task:', err);
@@ -252,16 +217,23 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     };
 
 
-    // Filter persons for dropdown based on admin status (Logic unchanged)
-    const personsToDisplay = isAdmin
-        ? persons.map(p => ({ value: p.Emp_Emails, label: p.Current_Employes }))
-        : persons.filter(p => p.Emp_Emails === currentUserEmail)
-                .map(p => ({ value: p.Emp_Emails, label: p.Current_Employes }));
+    // 🟢 Filter persons for dropdown based on admin status
+    const personsToDisplay = persons.map(p => ({ 
+        value: p.Emp_Emails, 
+        label: p.Current_Employes 
+    }));
 
+    // 🟢 Find the selected person based on the email/ID stored in formData.Emails
     const selectedPerson = personsToDisplay.find(p => p.value === formData.Emails);
+    
+    // 🟢 NEW DISABLING LOGIC for Non-Admins:
+    // 1. Task is considered assigned if formData.Emails has a value (and it's not the system account).
+    const isAssigned = !!formData.Emails && formData.Emails !== "systems@brightbraintech.com";
 
-    // Determine if fields should be disabled for non-admins (Logic unchanged)
-    const isFieldDisabledForNonAdmin = !isAdmin && (formData.Emails !== currentUserEmail && formData.Emails !== "systems@brightbraintech.com");
+    // 2. The field should be disabled if:
+    //    - The user is NOT an admin AND the task is already assigned.
+    const isFieldDisabled = !isAdmin && isAssigned;
+
 
     return (
         <Form onSubmit={handleSubmit} className="p-3 border rounded shadow-sm bg-light">
@@ -276,35 +248,32 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     name="Task_Details"
                     value={formData.Task_Details}
                     onChange={handleChange}
-                    disabled={true} // Disabled as requested
+                    disabled={true} 
                     required
                 />
             </Form.Group>
 
-            {/* --- FIX (Req 2) --- */}
             <Form.Group className="mb-3">
                 <Form.Label>Start Date<span className="text-danger">*</span></Form.Label> 
                 <Form.Control
                     type="date"
                     name="Planned_Start_Timestamp"
-                    // Format moment object for display
                     value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
                     onChange={handleStartDateChange}
-                    disabled={isFieldDisabledForNonAdmin}
+                    // 🟢 Start Date is disabled if the Person Responsible is disabled
+                    disabled={isFieldDisabled} 
                     required
                 />
             </Form.Group>
 
-            {/* --- FIX (Req 2) --- */}
             <Form.Group className="mb-3">
                 <Form.Label>End Date</Form.Label>
                 <Form.Control
                     type="date"
                     name="Planned_Delivery_Timestamp"
-                    // Format moment object for display
                     value={formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : ''}
-                    readOnly // This field is pre-filled from task data
-                    disabled={true} // Disabled as requested
+                    readOnly
+                    disabled={true}
                 />
             </Form.Group>
 
@@ -313,17 +282,22 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 <Select
                     name="Responsibility"
                     options={personsToDisplay}
-                    value={selectedPerson}
+                    value={selectedPerson} // 🟢 Uses the `selectedPerson` derived from pre-populated email/ID
                     onChange={handlePersonSelect}
-                    // Only admins can change responsibility (or if the task is currently unassigned/assigned to the system)
-                    isDisabled={!isAdmin || loadingPersons || isFieldDisabledForNonAdmin}
+                    // 🟢 Field is disabled if the user is not an admin AND the task is assigned
+                    isDisabled={isFieldDisabled || loadingPersons} 
                     placeholder="Select Person"
                     isClearable
                     required
                 />
+                {isFieldDisabled && (
+                    <Form.Text className="text-muted">
+                        This task is already assigned and can only be changed by an Admin.
+                    </Form.Text>
+                )}
             </Form.Group>
 
-            <Button variant="primary" type="submit" disabled={loading || isFieldDisabledForNonAdmin}>
+            <Button variant="primary" type="submit" disabled={loading || isFieldDisabled}>
                 {loading ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" /> : 'Update Task'}
             </Button>
         </Form>
