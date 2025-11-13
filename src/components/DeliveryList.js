@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useContext, useMemo } from 'react';
+import { Link } from 'react-router-dom'; // FIX: Removed useNavigate
 import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
 import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
 import { FaSpinner } from 'react-icons/fa';
@@ -45,7 +45,8 @@ const DeliveryList = () => {
     const [sortOption, setSortOption] = useState('latest'); // 'earliest' or 'latest'
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-    const navigate = useNavigate();
+    // FIX: Removed unused navigate
+    // const navigate = useNavigate();
 
     // Function to fetch deliveries based on current filters and search query
     const fetchDeliveries = useCallback(async () => {
@@ -110,9 +111,9 @@ const DeliveryList = () => {
         }
     }, [userEmail, searchQuery, selectedClient, sortOption]); // Dependencies for useCallback
 
-    // Debounced version of fetchDeliveries
-    const debouncedFetchDeliveries = useCallback(
-        debounce(fetchDeliveries, 500),
+    // FIX: Changed useCallback to useMemo to stabilize the debounced function instance
+    const debouncedFetchDeliveries = useMemo(
+        () => debounce(fetchDeliveries, 500),
         [fetchDeliveries]
     );
 
@@ -220,8 +221,6 @@ const DeliveryList = () => {
                         const deadlineDate = rawDeadlineTimestamp ? moment(rawDeadlineTimestamp) : null;
                         const formattedDeadline = deadlineDate && deadlineDate.isValid() ? deadlineDate.format('YYYY-MM-DD') : 'N/A';
                         
-                        // REMOVED: console.log(`Delivery Key: ${delivery.Key}, Planned_Delivery_Timestamp (raw object/string): ${JSON.stringify(delivery.Planned_Delivery_Timestamp)}, Formatted Deadline: ${formattedDeadline}`); 
-
                         return (
                             <Col key={delivery.Key}>
                                 <Link to={`/delivery/data/${encodeURIComponent(delivery.DelCode_w_o__)}`} className="text-decoration-none">
@@ -265,7 +264,8 @@ const DeliveryList = () => {
                                                 </p>
                                                 <p
                                                     onClick={(e) => {
-                                                        e.stopPropagation();
+                                                        e.preventDefault(); // Prevent link navigation
+                                                        e.stopPropagation(); // Prevent card click
                                                         const el = document.createElement('textarea');
                                                         el.value = delivery.DelCode_w_o__;
                                                         document.body.appendChild(el);
