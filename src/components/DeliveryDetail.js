@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext, useCallback, memo } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { Container, Card, Row, Col, Spinner, Alert, ListGroup } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
@@ -15,7 +15,7 @@ const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localh
 console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 
 // Define the status value that indicates a task is completed and should be hidden
-const COMPLETED_TASK_STATUS = 'Completed'; 
+const COMPLETED_TASK_STATUS = 'Completed';
 
 // Define admin emails on the frontend, matching the backend
 const ADMIN_EMAILS_FRONTEND = [
@@ -27,6 +27,90 @@ const ADMIN_EMAILS_FRONTEND = [
     "altaf.s@brightbraintech.com",
     "arvanbir.s@brightbraintech.com"
 ];
+
+// --- Performance (Req 4) ---
+// Helper function for the dropdown menu, defined outside to be stable
+const renderMenu = (task, onMenuItemClick) => (
+    <Menu>
+        {/* Conditional rendering based on task status */}
+        {task.Current_Status === 'Running' && (
+            <MenuItem key="pause" onClick={(e) => { e.stopPropagation(); onMenuItemClick(task.Key, 'pause'); }}>
+                <FaPause style={{ marginRight: '5px' }} /> Pause
+            </MenuItem>
+        )}
+        {task.Current_Status === 'Paused' && (
+            <MenuItem key="play" onClick={(e) => { e.stopPropagation(); onMenuItemClick(task.Key, 'play'); }}>
+                <FaPlay style={{ marginRight: '5px' }} /> Play
+            </MenuItem>
+        )}
+        {task.Current_Status !== 'Completed' && ( // Assuming 'Completed' tasks cannot be stopped
+            <MenuItem key="stop" onClick={(e) => { e.stopPropagation(); onMenuItemClick(task.Key, 'stop'); }}>
+                <FaStop style={{ marginRight: '5px' }} /> Stop
+            </MenuItem>
+        )}
+    </Menu>
+);
+
+// --- Performance (Req 4) ---
+// Created a memoized TaskCard component to prevent unnecessary re-renders of list items.
+const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemClick, onFormSubmit, currentUserEmail }) => {
+    
+    const isTaskCompleted = task.Current_Status === COMPLETED_TASK_STATUS;
+    const isTaskScheduled = displayStatus === 'Scheduled';
+
+    // Safely extract the timestamp value
+    const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
+        ? task.Planned_Start_Timestamp.value
+        : task.Planned_Start_Timestamp;
+
+    return (
+        <Col>
+            <Card
+                className={`task-card ${isTaskCompleted ? 'task-completed' : ''} ${isActive ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
+                style={{ cursor: isTaskScheduled ? 'default' : 'pointer' }}
+                onClick={() => onCardClick(task.Key, displayStatus)} // Use the passed handler
+            >
+                <Card.Body>
+                    <Card.Title>{task.Task_Details}</Card.Title>
+                    <Card.Text>
+                        <strong>Step ID:</strong> {task.Step_ID}<br />
+                        <strong>Responsibility:</strong> {task.Responsibility}<br />
+                        <strong className={isTaskScheduled ? 'text-info' : ''}>Status:</strong> {displayStatus}
+                    </Card.Text>
+                    <div className="d-flex justify-content-between align-items-center mt-3">
+                        {rawPlannedStartTimestamp && (
+                            <p className="text-muted mb-0">
+                                <FaCalendarAlt style={{ marginRight: '5px' }} />
+                                Start: {moment.utc(rawPlannedStartTimestamp).format('YYYY-MM-DD')}
+                            </p>
+                        )}
+                        <Dropdown
+                            overlay={renderMenu(task, onMenuItemClick)}
+                            trigger={['click']}
+                            onClick={(e) => e.stopPropagation()} // Prevent card click when clicking dropdown
+                        >
+                            <FaEllipsisV style={{ cursor: 'pointer' }} />
+                        </Dropdown>
+                    </div>
+
+                    {/* --- Form Opening (Req 3) --- */}
+                    {/* Display FormComponent ONLY if this task is the active one */}
+                    {isActive && (
+                        <div className="mt-3" onClick={(e) => e.stopPropagation()}> {/* Prevent form click from closing form */}
+                            <h6>Schedule Task: {task.Task_Details}</h6>
+                            <FormComponent
+                                onSubmit={onFormSubmit}
+                                task={task}
+                                currentUserEmail={currentUserEmail}
+                            />
+                        </div>
+                    )}
+                </Card.Body>
+            </Card>
+        </Col>
+    );
+});
+
 
 const DeliveryDetail = () => {
     const location = useLocation();
@@ -40,13 +124,12 @@ const DeliveryDetail = () => {
     const [activeTaskKey, setActiveTaskKey] = useState(null);
     const [actionType, setActionType] = useState(null); // 'edit', 'pause', 'play', 'stop'
     
-    // State added to trigger re-fetch after form submission (Fixes ESLint missing dependency)
+    // State added to trigger re-fetch after form submission
     const [refreshKey, setRefreshKey] = useState(0); 
 
     const { userEmail } = useContext(UserContext); // Get userEmail from context
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-    // FIX: Moved fetch logic inside useEffect and added refreshKey to dependencies.
     useEffect(() => {
         const fetchDeliveryDetails = async () => {
             if (!deliveryCode) {
@@ -58,7 +141,6 @@ const DeliveryDetail = () => {
             setLoading(true);
             setError(null);
             try {
-                // Fetch all tasks for this workflow
                 const response = await fetch(`${BACKEND_API_BASE_URL}/api/workflow-details/${encodeURIComponent(deliveryCode)}`);
                 
                 if (!response.ok) {
@@ -73,14 +155,11 @@ const DeliveryDetail = () => {
                     return;
                 }
 
-                // Assuming the first item with Step_ID=0 is the main workflow detail
                 const mainDeliveryDetail = data.find(task => task.Step_ID === 0);
-                setDeliveryDetails(mainDeliveryDetail || data[0]); // Fallback if no Step_ID=0
+                setDeliveryDetails(mainDeliveryDetail || data[0]); 
 
-                // Filter out Step_ID = 0 from the tasks array for display
                 const tasksToDisplay = data.filter(task => task.Step_ID !== 0);
 
-                // Sort by Step_ID ascending
                 const sortedTasks = tasksToDisplay.sort((a, b) => {
                     return a.Step_ID - b.Step_ID;
                 });
@@ -98,7 +177,9 @@ const DeliveryDetail = () => {
         fetchDeliveryDetails();
     }, [deliveryCode, userEmail, isAdmin, refreshKey]); // Now includes refreshKey as a dependency
 
-    const handleFormSubmit = (updatedTaskData) => {
+    // --- Performance (Req 4) ---
+    // Wrapped in useCallback so its reference is stable for React.memo
+    const handleFormSubmit = useCallback((updatedTaskData) => {
         // Optimistic update of tasks
         setTasks(prevTasks =>
             prevTasks.map(task =>
@@ -110,28 +191,39 @@ const DeliveryDetail = () => {
         setActiveTaskKey(null); // Close the form after submission
         setActionType(null); // Clear action type
         setRefreshKey(prev => prev + 1); // Trigger the useEffect to re-fetch with fresh data
-    };
+    }, []); // State setters are stable, so dependency array is empty
 
-    const handleCardClick = (taskKey, displayStatus) => { 
+    // --- Form Opening (Req 3) & Performance (Req 4) ---
+    // Updated click handler to toggle the form display
+    // Wrapped in useCallback so its reference is stable for React.memo
+    const handleCardClick = useCallback((taskKey, displayStatus) => {
         const isScheduled = displayStatus === 'Scheduled';
         
-        // Only open the form for scheduling/editing if the task is NOT 'Scheduled'
-        if (!isScheduled) { 
-            setActiveTaskKey(taskKey);
-            setActionType('edit'); // Always set to 'edit' when a task card is clicked
-        } else {
-            // If scheduled, show a notification and close any open form
+        if (isScheduled) { 
             notification.info({
                 message: 'Task Already Scheduled',
                 description: 'This task has a Planned Start Date and cannot be rescheduled.',
             });
             setActiveTaskKey(null);
             setActionType(null);
+            return; // Exit
         }
-    };
 
-    // New handler for dropdown menu item clicks (for Pause/Play/Stop)
-    const handleMenuItemClick = (taskKey, type) => {
+        // --- Toggle Logic (Req 3) ---
+        if (activeTaskKey === taskKey) {
+            // If clicking the *same* card that is already active, close it.
+            setActiveTaskKey(null);
+            setActionType(null);
+        } else {
+            // If clicking a *new* card, open it.
+            setActiveTaskKey(taskKey);
+            setActionType('edit');
+        }
+    }, [activeTaskKey]); // Depends on activeTaskKey to perform toggle logic
+
+    // --- Performance (Req 4) ---
+    // Wrapped in useCallback so its reference is stable for React.memo
+    const handleMenuItemClick = useCallback((taskKey, type) => {
         // Temporarily block P/P/S actions, as API is not yet ready.
         notification.info({
             message: 'Status Change Disabled',
@@ -139,35 +231,7 @@ const DeliveryDetail = () => {
         });
         setActiveTaskKey(null);
         setActionType(null);
-    };
-
-    const onVisibleChange = (visible) => {
-        // Keeps the form open if the dropdown closes but the form is open for 'edit'
-        if (!visible && activeTaskKey && actionType !== 'edit') {
-             // Logic to handle closing when not in edit mode
-        }
-    };
-
-    const renderMenu = (task) => (
-        <Menu>
-            {/* Conditional rendering based on task status */}
-            {task.Current_Status === 'Running' && (
-                <MenuItem key="pause" onClick={() => handleMenuItemClick(task.Key, 'pause')}>
-                    <FaPause style={{ marginRight: '5px' }} /> Pause
-                </MenuItem>
-            )}
-            {task.Current_Status === 'Paused' && (
-                <MenuItem key="play" onClick={() => handleMenuItemClick(task.Key, 'play')}>
-                    <FaPlay style={{ marginRight: '5px' }} /> Play
-                </MenuItem>
-            )}
-            {task.Current_Status !== 'Completed' && ( // Assuming 'Completed' tasks cannot be stopped
-                <MenuItem key="stop" onClick={() => handleMenuItemClick(task.Key, 'stop')}>
-                    <FaStop style={{ marginRight: '5px' }} /> Stop
-                </MenuItem>
-            )}
-        </Menu>
-    );
+    }, []); // State setters are stable
 
     if (loading) {
         return (
@@ -214,8 +278,6 @@ const DeliveryDetail = () => {
             <Row xs={1} md={2} lg={3} className="g-4">
                 {tasks.length > 0 ? (
                     tasks.map((task) => {
-                        const isTaskCompleted = task.Current_Status === COMPLETED_TASK_STATUS;
-                        
                         // Safely extract the timestamp value
                         const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
                             ? task.Planned_Start_Timestamp.value
@@ -226,55 +288,19 @@ const DeliveryDetail = () => {
                             ? 'Scheduled'
                             : task.Current_Status;
                         
-                        const isTaskScheduled = displayStatus === 'Scheduled'; 
-
                         return (
-                            <Col key={task.Key}>
-                                <Card
-                                    className={`task-card ${isTaskCompleted ? 'task-completed' : ''} ${task.Key === activeTaskKey ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
-                                    style={{ cursor: isTaskScheduled ? 'default' : 'pointer' }}
-                                    onClick={() => handleCardClick(task.Key, displayStatus)} // Pass displayStatus
-                                >
-                                    <Card.Body>
-                                        <Card.Title>{task.Task_Details}</Card.Title>
-                                        <Card.Text>
-                                            <strong>Step ID:</strong> {task.Step_ID}<br />
-                                            <strong>Responsibility:</strong> {task.Responsibility}<br />
-                                            <strong className={isTaskScheduled ? 'text-info' : ''}>Status:</strong> {displayStatus} {/* Updated status display */}
-                                        </Card.Text>
-                                        <div className="d-flex justify-content-between align-items-center mt-3">
-                                            {rawPlannedStartTimestamp && ( // Use the safely extracted timestamp
-                                                <p className="text-muted mb-0">
-                                                    <FaCalendarAlt style={{ marginRight: '5px' }} />
-                                                    Start: {moment.utc(rawPlannedStartTimestamp).format('YYYY-MM-DD')}
-                                                </p>
-                                            )}
-                                            {/* Dropdown for other actions (Pause/Play/Stop) */}
-                                            <Dropdown
-                                                overlay={renderMenu(task)}
-                                                trigger={['click']}
-                                                onVisibleChange={onVisibleChange}
-                                                // Prevent card click from propagating to dropdown when clicking ellipsis
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                <FaEllipsisV style={{ cursor: 'pointer' }} />
-                                            </Dropdown>
-                                        </div>
-
-                                        {/* Display FormComponent ONLY if the task is the active one and the action is 'edit' */}
-                                        {activeTaskKey === task.Key && actionType === 'edit' && (
-                                            <div className="mt-3">
-                                                <h6>Schedule Task: {task.Task_Details}</h6>
-                                                <FormComponent
-                                                    onSubmit={handleFormSubmit}
-                                                    task={task}
-                                                    currentUserEmail={userEmail}
-                                                />
-                                            </div>
-                                        )}
-                                    </Card.Body>
-                                </Card>
-                            </Col>
+                            // --- Performance (Req 4) ---
+                            // Using the new memoized TaskCard component
+                            <TaskCard
+                                key={task.Key} // React key goes on the component
+                                task={task}
+                                isActive={activeTaskKey === task.Key && actionType === 'edit'}
+                                displayStatus={displayStatus}
+                                onCardClick={handleCardClick}
+                                onMenuItemClick={handleMenuItemClick}
+                                onFormSubmit={handleFormSubmit}
+                                currentUserEmail={userEmail}
+                            />
                         );
                     })
                 ) : (
