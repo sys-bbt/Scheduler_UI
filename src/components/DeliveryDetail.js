@@ -133,12 +133,20 @@ const DeliveryDetail = () => {
                 throw new Error(errorData.message || `Failed to update status for Key ${key}.`);
             }
 
-            // 1. Optimistic UI update for immediate feedback
+// 1. 🟢 INSTANT OPTIMISTIC REMOVAL: 
+        // If the status is final (Complete or Not Required), remove the task from the local list.
+        if (status === 'Complete' || status === 'Not Required') {
+            setTasks(prevTasks => 
+                prevTasks.filter(task => task.Key !== key)
+            );
+        } else {
+            // Keep the old map logic if you ever decide to use a non-final status update
             setTasks(prevTasks =>
                 prevTasks.map(task =>
                     task.Key === key ? { ...task, Current_Status: status } : task
                 )
             );
+        }
 
             // 2. Success notification
             notification.success({
