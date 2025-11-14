@@ -241,8 +241,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     }
 
     // Disabling logic
-    const isAssigned = !!formData.Responsibility && formData.Responsibility !== "System";
-    const isFieldDisabled = !isAdmin && isAssigned;
+    //const isAssigned = !!formData.Responsibility && formData.Responsibility !== "System";
+   const isFieldDisabled = !isAdmin;
 
 
     return (
