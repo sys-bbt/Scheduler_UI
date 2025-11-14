@@ -80,7 +80,11 @@ const DeliveryDetail = () => {
                 const mainDeliveryDetail = data.find(task => task.Step_ID === 0);
                 setDeliveryDetails(mainDeliveryDetail || data[0]); 
 
-                const tasksToDisplay = data.filter(task => task.Step_ID !== 0);
+                const tasksToDisplay = data.filter(task => task.Step_ID !== 0)
+                .filter(task => 
+                    task.Current_Status !== COMPLETED_TASK_STATUS && 
+                    task.Current_Status !== NOT_REQUIRED_TASK_STATUS
+                );
 
                 const sortedTasks = tasksToDisplay.sort((a, b) => {
                     return a.Step_ID - b.Step_ID;
