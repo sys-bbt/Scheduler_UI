@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useContext, useCallback, memo } from 'react';
+import React, { useEffect, useState, useContext, useCallback } from 'react'; // Removed 'memo' from import
 import { useLocation, Link } from 'react-router-dom';
 import { Container, Card, Row, Col, Spinner, Alert, ListGroup, Button } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
 import Menu, { Item as MenuItem } from 'rc-menu';
 import { FaPause, FaPlay, FaStop, FaCalendarAlt, FaEllipsisV } from 'react-icons/fa';
-import FormComponent from './FormComponent';
-import { UserContext } from './UserContext';
+import FormComponent from './FormComponent'; // Default import (Correct)
+import { UserContext } from './UserContext'; // Named import (Correct based on UserContext.js)
 import 'rc-dropdown/assets/index.css';
 import './DeliveryDetail.css';
 import moment from 'moment';
@@ -28,7 +28,7 @@ const ADMIN_EMAILS_FRONTEND = [
     "arvanbir.s@brightbraintech.com"
 ];
 
-// Helper function for the dropdown menu (Unchanged, as per requirements)
+// Helper function for the dropdown menu (Unchanged)
 const renderMenu = (task, onMenuItemClick) => (
     <Menu>
         {/* Conditional rendering based on task status */}
@@ -42,7 +42,7 @@ const renderMenu = (task, onMenuItemClick) => (
                 <FaPlay style={{ marginRight: '5px' }} /> Play
             </MenuItem>
         )}
-        {task.Current_Status !== COMPLETED_TASK_STATUS && task.Current_Status !== NOT_REQUIRED_TASK_STATUS && ( 
+        {task.Current_Status !== COMPLETED_TASK_STATUS && task.Current_Status !== NOT_REQUIRED_TASK_STATUS && ( 
             <MenuItem key="stop" onClick={(e) => { e.stopPropagation(); onMenuItemClick(task.Key, 'stop'); }}>
                 <FaStop style={{ marginRight: '5px' }} /> Stop
             </MenuItem>
@@ -50,12 +50,14 @@ const renderMenu = (task, onMenuItemClick) => (
     </Menu>
 );
 
-// --- TaskCard Component (Modified to include Status Buttons) ---
-const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemClick, onFormSubmit, onStatusUpdate, currentUserEmail, isAdmin }) => {
+// --- TaskCard Component (Removed memo for stability check) ---
+// If the error persists, move this component definition to its own file.
+const TaskCard = ({ task, isActive, displayStatus, onCardClick, onMenuItemClick, onFormSubmit, onStatusUpdate, currentUserEmail, isAdmin }) => {
     
     const isTaskFinished = task.Current_Status === COMPLETED_TASK_STATUS || task.Current_Status === NOT_REQUIRED_TASK_STATUS;
     const isTaskScheduled = displayStatus === SCHEDULED_STATUS;
 
+    // Extract planned start timestamp robustly
     const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
         ? task.Planned_Start_Timestamp.value
         : task.Planned_Start_Timestamp;
@@ -99,44 +101,44 @@ const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemC
                                 task={task}
                                 currentUserEmail={currentUserEmail}
                             />
-                            
-                            {/* 🟢 NEW STATUS BUTTONS: Show only if not finished */}
-                            {!isTaskFinished && (
-                                <div className='d-grid gap-2 mt-3'>
-                                    {/* COMPLETE Button - Available to everyone */}
-                                    <Button 
-                                        variant="success" 
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onStatusUpdate(task.Key, 'Complete');
-                                        }}
-                                    >
-                                        Mark **Complete**
-                                    </Button>
+                            
+                            {/* 🟢 NEW STATUS BUTTONS: Show only if not finished */}
+                            {!isTaskFinished && (
+                                <div className='d-grid gap-2 mt-3'>
+                                    {/* COMPLETE Button - Available to everyone */}
+                                    <Button 
+                                        variant="success" 
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onStatusUpdate(task.Key, 'Complete');
+                                        }}
+                                    >
+                                        Mark **Complete**
+                                    </Button>
 
-                                    {/* NOT REQUIRED Button - Available only to Admin */}
-                                    {isAdmin && (
-                                        <Button 
-                                            variant="secondary" 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onStatusUpdate(task.Key, 'Not Required');
-                                            }}
-                                        >
-                                            Mark **Not Required**
-                                        </Button>
-                                    )}
-                                </div>
-                            )}
+                                    {/* NOT REQUIRED Button - Available only to Admin */}
+                                    {isAdmin && (
+                                        <Button 
+                                            variant="secondary" 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onStatusUpdate(task.Key, 'Not Required');
+                                            }}
+                                        >
+                                            Mark **Not Required**
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </Card.Body>
             </Card>
         </Col>
     );
-});
+}; // End of TaskCard
 
-
+// DeliveryDetail component definition remains the same
 const DeliveryDetail = () => {
     const location = useLocation();
     const delCodeMatch = location.pathname.match(/\/delivery\/data\/(.*)/);
@@ -148,7 +150,7 @@ const DeliveryDetail = () => {
     const [error, setError] = useState(null);
     
     const [activeTaskKey, setActiveTaskKey] = useState(null);
-    const [actionType, setActionType] = useState(null); 
+    const [actionType, setActionType] = useState(null); 
     const [refreshKey, setRefreshKey] = useState(0); 
 
     const { userEmail } = useContext(UserContext);
@@ -202,68 +204,68 @@ const DeliveryDetail = () => {
     }, [deliveryCode, userEmail, isAdmin, refreshKey]);
 
 
-    // 🟢 NEW HANDLER: For marking tasks Complete or Not Required
-    const handleStatusUpdate = useCallback(async (key, status) => {
-        
-        setActiveTaskKey(null); // Close any open form
-        setActionType(null);
+    // 🟢 NEW HANDLER: For marking tasks Complete or Not Required
+    const handleStatusUpdate = useCallback(async (key, status) => {
+        
+        setActiveTaskKey(null); // Close any open form
+        setActionType(null);
 
-        const confirmAction = window.confirm(`Are you sure you want to mark task Key ${key} as "${status}"?`);
-        if (!confirmAction) return;
+        const confirmAction = window.confirm(`Are you sure you want to mark task Key ${key} as "${status}"?`);
+        if (!confirmAction) return;
 
-        notification.info({
-            message: 'Updating Task Status',
-            description: `Sending request to mark Key ${key} as ${status}...`,
-            duration: 5,
-            key: 'statusUpdate'
-        });
+        notification.info({
+            message: 'Updating Task Status',
+            description: `Sending request to mark Key ${key} as ${status}...`,
+            duration: 5,
+            key: 'statusUpdate'
+        });
 
-        try {
-            const response = await fetch(`${BACKEND_API_BASE_URL}/api/task/status-update`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    key: key,
-                    email: userEmail, // Logged-in user's email
-                    status: status, // 'Complete' or 'Not Required'
-                }),
-            });
+        try {
+            const response = await fetch(`${BACKEND_API_BASE_URL}/api/task/status-update`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    key: key,
+                    email: userEmail, // Logged-in user's email
+                    status: status, // 'Complete' or 'Not Required'
+                }),
+            });
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || `Failed to update status for Key ${key}.`);
-            }
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `Failed to update status for Key ${key}.`);
+            }
 
-            // 1. Optimistic UI update for immediate feedback
-            setTasks(prevTasks =>
-                prevTasks.map(task =>
-                    task.Key === key ? { ...task, Current_Status: status } : task
-                )
-            );
+            // 1. Optimistic UI update for immediate feedback
+            setTasks(prevTasks =>
+                prevTasks.map(task =>
+                    task.Key === key ? { ...task, Current_Status: status } : task
+                )
+            );
 
-            // 2. Success notification
-            notification.success({
-                message: 'Status Update Successful',
-                description: `Task Key ${key} has been successfully marked as **${status}**.`,
-                key: 'statusUpdate'
-            });
+            // 2. Success notification
+            notification.success({
+                message: 'Status Update Successful',
+                description: `Task Key ${key} has been successfully marked as **${status}**.`,
+                key: 'statusUpdate'
+            });
 
-            // 3. Trigger re-fetch for fresh data and accurate overall status display (after a short delay)
-            setTimeout(() => setRefreshKey(prev => prev + 1), 1000);
+            // 3. Trigger re-fetch for fresh data and accurate overall status display (after a short delay)
+            setTimeout(() => setRefreshKey(prev => prev + 1), 1000);
 
-        } catch (err) {
-            console.error("Error updating task status:", err);
-            notification.error({
-                message: 'Status Update Failed',
-                description: err.message,
-                key: 'statusUpdate'
-            });
-            // Re-fetch to revert any inaccurate local state in case of failure
-            setRefreshKey(prev => prev + 1);
-        }
-    }, [userEmail]);
+        } catch (err) {
+            console.error("Error updating task status:", err);
+            notification.error({
+                message: 'Status Update Failed',
+                description: err.message,
+                key: 'statusUpdate'
+            });
+            // Re-fetch to revert any inaccurate local state in case of failure
+            setRefreshKey(prev => prev + 1);
+        }
+    }, [userEmail]);
 
 
     const handleFormSubmit = useCallback((updatedTaskData) => {
@@ -383,9 +385,9 @@ const DeliveryDetail = () => {
                                 onCardClick={handleCardClick} // Passes down the toggle function
                                 onMenuItemClick={handleMenuItemClick}
                                 onFormSubmit={handleFormSubmit}
-                                onStatusUpdate={handleStatusUpdate} // 🟢 NEW PROP
+                                onStatusUpdate={handleStatusUpdate} // 🟢 NEW PROP
                                 currentUserEmail={userEmail}
-                                isAdmin={isAdmin} // 🟢 NEW PROP
+                                isAdmin={isAdmin} // 🟢 NEW PROP
                             />
                         );
                     })
