@@ -61,7 +61,7 @@ const renderMenu = (task, onMenuItemClick) => (
 );
 
 // Memoized TaskCard component for performance
-const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemClick, onFormSubmit, currentUserEmail }) => {
+const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemClick, onFormSubmit, currentUserEmail, actionType }) => {
     // Memoize the time difference calculation for performance
     const timeDiff = useMemo(() => {
         const plannedDelivery = moment(task.Planned_Delivery_Timestamp.value || task.Planned_Delivery_Timestamp);
@@ -141,7 +141,7 @@ const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemC
                     </Row>
                 </Card.Body>
 
-                {/* Form Component - Hidden/Shown based on active state */}
+                {/* Form Component - Hidden/Shown based on active state. Now using actionType prop. */}
                 {isActive && actionType === 'edit' && (
                     <Card.Body>
                         <FormComponent
@@ -379,6 +379,7 @@ const DeliveryDetail = () => {
                                 onMenuItemClick={handleMenuItemClick}
                                 onFormSubmit={handleFormSubmit}
                                 currentUserEmail={userEmail}
+                                actionType={actionType} // 💡 FIX: Pass actionType as a prop
                             />
                         );
                     })
