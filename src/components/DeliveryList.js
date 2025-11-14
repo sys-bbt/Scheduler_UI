@@ -68,7 +68,7 @@ const DeliveryList = () => {
         // --- ACTIVE CLIENT FILTERING LOGIC (KEEP THIS BLOCK) ---
         
         // 1. **CRITICAL STEP:** Define the field name and status value for active clients.
-        const CLIENT_STATUS_FIELD = 'Client_Active_Status'; // <--- **REPLACE/CONFIRM FIELD NAME**
+        const CLIENT_STATUS_FIELD = 'Inactive'; // <--- **REPLACE/CONFIRM FIELD NAME**
         const ACTIVE_CLIENT_VALUE = 'Active'; // <--- **REPLACE/CONFIRM VALUE**
 
         // 2. Filter the deliveries to find only those belonging to currently active clients.
