@@ -46,60 +46,79 @@ const DeliveryList = () => {
 
     // fetchDeliveries is now dependent ONLY on userEmail, no other filters
     const fetchDeliveries = useCallback(async (currentSearchQuery, currentSelectedClient, currentSortOption) => {
-        setLoading(true);
-        setError(null);
-        try {
-            let url = `${BACKEND_API_BASE_URL}/api/data?email=${encodeURIComponent(userEmail)}`;
+    setLoading(true);
+    setError(null);
+    try {
+        let url = `${BACKEND_API_BASE_URL}/api/data?email=${encodeURIComponent(userEmail)}`;
 
-            if (currentSearchQuery) {
-                url += `&searchQuery=${encodeURIComponent(currentSearchQuery)}`;
-            }
-            if (currentSelectedClient) {
-                url += `&clientFilter=${encodeURIComponent(currentSelectedClient)}`;
-            }
-
-            const response = await fetch(url);
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Failed to fetch deliveries.');
-            }
-            const data = await response.json();
-
-            const uniqueClients = [...new Set(data.map(delivery => delivery.Client))].filter(Boolean);
-            setClients(uniqueClients);
-
-            // Sorting is now done with the passed sortOption
-            const sortedData = [...data].sort((a, b) => {
-                const timestampA = a.Initiated_Timestamp && typeof a.Initiated_Timestamp === 'object' && a.Initiated_Timestamp.value
-                    ? a.Initiated_Timestamp.value
-                    : a.Initiated_Timestamp || a.Created_at;
-                const timestampB = b.Initiated_Timestamp && typeof b.Initiated_Timestamp === 'object' && b.Initiated_Timestamp.value
-                    ? b.Initiated_Timestamp.value
-                    : b.Initiated_Timestamp || b.Created_at;
-
-                const dateA = moment(timestampA);
-                const dateB = moment(timestampB);
-
-                if (!dateA.isValid() && !dateB.isValid()) return 0;
-                if (!dateA.isValid()) return 1;
-                if (!dateB.isValid()) return -1;
-
-                if (currentSortOption === 'latest') {
-                    return dateB.diff(dateA);
-                } else {
-                    return dateA.diff(dateB);
-                }
-            });
-
-            setDeliveries(sortedData);
-        } catch (err) {
-            console.error("Error fetching deliveries:", err);
-            setError(err.message);
-            setDeliveries([]);
-        } finally {
-            setLoading(false);
+        if (currentSearchQuery) {
+            url += `&searchQuery=${encodeURIComponent(currentSearchQuery)}`;
         }
-    }, [userEmail]); // Dependency on userEmail only
+        if (currentSelectedClient) {
+            url += `&clientFilter=${encodeURIComponent(currentSelectedClient)}`;
+        }
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to fetch deliveries.');
+        }
+        const data = await response.json();
+
+        // --- ACTIVE CLIENT FILTERING LOGIC (KEEP THIS BLOCK) ---
+        
+        // 1. **CRITICAL STEP:** Define the field name and status value for active clients.
+        const CLIENT_STATUS_FIELD = 'Client_Active_Status'; // <--- **REPLACE/CONFIRM FIELD NAME**
+        const ACTIVE_CLIENT_VALUE = 'Active'; // <--- **REPLACE/CONFIRM VALUE**
+
+        // 2. Filter the deliveries to find only those belonging to currently active clients.
+        const activeClientDeliveries = data.filter(delivery => {
+            const statusValue = delivery[CLIENT_STATUS_FIELD] && typeof delivery[CLIENT_STATUS_FIELD] === 'object' && delivery[CLIENT_STATUS_FIELD].value
+                ? delivery[CLIENT_STATUS_FIELD].value
+                : delivery[CLIENT_STATUS_FIELD];
+            
+            return statusValue === ACTIVE_CLIENT_VALUE;
+        });
+
+        // 3. Extract unique client names ONLY from the active client deliveries.
+        const uniqueClients = [...new Set(activeClientDeliveries.map(delivery => delivery.Client))].filter(Boolean);
+        
+        setClients(uniqueClients); // This sets the list for the dropdown
+
+        // --- END OF ACTIVE CLIENT FILTERING LOGIC ---
+
+        // Sorting is now done with the passed sortOption (This part is correct)
+        const sortedData = [...data].sort((a, b) => {
+            const timestampA = a.Initiated_Timestamp && typeof a.Initiated_Timestamp === 'object' && a.Initiated_Timestamp.value
+                ? a.Initiated_Timestamp.value
+                : a.Initiated_Timestamp || a.Created_at;
+            const timestampB = b.Initiated_Timestamp && typeof b.Initiated_Timestamp === 'object' && b.Initiated_Timestamp.value
+                ? b.Initiated_Timestamp.value
+                : b.Initiated_Timestamp || b.Created_at;
+
+            const dateA = moment(timestampA);
+            const dateB = moment(timestampB);
+
+            if (!dateA.isValid() && !dateB.isValid()) return 0;
+            if (!dateA.isValid()) return 1;
+            if (!dateB.isValid()) return -1;
+
+            if (currentSortOption === 'latest') {
+                return dateB.diff(dateA);
+            } else {
+                return dateA.diff(dateB);
+            }
+        });
+
+        setDeliveries(sortedData);
+    } catch (err) {
+        console.error("Error fetching deliveries:", err);
+        setError(err.message);
+        setDeliveries([]);
+    } finally {
+        setLoading(false);
+    }
+}, [userEmail]); // Dependency on userEmail only
 
     // Create a stable debounced function that calls fetchDeliveries with the LATEST state
     const debouncedFetchDeliveries = useMemo(
