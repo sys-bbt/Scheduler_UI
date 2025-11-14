@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useCallback, memo, useMemo } from 'react';
+import React, { useEffect, useState, useContext, useCallback, memo } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { Container, Card, Row, Col, Spinner, Alert, ListGroup } from 'react-bootstrap';
 import Dropdown from 'rc-dropdown';
@@ -29,128 +29,77 @@ const ADMIN_EMAILS_FRONTEND = [
 const renderMenu = (task, onMenuItemClick) => (
     <Menu>
         {/* Conditional rendering based on task status */}
-        {task.Current_Status === 'On Hold' && (
-            <MenuItem key="start" onClick={() => onMenuItemClick(task.Key, 'start')}>
-                Start Task
+        {task.Current_Status === 'Running' && (
+            <MenuItem key="pause" onClick={(e) => { e.stopPropagation(); onMenuItemClick(task.Key, 'pause'); }}>
+                <FaPause style={{ marginRight: '5px' }} /> Pause
             </MenuItem>
         )}
-        {task.Current_Status === 'In Progress' && (
-            <>
-                <MenuItem key="pause" onClick={() => onMenuItemClick(task.Key, 'pause')}>
-                    Pause Task
-                </MenuItem>
-                <MenuItem key="complete" onClick={() => onMenuItemClick(task.Key, 'complete')}>
-                    Mark as Completed
-                </MenuItem>
-            </>
-        )}
-        {task.Current_Status !== COMPLETED_TASK_STATUS && task.Current_Status !== 'In Progress' && (
-            <MenuItem key="start" onClick={() => onMenuItemClick(task.Key, 'start')}>
-                Start Task
+        {task.Current_Status === 'Paused' && (
+            <MenuItem key="play" onClick={(e) => { e.stopPropagation(); onMenuItemClick(task.Key, 'play'); }}>
+                <FaPlay style={{ marginRight: '5px' }} /> Play
             </MenuItem>
         )}
-        {task.Current_Status === COMPLETED_TASK_STATUS && (
-            <MenuItem key="reopen" onClick={() => onMenuItemClick(task.Key, 'reopen')}>
-                Reopen Task
+        {task.Current_Status !== 'Completed' && ( // Assuming 'Completed' tasks cannot be stopped
+            <MenuItem key="stop" onClick={(e) => { e.stopPropagation(); onMenuItemClick(task.Key, 'stop'); }}>
+                <FaStop style={{ marginRight: '5px' }} /> Stop
             </MenuItem>
         )}
-        <MenuItem key="edit" onClick={() => onMenuItemClick(task.Key, 'edit')}>
-            Edit Task Details
-        </MenuItem>
     </Menu>
 );
 
-// Memoized TaskCard component for performance
-const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemClick, onFormSubmit, currentUserEmail, actionType }) => {
-    // Memoize the time difference calculation for performance
-    const timeDiff = useMemo(() => {
-        const plannedDelivery = moment(task.Planned_Delivery_Timestamp.value || task.Planned_Delivery_Timestamp);
-        const now = moment();
-        const diffInDays = plannedDelivery.diff(now, 'days');
+// --- TaskCard Component (The Clickable Card with Inline Form Logic) ---
+const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemClick, onFormSubmit, currentUserEmail }) => {
+    
+    const isTaskCompleted = task.Current_Status === COMPLETED_TASK_STATUS;
+    const isTaskScheduled = displayStatus === 'Scheduled';
 
-        if (displayStatus === COMPLETED_TASK_STATUS) {
-            return { text: 'Completed', color: 'text-success' };
-        } else if (diffInDays < 0) {
-            return { text: `Overdue by ${Math.abs(diffInDays)} days`, color: 'text-danger' };
-        } else if (diffInDays <= 3) {
-            return { text: `Due in ${diffInDays} days`, color: 'text-warning' };
-        } else {
-            return { text: `Due in ${diffInDays} days`, color: 'text-muted' };
-        }
-    }, [task.Planned_Delivery_Timestamp, displayStatus]);
-
-    const handleTimerClick = (action) => {
-        if (action === 'start' && task.Current_Status !== 'In Progress') {
-            onMenuItemClick(task.Key, 'start');
-        } else if (action === 'pause' && task.Current_Status === 'In Progress') {
-            onMenuItemClick(task.Key, 'pause');
-        }
-    };
-
-    const isTaskAssignedToUser = (task.Email === currentUserEmail || task.Emails.includes(currentUserEmail));
+    const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
+        ? task.Planned_Start_Timestamp.value
+        : task.Planned_Start_Timestamp;
 
     return (
-        <Col xs={12} className="mb-3">
-            <Card className={`task-card ${isActive ? 'active-card' : ''}`}>
-                <Card.Body onClick={() => onCardClick(task.Key)}>
-                    <Row className="align-items-center">
-                        {/* Task Title and Details */}
-                        <Col xs={10}>
-                            <h5>{task.Task_Details}</h5>
-                            <div className="task-meta">
-                                <span className="me-3">ID: {task.Step_ID}</span>
-                                <span className="me-3">
-                                    <FaCalendarAlt className="me-1" />
-                                    {moment(task.Planned_Delivery_Timestamp.value || task.Planned_Delivery_Timestamp).format('MMM D, YYYY')}
-                                </span>
-                                <span>Responsible: {task.Responsibility}</span>
-                            </div>
-                            <div className="task-status">
-                                Status: <span className="fw-bold">{displayStatus}</span>
-                            </div>
-                            <div className={`time-diff ${timeDiff.color}`}>{timeDiff.text}</div>
-                        </Col>
+        <Col>
+            <Card
+                className={`task-card ${isTaskCompleted ? 'task-completed' : ''} ${isActive ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
+                style={{ cursor: isTaskScheduled ? 'default' : 'pointer' }}
+                // 🟢 The click handler that triggers the form toggle
+                onClick={() => onCardClick(task.Key, displayStatus)} 
+            >
+                <Card.Body>
+                    <Card.Title>{task.Task_Details}</Card.Title>
+                    <Card.Text>
+                        <strong>Step ID:</strong> {task.Step_ID}<br />
+                        <strong>Responsibility:</strong> {task.Responsibility}<br />
+                        <strong className={isTaskScheduled ? 'text-info' : ''}>Status:</strong> {displayStatus}
+                    </Card.Text>
+                    <div className="d-flex justify-content-between align-items-center mt-3">
+                        {rawPlannedStartTimestamp && (
+                            <p className="text-muted mb-0">
+                                <FaCalendarAlt style={{ marginRight: '5px' }} />
+                                Start: {moment.utc(rawPlannedStartTimestamp).format('YYYY-MM-DD')}
+                            </p>
+                        )}
+                        <Dropdown
+                            overlay={renderMenu(task, onMenuItemClick)}
+                            trigger={['click']}
+                            onClick={(e) => e.stopPropagation()} // Prevent card click when clicking dropdown
+                        >
+                            <FaEllipsisV style={{ cursor: 'pointer' }} />
+                        </Dropdown>
+                    </div>
 
-                        {/* Controls (Timer & Menu) */}
-                        <Col xs={2} className="d-flex justify-content-end align-items-center">
-                            <div className="timer-controls me-3">
-                                {displayStatus === 'In Progress' ? (
-                                    <FaPause
-                                        className="text-primary me-2 cursor-pointer"
-                                        onClick={(e) => { e.stopPropagation(); handleTimerClick('pause'); }}
-                                        title="Pause Task"
-                                    />
-                                ) : (
-                                    <FaPlay
-                                        className="text-success me-2 cursor-pointer"
-                                        onClick={(e) => { e.stopPropagation(); handleTimerClick('start'); }}
-                                        title="Start Task"
-                                    />
-                                )}
-                            </div>
-
-                            <Dropdown
-                                overlay={renderMenu(task, onMenuItemClick)}
-                                trigger={['click']}
-                                placement="bottomRight"
-                                onClick={(e) => e.stopPropagation()} // Prevent card click when opening menu
-                            >
-                                <FaEllipsisV className="text-muted cursor-pointer" />
-                            </Dropdown>
-                        </Col>
-                    </Row>
+                    {/* 🟢 CONDITIONAL FORM RENDERING: Only displays when isActive is true */}
+                    {isActive && (
+                        <div className="mt-3" onClick={(e) => e.stopPropagation()}> 
+                            <h6>Schedule Task: {task.Task_Details}</h6>
+                            <FormComponent
+                                onSubmit={onFormSubmit}
+                                task={task}
+                                currentUserEmail={currentUserEmail}
+                            />
+                        </div>
+                    )}
                 </Card.Body>
-
-                {/* Form Component - Hidden/Shown based on active state. Now using actionType prop. */}
-                {isActive && actionType === 'edit' && (
-                    <Card.Body>
-                        <FormComponent
-                            task={task}
-                            onSubmit={onFormSubmit}
-                            currentUserEmail={currentUserEmail}
-                        />
-                    </Card.Body>
-                )}
             </Card>
         </Col>
     );
@@ -158,169 +107,133 @@ const TaskCard = memo(({ task, isActive, displayStatus, onCardClick, onMenuItemC
 
 
 const DeliveryDetail = () => {
-    // ----------------------------------------------------
-    // START: ALL HOOKS MUST BE UNCONDITIONAL AND AT THE TOP
-    // ----------------------------------------------------
-    const { userEmail } = useContext(UserContext);
     const location = useLocation();
+    const delCodeMatch = location.pathname.match(/\/delivery\/data\/(.*)/);
+    const deliveryCode = delCodeMatch ? decodeURIComponent(delCodeMatch[1]) : null;
 
-    // State for data fetching and display
-    const [delivery, setDelivery] = useState(null);
+    const [deliveryDetails, setDeliveryDetails] = useState(null);
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-
-    // State for task interaction
-    const [activeTaskKey, setActiveTaskKey] = useState(null);
-    const [actionType, setActionType] = useState(null); // 'edit', 'start', 'pause', 'complete', 'reopen'
-
-    // Memoize the admin check (This is likely the hook that was conditionally placed)
-    const isAdmin = useMemo(() => ADMIN_EMAILS_FRONTEND.includes(userEmail), [userEmail]);
     
-    // Extract deliveryKey from location state
-    const deliveryKey = useMemo(() => location.state?.deliveryKey, [location.state]);
+    // 🟢 KEY STATE: Controls which TaskCard form is open
+    const [activeTaskKey, setActiveTaskKey] = useState(null);
+    const [actionType, setActionType] = useState(null); // 'edit', 'pause', 'play', 'stop'
+    const [refreshKey, setRefreshKey] = useState(0); 
 
-    // HANDLERS
-    const handleCardClick = useCallback((taskKey) => {
-        // Toggle the form visibility for the clicked card
-        setActiveTaskKey(prevKey => (prevKey === taskKey && actionType === 'edit') ? null : taskKey);
-        setActionType('edit'); // Always switch to edit mode when clicking the card body
-    }, [actionType]);
+    const { userEmail } = useContext(UserContext);
+    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-    const handleMenuItemClick = useCallback((taskKey, newActionType) => {
-        // This is for menu actions (start, pause, edit, complete)
-        if (newActionType === 'edit') {
-            setActiveTaskKey(taskKey);
-            setActionType('edit');
-        } else {
-            // For status change actions, we don't need to show the form, just trigger the status change
-            // We'll call handleFormSubmit directly with the new action type
-            handleFormSubmit(taskKey, null, newActionType);
-        }
-    }, []);
+    useEffect(() => {
+        const fetchDeliveryDetails = async () => {
+            if (!deliveryCode) {
+                setError("Delivery code not found in URL.");
+                setLoading(false);
+                return;
+            }
 
-    const fetchDeliveryDetail = useCallback(async () => {
-        if (!deliveryKey) {
-            setError('No delivery key provided.');
-            setLoading(false);
+            setLoading(true);
+            setError(null);
+            try {
+                const response = await fetch(`${BACKEND_API_BASE_URL}/api/workflow-details/${encodeURIComponent(deliveryCode)}`);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Failed to fetch workflow details for ${deliveryCode}.`);
+                }
+                const data = await response.json();
+                
+                if (data.length === 0) {
+                    setError(`Workflow with code "${deliveryCode}" not found or has no tasks.`);
+                    setLoading(false);
+                    return;
+                }
+
+                const mainDeliveryDetail = data.find(task => task.Step_ID === 0);
+                setDeliveryDetails(mainDeliveryDetail || data[0]); 
+
+                const tasksToDisplay = data.filter(task => task.Step_ID !== 0);
+
+                const sortedTasks = tasksToDisplay.sort((a, b) => {
+                    return a.Step_ID - b.Step_ID;
+                });
+
+                setTasks(sortedTasks);
+
+            } catch (err) {
+                console.error("Error fetching delivery details:", err);
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchDeliveryDetails();
+    }, [deliveryCode, userEmail, isAdmin, refreshKey]);
+
+    const handleFormSubmit = useCallback((updatedTaskData) => {
+    // Optimistic update of tasks
+    setTasks(prevTasks =>
+        prevTasks.map(task =>
+            task.Key === updatedTaskData.Key
+                ? { ...task, ...updatedTaskData }
+                : task
+        )
+    );
+    
+    // 🛑 REMOVE or COMMENT OUT THESE LINES:
+    // setActiveTaskKey(null); 
+    // setActionType(null);
+    
+    // 🟢 NEW LOGIC: Wait 2 seconds, then close the form and refresh.
+    // This gives the user time to see the success message displayed by FormComponent.
+    setTimeout(() => {
+        setActiveTaskKey(null); 
+        setActionType(null);
+        // 🟢 Trigger re-fetch for fresh data and accurate status display
+        setRefreshKey(prev => prev + 1); 
+    }, 2000); // Wait 2 seconds
+}, []);
+
+    // 🟢 CLICK HANDLER: Controls the activeTaskKey state
+    const handleCardClick = useCallback((taskKey, displayStatus) => {
+        const isScheduled = displayStatus === 'Scheduled';
+        
+        // This check is important to prevent opening the form for scheduled tasks
+        if (isScheduled) { 
+            notification.info({
+                message: 'Task Already Scheduled',
+                description: 'This task has a Planned Start Date and cannot be rescheduled.',
+            });
+            setActiveTaskKey(null);
+            setActionType(null);
             return;
         }
 
-        try {
-            const response = await fetch(`${BACKEND_API_BASE_URL}/deliveries/${deliveryKey}`);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch: ${response.statusText}`);
-            }
-            const data = await response.json();
-            
-            // Format dates using moment object for internal consistency in forms/display
-            const formattedTasks = data.tasks.map(task => ({
-                ...task,
-                Planned_Start_Timestamp: moment(task.Planned_Start_Timestamp),
-                Planned_Delivery_Timestamp: moment(task.Planned_Delivery_Timestamp)
-            }));
-            
-            setDelivery(data.delivery);
-            setTasks(formattedTasks);
-            setError(null);
-        } catch (err) {
-            console.error('Fetching error:', err);
-            setError(`Error fetching delivery details: ${err.message}`);
-        } finally {
-            setLoading(false);
+        if (activeTaskKey === taskKey) {
+            // Close the currently active card
+            setActiveTaskKey(null);
+            setActionType(null);
+        } else {
+            // Open the new card
+            setActiveTaskKey(taskKey);
+            setActionType('edit');
         }
-    }, [deliveryKey]);
+    }, [activeTaskKey]); 
 
-    const handleFormSubmit = useCallback(async (taskKey, updatedFormData, action) => {
-        setLoading(true);
-        setActiveTaskKey(null); // Hide form/reset active state immediately
+    const handleMenuItemClick = useCallback((taskKey, type) => {
+        // Temporary block for P/P/S actions
+        notification.info({
+            message: 'Status Change Disabled',
+            description: `API for ${type} is not yet implemented.`,
+        });
+        setActiveTaskKey(null);
         setActionType(null);
+    }, []);
 
-        const currentTask = tasks.find(t => t.Key === taskKey);
-        let payload = {};
-        let endpoint = `/tasks/${taskKey}`;
-        let method = 'PUT';
-
-        if (action) {
-            // Status update actions (start, pause, complete, reopen)
-            let newStatus = currentTask.Current_Status;
-            
-            switch (action) {
-                case 'start': newStatus = 'In Progress'; break;
-                case 'pause': newStatus = 'On Hold'; break;
-                case 'complete': newStatus = COMPLETED_TASK_STATUS; break;
-                case 'reopen': newStatus = 'In Progress'; break;
-                default: break;
-            }
-            payload = {
-                ...currentTask,
-                Current_Status: newStatus
-            };
-            // Send only necessary fields for status update
-            payload = { 
-                Key: payload.Key, 
-                Delivery_code: payload.Delivery_code,
-                Current_Status: newStatus,
-                Responsibility: payload.Responsibility, // Ensure responsibility is also included
-                Email: payload.Email
-            };
-
-        } else if (updatedFormData) {
-            // Form submission for editing details
-            payload = { 
-                ...currentTask,
-                ...updatedFormData,
-                // Ensure date objects are converted back to ISO strings for the backend if needed
-                Planned_Start_Timestamp: updatedFormData.Planned_Start_Timestamp ? updatedFormData.Planned_Start_Timestamp.toISOString() : null,
-                Planned_Delivery_Timestamp: updatedFormData.Planned_Delivery_Timestamp ? updatedFormData.Planned_Delivery_Timestamp.toISOString() : null
-            };
-            // Remove moment objects from payload if any remain, keeping only ISO strings or original data
-            payload.Planned_Start_Timestamp = payload.Planned_Start_Timestamp?.value || payload.Planned_Start_Timestamp;
-            payload.Planned_Delivery_Timestamp = payload.Planned_Delivery_Timestamp?.value || payload.Planned_Delivery_Timestamp;
-        }
-
-        try {
-            const response = await fetch(`${BACKEND_API_BASE_URL}${endpoint}`, {
-                method: method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                throw new Error(`Update failed: ${response.statusText}`);
-            }
-
-            notification.success({
-                message: 'Task Updated',
-                description: `Task ${taskKey} was successfully updated.`,
-            });
-            
-            // Re-fetch data to reflect changes
-            await fetchDeliveryDetail();
-
-        } catch (err) {
-            console.error('Submission error:', err);
-            notification.error({
-                message: 'Update Failed',
-                description: `Failed to update task: ${err.message}`,
-            });
-            setLoading(false);
-        }
-    }, [tasks, fetchDeliveryDetail]);
-
-    // EFFECTS
-    useEffect(() => {
-        fetchDeliveryDetail();
-    }, [fetchDeliveryDetail]);
-    // ----------------------------------------------------
-    // END: ALL HOOKS MUST BE UNCONDITIONAL AND AT THE TOP
-    // ----------------------------------------------------
-
-
-    // CONDITIONAL RENDERING (Safe now that all hooks are called)
     if (loading) {
         return (
-            <Container className="d-flex justify-content-center align-items-center" style={{ height: '100vh' }}>
+            <Container className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
                 <Spinner animation="border" role="status">
                     <span className="visually-hidden">Loading...</span>
                 </Spinner>
@@ -330,38 +243,40 @@ const DeliveryDetail = () => {
 
     if (error) {
         return (
-            <Container className="mt-5">
+            <Container className="mt-5 text-center">
                 <Alert variant="danger">
-                    Error: {error}
-                    <Link to="/" className="d-block mt-2">Go back to Deliveries</Link>
+                    <h2>Error Loading Workflow Details</h2>
+                    <p>{error}</p>
                 </Alert>
+                <Link to="/" className="btn btn-primary mt-3">Back to Deliveries</Link>
             </Container>
         );
     }
 
-    if (!delivery) {
+    if (!deliveryDetails) {
         return (
-            <Container className="mt-5">
-                <Alert variant="warning">
-                    Delivery data could not be loaded.
-                    <Link to="/" className="d-block mt-2">Go back to Deliveries</Link>
-                </Alert>
+            <Container className="mt-5 text-center">
+                <h2>No Workflow Details Found</h2>
+                <p>The requested workflow could not be found.</p>
+                <Link to="/" className="btn btn-primary mt-3">Back to Deliveries</Link>
             </Container>
         );
     }
 
     return (
-        <Container className="mt-4">
-            <h2 className="mb-3">{delivery.Client} - {delivery.DelCode_w_o__}</h2>
-            <p><strong>Description:</strong> {delivery.Description}</p>
-            <p><strong>Delivery Deadline:</strong> {moment(delivery.Planned_Delivery_Timestamp).format('MMMM D, YYYY')}</p>
-            <p><strong>Admin Status:</strong> {isAdmin ? 'Active' : 'Inactive'}</p>
-            
-            <Row>
+        <Container className="delivery-detail-container mt-4">
+            <h2 className="mb-4">Workflow: {deliveryDetails.Delivery_code}</h2>
+            <p><strong>Client:</strong> {deliveryDetails.Client}</p>
+            <p><strong>Description:</strong> {deliveryDetails.Short_Description}</p>
+            <p><strong>Planned Start:</strong> {deliveryDetails.Planned_Start_Timestamp ? moment.utc(deliveryDetails.Planned_Start_Timestamp).format('YYYY-MM-DD') : 'N/A'}</p>
+            <p><strong>Planned Delivery:</strong> {deliveryDetails.Planned_Delivery_Timestamp ? moment.utc(deliveryDetails.Planned_Delivery_Timestamp).format('YYYY-MM-DD') : 'N/A'}</p>
+            <p><strong>Overall Status:</strong> {deliveryDetails.Current_Status}</p>
+
+            <h3 className="mt-5 mb-3">Tasks in this Workflow:</h3>
+            <Row xs={1} md={2} lg={3} className="g-4">
                 {tasks.length > 0 ? (
-                    tasks.map(task => {
-                        // Normalize the Planned_Start_Timestamp for display logic
-                        const rawPlannedStartTimestamp = task.Planned_Start_Timestamp.value
+                    tasks.map((task) => {
+                        const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
                             ? task.Planned_Start_Timestamp.value
                             : task.Planned_Start_Timestamp;
                         
@@ -379,7 +294,6 @@ const DeliveryDetail = () => {
                                 onMenuItemClick={handleMenuItemClick}
                                 onFormSubmit={handleFormSubmit}
                                 currentUserEmail={userEmail}
-                                actionType={actionType} // 💡 FIX: Pass actionType as a prop
                             />
                         );
                     })
