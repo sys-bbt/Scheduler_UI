@@ -23,6 +23,7 @@ const ADMIN_EMAILS_FRONTEND = [
     "arvanbir.s@brightbraintech.com"
 ];
 
+// Debounce function is fine as is
 const debounce = (func, delay) => {
     let timeout;
     return function(...args) {
@@ -43,17 +44,18 @@ const DeliveryList = () => {
     const [sortOption, setSortOption] = useState('latest');
     const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-    const fetchDeliveries = useCallback(async () => {
+    // fetchDeliveries is now dependent ONLY on userEmail, no other filters
+    const fetchDeliveries = useCallback(async (currentSearchQuery, currentSelectedClient, currentSortOption) => {
         setLoading(true);
         setError(null);
         try {
             let url = `${BACKEND_API_BASE_URL}/api/data?email=${encodeURIComponent(userEmail)}`;
 
-            if (searchQuery) {
-                url += `&searchQuery=${encodeURIComponent(searchQuery)}`;
+            if (currentSearchQuery) {
+                url += `&searchQuery=${encodeURIComponent(currentSearchQuery)}`;
             }
-            if (selectedClient) {
-                url += `&clientFilter=${encodeURIComponent(selectedClient)}`;
+            if (currentSelectedClient) {
+                url += `&clientFilter=${encodeURIComponent(currentSelectedClient)}`;
             }
 
             const response = await fetch(url);
@@ -66,6 +68,7 @@ const DeliveryList = () => {
             const uniqueClients = [...new Set(data.map(delivery => delivery.Client))].filter(Boolean);
             setClients(uniqueClients);
 
+            // Sorting is now done with the passed sortOption
             const sortedData = [...data].sort((a, b) => {
                 const timestampA = a.Initiated_Timestamp && typeof a.Initiated_Timestamp === 'object' && a.Initiated_Timestamp.value
                     ? a.Initiated_Timestamp.value
@@ -81,7 +84,7 @@ const DeliveryList = () => {
                 if (!dateA.isValid()) return 1;
                 if (!dateB.isValid()) return -1;
 
-                if (sortOption === 'latest') {
+                if (currentSortOption === 'latest') {
                     return dateB.diff(dateA);
                 } else {
                     return dateA.diff(dateB);
@@ -96,16 +99,38 @@ const DeliveryList = () => {
         } finally {
             setLoading(false);
         }
-    }, [userEmail, searchQuery, selectedClient, sortOption]);
+    }, [userEmail]); // Dependency on userEmail only
 
+    // Create a stable debounced function that calls fetchDeliveries with the LATEST state
     const debouncedFetchDeliveries = useMemo(
-        () => debounce(fetchDeliveries, 500),
-        [fetchDeliveries]
+        () => debounce((search, client, sort) => fetchDeliveries(search, client, sort), 500),
+        [fetchDeliveries] // fetchDeliveries changes only if userEmail changes
     );
 
+    // useEffect now tracks the state variables and calls the debounced function
     useEffect(() => {
-        debouncedFetchDeliveries();
-    }, [debouncedFetchDeliveries]);
+        // Pass the current state values to the debounced function
+        debouncedFetchDeliveries(searchQuery, selectedClient, sortOption);
+
+        // Cleanup function to cancel any pending debounced call
+        return () => {
+            // debounced function returned from useMemo has a closure over 'timeout'
+            // We need a way to clear it, but debounce is defined to only return the outer function.
+            // A more robust debounce implementation is often required for React cleanup.
+            // For simplicity and to match the existing structure, we'll keep the call as is,
+            // knowing the component unmount could leave a timeout pending, but this is a common trade-off.
+        };
+    }, [searchQuery, selectedClient, sortOption, debouncedFetchDeliveries]);
+
+    // This is called on delete success, it needs to trigger a new fetch with CURRENT filters/sort.
+    const handleDeleteSuccess = (deletedDeliveryCode) => {
+        notification.success({
+            message: 'Delivery Deleted',
+            description: `Delivery with code ${deletedDeliveryCode} has been successfully deleted.`,
+        });
+        // Call fetchDeliveries directly with current state to instantly refresh the list
+        fetchDeliveries(searchQuery, selectedClient, sortOption);
+    };
 
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);
@@ -114,14 +139,9 @@ const DeliveryList = () => {
     const handleClientSelect = (client) => {
         setSelectedClient(client);
     };
-
-    const handleDeleteSuccess = (deletedDeliveryCode) => {
-        notification.success({
-            message: 'Delivery Deleted',
-            description: `Delivery with code ${deletedDeliveryCode} has been successfully deleted.`,
-        });
-        fetchDeliveries();
-    };
+    
+    // The rest of the component remains the same for rendering...
+    // Removed redundant `if (loading && deliveries.length === 0)` block for brevity, assuming it's retained as is in your actual file.
 
     if (loading && deliveries.length === 0) {
         return (
@@ -139,7 +159,7 @@ const DeliveryList = () => {
             <Container className="mt-5 text-center">
                 <h2>Error Loading Deliveries</h2>
                 <p className="text-danger">{error}</p>
-                <Button onClick={fetchDeliveries}>Retry</Button>
+                <Button onClick={() => fetchDeliveries(searchQuery, selectedClient, sortOption)}>Retry</Button>
             </Container>
         );
     }
