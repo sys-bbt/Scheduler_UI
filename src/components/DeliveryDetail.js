@@ -28,7 +28,8 @@ const ADMIN_EMAILS_FRONTEND = [
     "divya.s@brightbraintech.com",
     "zoya.a@brightbraintech.com",
     "altaf.s@brightbraintech.com",
-    "arvanbir.s@brightbraintech.com"
+    "arvanbir.s@brightbraintech.com",
+    "meghna.j@brightbraintech.com"
 ];
 
 // ❌ REMOVED: renderMenu helper function (it must now be inside TaskCard.js or TaskCard's module)
