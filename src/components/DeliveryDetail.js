@@ -18,7 +18,7 @@ const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localh
 console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 
 // 🟢 STATUS CONSTANTS - Kept here as they are used in the main component's logic (handleCardClick, useEffect, mapping logic)
-const COMPLETED_TASK_STATUS = 'Completed';
+const COMPLETED_TASK_STATUS = 'Complete';
 const NOT_REQUIRED_TASK_STATUS = 'Not Required';
 const SCHEDULED_STATUS = 'Scheduled'; // Used locally for display logic
 
