@@ -82,6 +82,8 @@ const DeliveryList = () => {
 
         // 3. Extract unique client names ONLY from the active client deliveries.
         const uniqueClients = [...new Set(activeClientDeliveries.map(delivery => delivery.Client))].filter(Boolean);
+
+        uniqueClients.sort((a, b) => a.localeCompare(b));
         
         setClients(uniqueClients); // This sets the list for the dropdown
 
