@@ -72,13 +72,21 @@ const DeliveryList = () => {
         const ACTIVE_CLIENT_VALUE = 'Active'; // <--- **REPLACE/CONFIRM VALUE**
 
         // 2. Filter the deliveries to find only those belonging to currently active clients.
-        const activeClientDeliveries = data.filter(delivery => {
-            const statusValue = delivery[CLIENT_STATUS_FIELD] && typeof delivery[CLIENT_STATUS_FIELD] === 'object' && delivery[CLIENT_STATUS_FIELD].value
-                ? delivery[CLIENT_STATUS_FIELD].value
-                : delivery[CLIENT_STATUS_FIELD];
-            
-            return statusValue === ACTIVE_CLIENT_VALUE;
-        });
+            const activeClientDeliveries = data.filter(delivery => {
+                const rawStatusValue = delivery[CLIENT_STATUS_FIELD];
+                let statusString = null;
+
+                // Safely extract the status value, handling object types (like rich text fields)
+                if (rawStatusValue) {
+                    statusString = typeof rawStatusValue === 'object' && rawStatusValue.value
+                        ? String(rawStatusValue.value)
+                        : String(rawStatusValue);
+                }
+
+                // **NEW IMPROVEMENT:** Compare status using `.trim().toLowerCase()` 
+                // to ignore leading/trailing spaces and case differences.
+                return statusString && statusString.trim().toLowerCase() === ACTIVE_CLIENT_VALUE.toLowerCase();
+            });
 
         // 3. Extract unique client names ONLY from the active client deliveries.
         const uniqueClients = [...new Set(activeClientDeliveries.map(delivery => delivery.Client))].filter(Boolean);
