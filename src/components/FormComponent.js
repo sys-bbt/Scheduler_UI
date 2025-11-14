@@ -265,7 +265,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             </Form.Group>
 
             <Form.Group className="mb-3">
-                <Form.Label>Start Date<span className="text-danger">*</span></Form.Label> 
+                <Form.Label>Planned To Work On<span className="text-danger">*</span></Form.Label> 
                 <Form.Control
                     type="date"
                     name="Planned_Start_Timestamp"
@@ -277,7 +277,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             </Form.Group>
 
             <Form.Group className="mb-3">
-                <Form.Label>End Date</Form.Label>
+                <Form.Label>Delivery Deadline</Form.Label>
                 <Form.Control
                     type="date"
                     name="Planned_Delivery_Timestamp"
