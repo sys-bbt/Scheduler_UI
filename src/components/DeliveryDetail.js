@@ -17,7 +17,6 @@ console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 const COMPLETED_TASK_STATUS = 'Completed';
 
 const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "divya.s@brightbraintech.com",
