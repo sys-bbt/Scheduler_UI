@@ -99,9 +99,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     // 2. Fetch people mapping data
     useEffect(() => {
-        // Only fetch person data if the user is an admin or if the user needs to select an assignee
-        // Given that non-admins cannot see the dropdown, fetching is less critical for them,
-        // but we'll fetch anyway to ensure current assigned person data is available.
         const fetchPeopleMapping = async () => {
             setLoadingPersons(true);
             setPersonError(null);
@@ -168,21 +165,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
              return;
         }
 
-        // NOTE: Non-admins cannot see or change the Responsible person, but they must be assigned to update the date.
-        // Admins must fill Responsible and Start Date.
-        if (isAdmin && (!formData.Planned_Start_Timestamp || !formData.Planned_Start_Timestamp.isValid() || !formData.Responsibility)) {
+        if (!formData.Planned_Start_Timestamp || !formData.Planned_Start_Timestamp.isValid() || !formData.Responsibility) {
             setError("Please fill all required fields: Start Date and Person Responsible.");
             setLoading(false);
             return;
         }
-        
-        // Non-admin logic: they can only submit if they are the assigned person, regardless of whether the fields are disabled
-        if (!isAdmin && formData.Responsibility !== userEmail) {
-            setError("You can only update the details of tasks assigned to you.");
-            setLoading(false);
-            return;
-        }
-
 
         try {
             const mainTaskPayload = {
@@ -192,15 +179,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
                 Updated_at: moment.utc().toISOString(), 
             };
-            
-            // Only update Responsibility/Emails if the user is an admin
-            if (!isAdmin) {
-                // Non-admins should not submit changes to these fields,
-                // so ensure we send the original values back to prevent accidental overwrite.
-                mainTaskPayload.Responsibility = task.Responsibility || '';
-                mainTaskPayload.Emails = task.Emails || '';
-            }
-
 
             const perKeyPerDayRows = [];
             
@@ -262,19 +240,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         };
     }
 
-    // Disabling logic for non-admins
-    const isAssignedToSomeone = !!formData.Responsibility && formData.Responsibility !== "System";
-    const isAssignedToCurrentUser = formData.Emails === userEmail; 
-
-    // Date/Time fields can only be edited by Admins OR the person assigned to the task
-    const isPlannedStartDisabled = !isAdmin && !isAssignedToCurrentUser;
-
-
-    // Button should be disabled if loading OR if it's a non-admin and the task isn't assigned to them
-    const isSubmitDisabled = loading || (!isAdmin && !isAssignedToCurrentUser); 
-    
-    // Admin checks only for loading
-    const isSelectDisabled = loadingPersons; 
+    // Disabling logic
+    const isAssigned = !!formData.Responsibility && formData.Responsibility !== "System";
+    const isFieldDisabled = !isAdmin && isAssigned;
 
 
     return (
@@ -294,8 +262,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     required
                 />
             </Form.Group>
-            
-            {/* Planned To Work On - Disabled for non-admins if they aren't assigned */}
+
             <Form.Group className="mb-3">
                 <Form.Label>Planned To Work On<span className="text-danger">*</span></Form.Label> 
                 <Form.Control
@@ -303,14 +270,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     name="Planned_Start_Timestamp"
                     value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
                     onChange={handleStartDateChange}
-                    disabled={isPlannedStartDisabled} 
+                    disabled={isFieldDisabled} 
                     required
                 />
-                {isPlannedStartDisabled && (
-                    <Form.Text className="text-danger">
-                        Only Admins or the assigned person can set the start date.
-                    </Form.Text>
-                )}
             </Form.Group>
 
             <Form.Group className="mb-3">
@@ -324,68 +286,28 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 />
             </Form.Group>
 
-            {/* Person Responsible - ONLY VISIBLE TO ADMINS */}
-            {isAdmin && (
-                <Form.Group className="mb-3">
-                    <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
-                    <Select
-                        name="Responsibility"
-                        options={personsToDisplay}
-                        value={selectedPerson} 
-                        onChange={handlePersonSelect}
-                        // Admins can always edit, only disable if loading the list
-                        isDisabled={isSelectDisabled} 
-                        placeholder="Select Person"
-                        isClearable
-                        required
-                    />
-                    {isAssignedToSomeone && (
-                        <Form.Text className="text-muted">
-                            This task is currently assigned to: {formData.Responsibility}.
-                        </Form.Text>
-                    )}
-                </Form.Group>
-            )}
-            
-            {/* Show Read-Only Responsible Field for Non-Admins */}
-            {!isAdmin && isAssignedToSomeone && (
-                 <Form.Group className="mb-3">
-                    <Form.Label>Person Responsible</Form.Label>
-                    <Form.Control
-                        type="text"
-                        value={formData.Responsibility}
-                        disabled={true}
-                    />
-                    {isAssignedToCurrentUser && (
-                        <Form.Text className="text-success">
-                            This task is assigned to you. You can update the start date.
-                        </Form.Text>
-                    )}
-                 </Form.Group>
-            )}
-            
-            {/* Show Read-Only Field if Unassigned and not Admin */}
-            {!isAdmin && !isAssignedToSomeone && (
-                <Form.Group className="mb-3">
-                    <Form.Label>Person Responsible</Form.Label>
-                    <Form.Control
-                        type="text"
-                        value="Unassigned (Only Admin can assign)"
-                        disabled={true}
-                    />
-                </Form.Group>
-            )}
+            <Form.Group className="mb-3">
+                <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
+                <Select
+                    name="Responsibility"
+                    options={personsToDisplay}
+                    value={selectedPerson} 
+                    onChange={handlePersonSelect}
+                    isDisabled={isFieldDisabled || loadingPersons} 
+                    placeholder="Select Person"
+                    isClearable
+                    required
+                />
+                {isFieldDisabled && (
+                    <Form.Text className="text-muted">
+                        This task is already assigned and can only be changed by an Admin.
+                    </Form.Text>
+                )}
+            </Form.Group>
 
-            <Button variant="primary" type="submit" disabled={isSubmitDisabled}>
+            <Button variant="primary" type="submit" disabled={loading || isFieldDisabled}>
                 {loading ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" /> : 'Update Task'}
             </Button>
-            
-            {/* Warning for non-admins not assigned to the task */}
-            {!isAdmin && !isAssignedToCurrentUser && (
-                <Form.Text className="text-danger ms-3">
-                    You can only update tasks that are assigned to you.
-                </Form.Text>
-            )}
         </Form>
     );
 };
