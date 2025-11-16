@@ -1,18 +1,17 @@
 import React, { useEffect, useState, useContext, useCallback } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { Container, Row, Col, Spinner, Alert, ListGroup } from 'react-bootstrap'; 
+import { Container, Row, Col, Spinner, Alert, ListGroup } from 'react-bootstrap';
 // NOTE: Card, Dropdown, Button were removed from here as they are now used in TaskCard.js
 
-import { FaCalendarAlt } from 'react-icons/fa'; // Kept FaCalendarAlt as it's used in TaskCard's helper function (renderMenu) if TaskCard.js imports it.
-// If TaskCard.js is defined in a separate file, you should remove all imports only used by TaskCard.
-
+import { FaCalendarAlt } from 'react-icons/fa';
 // 🟢 NEW IMPORT: Import the TaskCard component from its separate file
-import TaskCard from './TaskCard'; 
-import { UserContext } from './UserContext'; 
+import TaskCard from './TaskCard';
+import { UserContext } from './UserContext';
 // import 'rc-dropdown/assets/index.css'; // This CSS import should also likely stay here or in a root file if it affects the global app
 import './DeliveryDetail.css';
 import moment from 'moment';
-import { notification } from 'antd';
+// 💡 MODIFICATION 1: Import Modal alongside notification from antd
+import { notification, Modal } from 'antd';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
@@ -31,9 +30,6 @@ const ADMIN_EMAILS_FRONTEND = [
     "arvanbir.s@brightbraintech.com",
     "meghna.j@brightbraintech.com"
 ];
-
-// ❌ REMOVED: renderMenu helper function (it must now be inside TaskCard.js or TaskCard's module)
-// ❌ REMOVED: TaskCard Component definition
 
 // DeliveryDetail component definition
 const DeliveryDetail = () => {
@@ -105,74 +101,84 @@ const DeliveryDetail = () => {
     }, [deliveryCode, userEmail, isAdmin, refreshKey]);
 
 
-    const handleStatusUpdate = useCallback(async (key, status) => {
+    // 💡 MODIFICATION 2: Replacing window.confirm with Modal.confirm
+    const handleStatusUpdate = useCallback((key, status) => { 
         
         setActiveTaskKey(null); // Close any open form
         setActionType(null);
 
-        const confirmAction = window.confirm(`Are you sure you want to mark task Key ${key} as "${status}"?`);
-        if (!confirmAction) return;
+        // 🛑 NEW CODE: Use Ant Design Modal.confirm for status update confirmation
+        Modal.confirm({
+            title: 'Confirm Task Status Update',
+            content: `Are you sure you want to mark task Key ${key} as "${status}"?`,
+            okText: 'Confirm',
+            cancelText: 'Cancel',
+            onOk: async () => { // The actual update logic runs inside onOk
+                
+                notification.info({
+                    message: 'Updating Task Status',
+                    description: `Sending request to mark Key ${key} as ${status}...`,
+                    duration: 5,
+                    key: 'statusUpdate'
+                });
 
-        notification.info({
-            message: 'Updating Task Status',
-            description: `Sending request to mark Key ${key} as ${status}...`,
-            duration: 5,
-            key: 'statusUpdate'
+                try {
+                    const response = await fetch(`${BACKEND_API_BASE_URL}/api/task/status-update`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            key: key,
+                            email: userEmail, // Logged-in user's email
+                            status: status, // 'Complete' or 'Not Required'
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || `Failed to update status for Key ${key}.`);
+                    }
+
+                    // 1. 🟢 INSTANT OPTIMISTIC REMOVAL: 
+                    if (status === 'Complete' || status === 'Not Required') {
+                        setTasks(prevTasks => 
+                            prevTasks.filter(task => task.Key !== key)
+                        );
+                    } else {
+                        // Keep the old map logic if you ever decide to use a non-final status update
+                        setTasks(prevTasks =>
+                            prevTasks.map(task =>
+                                task.Key === key ? { ...task, Current_Status: status } : task
+                            )
+                        );
+                    }
+
+                    // 2. Success notification
+                    notification.success({
+                        message: 'Status Update Successful',
+                        description: `Task Key ${key} has been successfully marked as **${status}**.`,
+                        key: 'statusUpdate'
+                    });
+
+                    // 3. Trigger re-fetch for fresh data and accurate overall status display (after a short delay)
+                    setTimeout(() => setRefreshKey(prev => prev + 1), 1000);
+
+                } catch (err) {
+                    console.error("Error updating task status:", err);
+                    notification.error({
+                        message: 'Status Update Failed',
+                        description: err.message,
+                        key: 'statusUpdate'
+                    });
+                    // Re-fetch to revert any inaccurate local state in case of failure
+                    setRefreshKey(prev => prev + 1);
+                }
+            },
+            onCancel: () => {
+                // User clicked cancel, do nothing
+            },
         });
-
-        try {
-            const response = await fetch(`${BACKEND_API_BASE_URL}/api/task/status-update`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    key: key,
-                    email: userEmail, // Logged-in user's email
-                    status: status, // 'Complete' or 'Not Required'
-                }),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || `Failed to update status for Key ${key}.`);
-            }
-
-// 1. 🟢 INSTANT OPTIMISTIC REMOVAL: 
-        // If the status is final (Complete or Not Required), remove the task from the local list.
-        if (status === 'Complete' || status === 'Not Required') {
-            setTasks(prevTasks => 
-                prevTasks.filter(task => task.Key !== key)
-            );
-        } else {
-            // Keep the old map logic if you ever decide to use a non-final status update
-            setTasks(prevTasks =>
-                prevTasks.map(task =>
-                    task.Key === key ? { ...task, Current_Status: status } : task
-                )
-            );
-        }
-
-            // 2. Success notification
-            notification.success({
-                message: 'Status Update Successful',
-                description: `Task Key ${key} has been successfully marked as **${status}**.`,
-                key: 'statusUpdate'
-            });
-
-            // 3. Trigger re-fetch for fresh data and accurate overall status display (after a short delay)
-            setTimeout(() => setRefreshKey(prev => prev + 1), 1000);
-
-        } catch (err) {
-            console.error("Error updating task status:", err);
-            notification.error({
-                message: 'Status Update Failed',
-                description: err.message,
-                key: 'statusUpdate'
-            });
-            // Re-fetch to revert any inaccurate local state in case of failure
-            setRefreshKey(prev => prev + 1);
-        }
     }, [userEmail]);
 
 
