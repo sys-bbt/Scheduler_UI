@@ -110,7 +110,7 @@ const DeliveryDetail = () => {
         // 🛑 NEW CODE: Use Ant Design Modal.confirm for status update confirmation
         Modal.confirm({
             title: 'Confirm Task Status Update',
-            content: `Are you sure you want to mark task Key ${key} as "${status}"?`,
+            content: `Are you sure you want to mark task as "${status}"?`,
             okText: 'Confirm',
             cancelText: 'Cancel',
             onOk: async () => { // The actual update logic runs inside onOk
