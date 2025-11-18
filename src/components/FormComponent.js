@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Form, Button, Spinner, Alert } from 'react-bootstrap';
+import { Form, Button, Spinner, Alert, Row, Col } from 'react-bootstrap'; // Added Row, Col for better layout
 import Select from 'react-select';
 import moment from 'moment';
 import { UserContext } from './UserContext'; 
@@ -199,11 +199,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 });
             }
 
-            // Rewriting the payload object definition to be absolutely safe (line 319-322)
+            // This is the payload block, ensured to be syntactically clean
             const payload = {
                 mainTask: mainTaskPayload,
                 perKeyPerDayRows: perKeyPerDayRows,
-                requestingUserEmail: userEmail // Final item, no comma
+                requestingUserEmail: userEmail
             };
 
             const response = await fetch(`${BACKEND_API_BASE_URL}/api/post`, {
@@ -253,11 +253,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     // Logic for setting the maximum selectable date (Delivery Deadline)
     const maxDate = formData.Planned_Delivery_Timestamp
-        ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD')
+        ? formData.Planned_Delivery_Timestamp.clone().subtract(1, 'day').format('YYYY-MM-DD') // Corrected logic: must be before the deadline, so subtract one day.
         : undefined;
 
     return (
-        <Form onSubmit={handleSubmit} className="p-3 border rounded shadow-sm bg-light">
+        <Form onSubmit={handleSubmit} className="p-3 border rounded shadow-sm bg-light" style={{ maxWidth: '450px', margin: '0 auto' }}>
             {error && <Alert variant="danger">{error}</Alert>}
             {success && <Alert variant="success">{success}</Alert>}
             {personError && <Alert variant="warning">{personError}</Alert>}
@@ -273,6 +273,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     required
                 />
             </Form.Group>
+
+            {/* Layout: Placing dates and person in a single column for better arrangement */}
 
             <Form.Group className="mb-3">
                 <Form.Label>Planned To Work On<span className="text-danger">*</span></Form.Label> 
@@ -297,7 +299,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 />
             </Form.Group>
 
-            <Form.Group className="mb-3">
+            <Form.Group className="mb-4">
                 <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
                 <Select
                     name="Responsibility"
