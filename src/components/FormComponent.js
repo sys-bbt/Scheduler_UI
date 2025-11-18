@@ -271,7 +271,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     name="Planned_Start_Timestamp"
                     value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
                     onChange={handleStartDateChange}
-                    disabled={isFieldDisabled} 
+                    //disabled={isFieldDisabled} 
                     required
                 />
             </Form.Group>
