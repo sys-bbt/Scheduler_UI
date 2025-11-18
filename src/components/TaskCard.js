@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Col, Button } from 'react-bootstrap';
+import { Card, Button } from 'react-bootstrap'; // Keep Card and Button since they are fundamental BS components
 import { FaCalendarAlt, FaCheckCircle, FaTimesCircle } from 'react-icons/fa'; 
 import moment from 'moment';
 import FormComponent from './FormComponent'; 
@@ -15,10 +15,11 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
     const isTaskFinished = task.Current_Status === COMPLETED_TASK_STATUS || task.Current_Status === NOT_REQUIRED_TASK_STATUS;
     const isTaskScheduled = displayStatus === SCHEDULED_STATUS;
 
-    // --- LOGIC FIX: Determine button widths and visibility ---
-    const showNotRequired = isAdmin;
-    const completeButtonWidthClass = showNotRequired ? 'w-50 me-2' : 'w-100';
-    // --------------------------------------------------------
+    // --- LOGIC FIX: Determine button widths and visibility ---
+    const showNotRequired = isAdmin;
+    // Removed 'w-50 me-2' and 'w-100' classes, logic now only affects visibility/structure
+    // const completeButtonWidthClass = showNotRequired ? 'w-50 me-2' : 'w-100'; 
+    // --------------------------------------------------------
 
     // Extract planned start timestamp robustly
     const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
@@ -26,11 +27,13 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
         : task.Planned_Start_Timestamp;
 
     return (
-        <Col>
+        // Replaced Col with a standard div
+        <div>
             <Card
-                // Added 'task-workflow-card' class for dedicated styling
-                className={`task-workflow-card ${isTaskFinished ? 'task-completed' : ''} ${isActive ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
-                style={{ cursor: isTaskScheduled ? 'default' : 'pointer' }}
+                // Removed all CSS classes: task-workflow-card, task-completed, active-task, task-scheduled-uneditable
+                className={''} 
+                // Removed inline style for cursor
+                style={{}} 
                 onClick={() => onCardClick(task.Key, displayStatus)} 
             >
                 <Card.Body>
@@ -38,14 +41,18 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                     <Card.Text>
                         <strong>Step ID:</strong> {task.Step_ID}<br />
                         <strong>Responsibility:</strong> {task.Responsibility}<br />
-                        <strong className={isTaskScheduled ? 'text-info' : ''}>Status:</strong> {displayStatus}
+                        {/* Removed text-info class */}
+                        <strong>Status:</strong> {displayStatus}
                     </Card.Text>
                     
                     {/* --- Metadata Section --- */}
-                    <div className="d-flex justify-content-between align-items-center mt-3">
+                    {/* Removed d-flex, justify-content-between, align-items-center, mt-3 classes */}
+                    <div>
                         {rawPlannedStartTimestamp && (
-                            <p className="text-muted mb-0">
-                                <FaCalendarAlt style={{ marginRight: '5px' }} />
+                            // Removed text-muted and mb-0 classes
+                            <p>
+                                {/* Removed inline style for margin */}
+                                <FaCalendarAlt />
                                 Start: {moment.utc(rawPlannedStartTimestamp).format('YYYY-MM-DD')}
                             </p>
                         )}
@@ -53,14 +60,15 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                     
                     {/* Status Buttons displayed ONLY when task is SCHEDULED and NOT Finished */}
                     {isTaskScheduled && !isTaskFinished && (
-                        // Added 'action-button-container' class for dedicated styling
-                        <div className='action-button-container d-flex justify-content-between mt-3' onClick={(e) => e.stopPropagation()}>
+                        {/* Replaced styled div with basic div and removed classes */}
+                        <div onClick={(e) => e.stopPropagation()}>
                             
-                            {/* COMPLETE Button (Width is dynamic) */}
+                            {/* COMPLETE Button */}
                             <Button 
                                 variant="success" 
-                                className={`${completeButtonWidthClass} d-flex align-items-center justify-content-center`}
-                                title="Mark Complete" 
+                                // Removed width and layout classes: completeButtonWidthClass, d-flex, align-items-center, justify-content-center
+                                className={showNotRequired ? 'me-2' : ''} // Keep minimal separation for visual distinction if both buttons are shown
+                                title="Mark Complete" 
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onStatusUpdate(task.Key, 'Complete');
@@ -73,7 +81,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                             {showNotRequired && (
                                 <Button 
                                     variant="secondary" 
-                                    className="w-50 ms-2 d-flex align-items-center justify-content-center"
+                                    // Removed width and layout classes: w-50 ms-2, d-flex, align-items-center, justify-content-center
                                     title="Mark Not Required (Admin)"
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -88,7 +96,8 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
 
                     {/* Form Rendering */}
                     {isActive && (
-                        <div className="mt-3" onClick={(e) => e.stopPropagation()}> 
+                        {/* Removed mt-3 class */}
+                        <div onClick={(e) => e.stopPropagation()}> 
                             <FormComponent
                                 onSubmit={onFormSubmit}
                                 task={task}
@@ -98,7 +107,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                     )}
                 </Card.Body>
             </Card>
-        </Col>
+        </div>
     );
 };
 
