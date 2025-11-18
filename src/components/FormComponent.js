@@ -87,7 +87,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Planned_Tasks: task.Planned_Tasks || 0,
                 Percent_Tasks_Completed: task.Percent_Tasks_Completed || 0,
                 Created_at: task.Created_at || null,
-                Updated_at: task.Updated_at || null,
+                Updated_at: null,
                 Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss || '',
                 Card_Corner_Status: task.Card_Corner_Status || '',
             });
@@ -199,10 +199,11 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 });
             }
 
+            // Rewriting the payload object definition to be absolutely safe (line 319-322)
             const payload = {
                 mainTask: mainTaskPayload,
                 perKeyPerDayRows: perKeyPerDayRows,
-                requestingUserEmail: userEmail // <-- ADDED for Admin 403 fix
+                requestingUserEmail: userEmail // Final item, no comma
             };
 
             const response = await fetch(`${BACKEND_API_BASE_URL}/api/post`, {
@@ -248,13 +249,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     }
 
     // Disabling logic for Person Responsible (Admin-only change)
-    // Renamed for clarity: isResponsibilityDisabled is used for the Select component
     const isResponsibilityDisabled = !isAdmin;
 
-    // Logic for setting the maximum selectable date (Delivery Deadline)
-    const maxDate = formData.Planned_Delivery_Timestamp
-        ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD')
-        : undefined;
+    // Logic for setting the maximum selectable date (Delivery Deadline)
+    const maxDate = formData.Planned_Delivery_Timestamp
+        ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD')
+        : undefined;
 
     return (
         <Form onSubmit={handleSubmit} className="p-3 border rounded shadow-sm bg-light">
@@ -281,7 +281,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     name="Planned_Start_Timestamp"
                     value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
                     onChange={handleStartDateChange}
-                    max={maxDate} // <-- ADDED: Date restriction based on Delivery Deadline
+                    max={maxDate} 
                     required
                 />
             </Form.Group>
@@ -304,19 +304,19 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                     options={personsToDisplay}
                     value={selectedPerson} 
                     onChange={handlePersonSelect}
-                    isDisabled={isResponsibilityDisabled || loadingPersons} // <-- Updated variable
+                    isDisabled={isResponsibilityDisabled || loadingPersons} 
                     placeholder="Select Person"
                     isClearable
                     required
                 />
-                {isResponsibilityDisabled && ( // <-- Updated variable
+                {isResponsibilityDisabled && ( 
                     <Form.Text className="text-muted">
                         This task is already assigned and can only be changed by an Admin.
                     </Form.Text>
                 )}
             </Form.Group>
 
-            <Button variant="primary" type="submit" disabled={loading}> // <-- FIXED: Only disabled when loading
+            <Button variant="primary" type="submit" disabled={loading}> 
                 {loading ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" /> : 'Update Task'}
             </Button>
         </Form>
