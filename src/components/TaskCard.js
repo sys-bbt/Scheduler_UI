@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Button } from 'react-bootstrap'; 
+import { Card, Col, Button } from 'react-bootstrap';
 import { FaCalendarAlt, FaCheckCircle, FaTimesCircle } from 'react-icons/fa'; 
 import moment from 'moment';
 import FormComponent from './FormComponent'; 
@@ -15,8 +15,11 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
     const isTaskFinished = task.Current_Status === COMPLETED_TASK_STATUS || task.Current_Status === NOT_REQUIRED_TASK_STATUS;
     const isTaskScheduled = displayStatus === SCHEDULED_STATUS;
 
+    // --- LOGIC: Determine button widths and visibility ---
     const showNotRequired = isAdmin;
-    // Removed the logic for dynamic class names
+    // Re-added dynamic class logic
+    const completeButtonWidthClass = showNotRequired ? 'w-50 me-2' : 'w-100';
+    // --------------------------------------------------------
 
     // Extract planned start timestamp robustly
     const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
@@ -24,25 +27,28 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
         : task.Planned_Start_Timestamp;
 
     return (
-        <div>
+        <Col> {/* Re-added Col for grid layout */}
             <Card
-                className={''} 
-                style={{}} 
+                // Restored necessary classes (using a simple 'task-card' as a container)
+                className={`task-card ${isTaskFinished ? 'task-completed' : ''} ${isActive ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
+                style={{ cursor: isTaskScheduled ? 'default' : 'pointer' }}
                 onClick={() => onCardClick(task.Key, displayStatus)} 
             >
                 <Card.Body>
                     <Card.Title>{task.Task_Details}</Card.Title>
-                    <Card.Text>
+                    <Card.Text className="text-start"> {/* Added text-start for left alignment */}
                         <strong>Step ID:</strong> {task.Step_ID}<br />
                         <strong>Responsibility:</strong> {task.Responsibility}<br />
-                        <strong>Status:</strong> {displayStatus}
+                        <strong className={isTaskScheduled ? 'text-info' : ''}>Status:</strong> {displayStatus}
                     </Card.Text>
                     
                     {/* --- Metadata Section --- */}
-                    <div>
+                    {/* Restored d-flex, justify-content-start, and mt-3 for alignment/spacing */}
+                    <div className="d-flex justify-content-start align-items-center mt-3">
                         {rawPlannedStartTimestamp && (
-                            <p>
-                                <FaCalendarAlt />
+                            {/* Restored text-muted and margin style */}
+                            <p className="text-muted mb-0">
+                                <FaCalendarAlt style={{ marginRight: '5px' }} />
                                 Start: {moment.utc(rawPlannedStartTimestamp).format('YYYY-MM-DD')}
                             </p>
                         )}
@@ -50,12 +56,13 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                     
                     {/* Status Buttons displayed ONLY when task is SCHEDULED and NOT Finished */}
                     {isTaskScheduled && !isTaskFinished && (
-                        <div onClick={(e) => e.stopPropagation()}>
+                        {/* Restored d-flex, justify-content-between, mt-3 for button layout */}
+                        <div className='d-flex justify-content-between mt-3' onClick={(e) => e.stopPropagation()}>
                             
-                            {/* COMPLETE Button */}
+                            {/* COMPLETE Button (Restored dynamic width and alignment classes) */}
                             <Button 
                                 variant="success" 
-                                className={showNotRequired ? 'me-2' : ''} 
+                                className={`${completeButtonWidthClass} d-flex align-items-center justify-content-center`}
                                 title="Mark Complete" 
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -65,10 +72,11 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                                 <FaCheckCircle size={20} />
                             </Button>
 
-                            {/* NOT REQUIRED Button - Admin only */}
+                            {/* NOT REQUIRED Button - Admin only (Restored width and alignment classes) */}
                             {showNotRequired && (
                                 <Button 
                                     variant="secondary" 
+                                    className="w-50 ms-2 d-flex align-items-center justify-content-center"
                                     title="Mark Not Required (Admin)"
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -83,7 +91,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
 
                     {/* Form Rendering */}
                     {isActive && (
-                        <div onClick={(e) => e.stopPropagation()}> 
+                        <div className="mt-3" onClick={(e) => e.stopPropagation()}>  {/* Restored mt-3 */}
                             <FormComponent
                                 onSubmit={onFormSubmit}
                                 task={task}
@@ -93,7 +101,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                     )}
                 </Card.Body>
             </Card>
-        </div>
+        </Col>
     );
 };
 
