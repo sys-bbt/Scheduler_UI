@@ -26,16 +26,15 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
         : task.Planned_Start_Timestamp;
 
     return (
-        <Col> {/* Re-added Col for grid layout */}
+        <Col>
             <Card
-                // NOTE: The comment that caused the error has been removed or moved.
                 className={`task-card ${isTaskFinished ? 'task-completed' : ''} ${isActive ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
                 style={{ cursor: isTaskScheduled ? 'default' : 'pointer' }}
                 onClick={() => onCardClick(task.Key, displayStatus)} 
             >
-                <Card.Body>
-                    <Card.Title className="text-start">{task.Task_Details}</Card.Title> {/* ADDED text-start */}
-                    <Card.Text className="text-start"> {/* ENSURE text-start is HERE */}
+                <Card.Body className="text-start"> {/* FIX: Apply text-start here */}
+                    <Card.Title className="text-start">{task.Task_Details}</Card.Title> {/* FIX: Apply to Title */}
+                    <Card.Text className="text-start"> {/* FIX: Apply to Details text block */}
                         <strong>Step ID:</strong> {task.Step_ID}<br />
                             <strong>Responsibility:</strong> {task.Responsibility}<br />
                         <strong className={isTaskScheduled ? 'text-info' : ''}>Status:</strong> {displayStatus}
@@ -53,9 +52,10 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                     
                     {/* Status Buttons displayed ONLY when task is SCHEDULED and NOT Finished */}
                     {isTaskScheduled && !isTaskFinished && (
+                        {/* Restored d-flex, justify-content-between, mt-3 for button layout */}
                         <div className='d-flex justify-content-between mt-3' onClick={(e) => e.stopPropagation()}>
                             
-                            {/* COMPLETE Button */}
+                            {/* COMPLETE Button (Restored dynamic width and alignment classes) */}
                             <Button 
                                 variant="success" 
                                 className={`${completeButtonWidthClass} d-flex align-items-center justify-content-center`}
