@@ -22,7 +22,6 @@ const NOT_REQUIRED_TASK_STATUS = 'Not Required';
 const SCHEDULED_STATUS = 'Scheduled'; // Used locally for display logic
 
 const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "divya.s@brightbraintech.com",
     "zoya.a@brightbraintech.com",
