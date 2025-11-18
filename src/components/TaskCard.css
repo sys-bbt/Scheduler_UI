@@ -1,83 +1,50 @@
-/* ------------------------------------------- */
-/* 1. Base Task Card Styling */
-/* This makes the card visually distinct and responsive */
-.task-card {
-    border-radius: 8px;
+/* ================================================= */
+/* 2. Task Card Styling (Based on image_deae0d.png) */
+/* ================================================= */
+
+/* Applies to the main card structure */
+.task-workflow-card {
+    border-radius: 12px;
     transition: transform 0.2s, box-shadow 0.2s;
-    min-height: 180px; /* Ensure a consistent minimum height */
-    margin-bottom: 20px;
+    min-height: 180px;
     border: 1px solid #e0e0e0;
 }
 
-/* Hover effect for interactive tasks */
-.task-card:not(.task-scheduled-uneditable):hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+/* Hover effect */
+.task-workflow-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
 }
 
-/* Active state for the currently selected task */
-.task-card.active-task {
-    border: 2px solid #007bff; /* Primary color border for selection */
-    box-shadow: 0 0 10px rgba(0, 123, 255, 0.3);
-}
-
-/* Styling for finished tasks */
-.task-card.task-completed {
-    background-color: #f0fff0; /* Very light green background */
-    border-color: #c3e6cb;
-    opacity: 0.8;
-}
-
-/* ------------------------------------------- */
-/* 2. Card Content and Typography */
-
-.task-card .card-body {
-    padding: 15px;
-}
-
-.task-card .card-title {
-    font-size: 1.1rem;
-    font-weight: 600;
+/* Task Title */
+.task-workflow-card .card-title {
+    font-size: 1.15rem;
+    font-weight: 700;
     color: #343a40;
     margin-bottom: 10px;
-    line-height: 1.3;
 }
 
-.task-card .card-text strong {
+/* Sub-details (Step ID, Responsibility, Status) */
+.task-workflow-card .card-text {
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+.task-workflow-card .card-text strong {
     font-weight: 500;
     color: #6c757d;
 }
 
-/* Styling for the Status text */
-.task-card .card-text .text-info {
-    color: #17a2b8 !important; /* Standard Bootstrap info color */
-    font-weight: bold;
+/* Styling the Action Button Container (The green square) */
+.task-workflow-card .action-button-container {
+    padding-top: 15px;
+    border-top: 1px solid #f0f0f0;
+    text-align: center;
 }
 
-/* ------------------------------------------- */
-/* 3. Metadata Section (Date/Icons) */
-
-.task-card .text-muted {
-    font-size: 0.85rem;
-    color: #999 !important;
-}
-
-/* Style the calendar icon */
-.task-card .text-muted svg {
-    color: #6c757d;
-}
-
-
-/* ------------------------------------------- */
-/* 4. Status Buttons (Fixing the visibility of the "Not Required" button) */
-/* The buttons section needs a slightly darker border or background for contrast */
-.task-card .d-flex.justify-content-between.mt-3 {
-    padding-top: 10px;
-    border-top: 1px solid #eee;
-}
-
-/* Style for the button container (the colored square on the right card) */
-/* Assuming the green square is the button container that houses the status buttons */
-.task-card .d-flex.justify-content-between.mt-3 .w-50 {
-    border-radius: 4px; /* Slightly round the button corners */
+/* Ensure the button takes proper shape */
+.task-workflow-card .btn {
+    border-radius: 6px;
+    padding: 10px 15px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
