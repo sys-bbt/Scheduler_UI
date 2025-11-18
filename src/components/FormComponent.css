@@ -1,26 +1,26 @@
-/* ================================================= */
+/* /* ================================================= */
 /* 1. Form Component Styling (Based on image_de8d5a.png) */
 /* ================================================= */
 
-/* Applies to the outermost Card wrapper of the FormComponent */
+/*/* Applies to the outermost Card wrapper of the FormComponent 
 .schedule-task-card {
     border-radius: 12px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
     border: 1px solid #f0f0f0;
 }
 
-/* Ensure consistent spacing and modern look for form inputs */
+/* Ensure consistent spacing and modern look for form inputs 
 .schedule-task-card .form-label {
-    font-weight: 600; /* Bolder labels */
+    font-weight: 600; /* Bolder labels 
     color: #495057;
-    margin-bottom: 0.3rem; /* Tighter spacing */
+    margin-bottom: 0.3rem; /* Tighter spacing 
 }
 
-/* Styling for disabled/readonly fields like 'Task Details' and 'Delivery Deadline' */
+/* Styling for disabled/readonly fields like 'Task Details' and 'Delivery Deadline' 
 .schedule-task-card .form-control[disabled],
 .schedule-task-card .form-control[readonly] {
-    background-color: #e9ecef; /* Light gray background */
-    color: #6c757d; /* Darker text for readability */
+    background-color: #e9ecef; /* Light gray background 
+    color: #6c757d; /* Darker text for readability 
     cursor: not-allowed;
-    border: 1px dashed #ced4da; /* Dotted/dashed border for visual distinction */
-}
+    border: 1px dashed #ced4da; /* Dotted/dashed border for visual distinction 
+} */
