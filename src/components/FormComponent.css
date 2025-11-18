@@ -1,38 +1,58 @@
-@media (max-width: 768px) {
-    .ant-row {
-      flex-direction: column;
-    }
-  }
-  
-/* Increase slider handle size for better usability on mobile */
-.ant-slider-handle {
-    width: 30px;
-    height: 50px;
-    margin-top: -10px; /* Center the handle vertically */
+/* ------------------------------------------- */
+/* 1. General Form Container & Spacing (Optional, if not using Bootstrap Card) */
+/* If you use the <Card> structure from the last update, these are mostly covered. */
+.schedule-task-container {
+    /* Optional: Center the form if it's not wrapped in a Bootstrap Row/Col */
+    margin: 20px auto; 
+    /* Set a max width for desktop/tablet viewing */
+    max-width: 600px;
+    padding: 20px;
+    border-radius: 8px;
+    /* Optional: If you don't use the Card shadow-lg class */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); 
+    background-color: #ffffff;
 }
 
-/* Improve track width for a more visible slider */
-.ant-slider-track {
-    height: 20px;
+/* ------------------------------------------- */
+/* 2. Input Field Styling */
+/* Makes disabled inputs clearer while maintaining readability */
+.form-control[disabled], 
+.form-control[readonly] {
+    /* Slightly lighter background for disabled fields */
+    background-color: #f8f9fa; 
+    /* Better text color contrast */
+    color: #495057; 
+    /* Ensure cursor is clearly not actionable */
+    cursor: not-allowed;
+    /* Optional: subtle border change */
+    border-color: #dee2e6;
 }
 
-/* Tooltip styling for slider value */
-.slider-value-box {
-    display: inline-block;
-    margin-left: 10px;
-    padding: 5px;
-    border-radius: 4px;
-    background-color: #f5f5f5;
-    font-size: 12px;
+/* ------------------------------------------- */
+/* 3. React Select Styling (for Person Responsible) */
+/* Targeting the disabled state of the React-Select component */
+.select-container .react-select__control--is-disabled {
+    background-color: #f8f9fa !important;
+    border-color: #dee2e6 !important;
+    box-shadow: none !important;
 }
 
-/* Responsive adjustments */
-/* @media (max-width: 576px) {
-    .slider-value-box {
-        font-size: 10px;
-    }
-    .ant-slider-handle {
-        width: 20px;
-        height: 20px;
-    }
-} */
+/* Ensures the text inside the disabled select is visible */
+.select-container .react-select__single-value--is-disabled {
+    color: #495057 !important;
+}
+
+/* ------------------------------------------- */
+/* 4. Labels and Required Asterisk */
+/* Make labels stand out */
+.form-label {
+    font-size: 0.95rem;
+    color: #343a40;
+    margin-bottom: 0.25rem; /* Reduce vertical space between label and input */
+}
+
+/* Style the required asterisk for visual impact */
+.text-danger {
+    margin-left: 3px;
+    font-weight: bold;
+}
