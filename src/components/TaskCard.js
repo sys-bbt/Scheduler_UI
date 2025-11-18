@@ -15,7 +15,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
     const isTaskFinished = task.Current_Status === COMPLETED_TASK_STATUS || task.Current_Status === NOT_REQUIRED_TASK_STATUS;
     const isTaskScheduled = displayStatus === SCHEDULED_STATUS;
 
-    // --- NEW LOGIC: Determine button widths and visibility ---
+    // --- LOGIC FIX: Determine button widths and visibility ---
     const showNotRequired = isAdmin;
     const completeButtonWidthClass = showNotRequired ? 'w-50 me-2' : 'w-100';
     // --------------------------------------------------------
@@ -28,7 +28,8 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
     return (
         <Col>
             <Card
-                className={`task-card ${isTaskFinished ? 'task-completed' : ''} ${isActive ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
+                // Added 'task-workflow-card' class for dedicated styling
+                className={`task-workflow-card ${isTaskFinished ? 'task-completed' : ''} ${isActive ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
                 style={{ cursor: isTaskScheduled ? 'default' : 'pointer' }}
                 onClick={() => onCardClick(task.Key, displayStatus)} 
             >
@@ -52,13 +53,12 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                     
                     {/* Status Buttons displayed ONLY when task is SCHEDULED and NOT Finished */}
                     {isTaskScheduled && !isTaskFinished && (
-                        // Use d-flex and space-between to align buttons horizontally
-                        <div className='d-flex justify-content-between mt-3' onClick={(e) => e.stopPropagation()}>
+                        // Added 'action-button-container' class for dedicated styling
+                        <div className='action-button-container d-flex justify-content-between mt-3' onClick={(e) => e.stopPropagation()}>
                             
-                            {/* COMPLETE Button (Width adjusts based on visibility of Not Required button) */}
+                            {/* COMPLETE Button (Width is dynamic) */}
                             <Button 
                                 variant="success" 
-                                // Use the calculated width class here
                                 className={`${completeButtonWidthClass} d-flex align-items-center justify-content-center`}
                                 title="Mark Complete" 
                                 onClick={(e) => {
@@ -70,7 +70,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                             </Button>
 
                             {/* NOT REQUIRED Button - Admin only */}
-                            {showNotRequired && ( // Now uses the new variable
+                            {showNotRequired && (
                                 <Button 
                                     variant="secondary" 
                                     className="w-50 ms-2 d-flex align-items-center justify-content-center"
@@ -89,7 +89,6 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                     {/* Form Rendering */}
                     {isActive && (
                         <div className="mt-3" onClick={(e) => e.stopPropagation()}> 
-                            <h6>Schedule Task: {task.Task_Details}</h6>
                             <FormComponent
                                 onSubmit={onFormSubmit}
                                 task={task}
