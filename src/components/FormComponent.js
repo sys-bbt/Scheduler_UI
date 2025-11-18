@@ -305,7 +305,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 )}
             </Form.Group>
 
-            <Button variant="primary" type="submit" //disabled={loading || isFieldDisabled}>
+            <Button variant="primary" type="submit" disabled={loading}>
                 {loading ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" /> : 'Update Task'}
             </Button>
         </Form>
