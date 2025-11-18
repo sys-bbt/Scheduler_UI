@@ -202,7 +202,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             const payload = {
                 mainTask: mainTaskPayload,
                 perKeyPerDayRows: perKeyPerDayRows,
-                requestingUserEmail: userEmail, // <-- ADDED for Admin 403 fix
+                requestingUserEmail: userEmail // <-- ADDED for Admin 403 fix
             };
 
             const response = await fetch(`${BACKEND_API_BASE_URL}/api/post`, {
