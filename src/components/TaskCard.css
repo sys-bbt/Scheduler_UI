@@ -1,8 +1,8 @@
-/* ================================================= */
-/* 2. Task Card Styling (Based on image_deae0d.png) */
-/* ================================================= */
+/* ================================================= 
+/* 2. Task Card Styling (Based on image_deae0d.png) 
+/* ================================================= 
 
-/* Applies to the main card structure */
+/* Applies to the main card structure 
 .task-workflow-card {
     border-radius: 12px;
     transition: transform 0.2s, box-shadow 0.2s;
@@ -10,13 +10,13 @@
     border: 1px solid #e0e0e0;
 }
 
-/* Hover effect */
+/* Hover effect 
 .task-workflow-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
 }
 
-/* Task Title */
+/* Task Title 
 .task-workflow-card .card-title {
     font-size: 1.15rem;
     font-weight: 700;
@@ -24,7 +24,7 @@
     margin-bottom: 10px;
 }
 
-/* Sub-details (Step ID, Responsibility, Status) */
+/* Sub-details (Step ID, Responsibility, Status) 
 .task-workflow-card .card-text {
     font-size: 0.9rem;
     line-height: 1.6;
@@ -35,7 +35,7 @@
     color: #6c757d;
 }
 
-/* Styling the Action Button Container (The green square) */
+/* Styling the Action Button Container (The green square) 
 .task-workflow-card .action-button-container {
     padding-top: 15px;
     border-top: 1px solid #f0f0f0;
@@ -43,8 +43,8 @@
 }
 
 /* Ensure the button takes proper shape */
-.task-workflow-card .btn {
+/*.task-workflow-card .btn {
     border-radius: 6px;
     padding: 10px 15px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-}
+}*/
