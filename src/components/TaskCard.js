@@ -34,8 +34,8 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                 onClick={() => onCardClick(task.Key, displayStatus)} 
             >
                 <Card.Body>
-                    <Card.Title>{task.Task_Details}</Card.Title>
-                    <Card.Text className="text-start">
+                    <Card.Title className="text-start">{task.Task_Details}</Card.Title> {/* ADDED text-start */}
+                    <Card.Text className="text-start"> {/* ENSURE text-start is HERE */}
                         <strong>Step ID:</strong> {task.Step_ID}<br />
                             <strong>Responsibility:</strong> {task.Responsibility}<br />
                         <strong className={isTaskScheduled ? 'text-info' : ''}>Status:</strong> {displayStatus}
