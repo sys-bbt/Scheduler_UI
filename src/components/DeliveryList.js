@@ -14,7 +14,7 @@ import moment from 'moment';
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
 const ADMIN_EMAILS_FRONTEND = [
-   
+    "systems@brightbraintech.com",
     "neelam.p@brightbraintech.com",
     "meghna.j@brightbraintech.com",
     "divya.s@brightbraintech.com",
