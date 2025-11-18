@@ -17,7 +17,6 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
 
     // --- LOGIC: Determine button widths and visibility ---
     const showNotRequired = isAdmin;
-    // Re-added dynamic class logic
     const completeButtonWidthClass = showNotRequired ? 'w-50 me-2' : 'w-100';
     // --------------------------------------------------------
 
@@ -29,24 +28,22 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
     return (
         <Col> {/* Re-added Col for grid layout */}
             <Card
-                // Restored necessary classes (using a simple 'task-card' as a container)
+                // NOTE: The comment that caused the error has been removed or moved.
                 className={`task-card ${isTaskFinished ? 'task-completed' : ''} ${isActive ? 'active-task' : ''} ${isTaskScheduled ? 'task-scheduled-uneditable' : ''}`}
                 style={{ cursor: isTaskScheduled ? 'default' : 'pointer' }}
                 onClick={() => onCardClick(task.Key, displayStatus)} 
             >
                 <Card.Body>
                     <Card.Title>{task.Task_Details}</Card.Title>
-                    <Card.Text className="text-start"> {/* Added text-start for left alignment */}
+                    <Card.Text className="text-start">
                         <strong>Step ID:</strong> {task.Step_ID}<br />
-                        <strong>Responsibility:</strong> {task.Responsibility}<br />
+                            <strong>Responsibility:</strong> {task.Responsibility}<br />
                         <strong className={isTaskScheduled ? 'text-info' : ''}>Status:</strong> {displayStatus}
                     </Card.Text>
                     
                     {/* --- Metadata Section --- */}
-                    {/* Restored d-flex, justify-content-start, and mt-3 for alignment/spacing */}
                     <div className="d-flex justify-content-start align-items-center mt-3">
                         {rawPlannedStartTimestamp && (
-                            {/* Restored text-muted and margin style */}
                             <p className="text-muted mb-0">
                                 <FaCalendarAlt style={{ marginRight: '5px' }} />
                                 Start: {moment.utc(rawPlannedStartTimestamp).format('YYYY-MM-DD')}
@@ -56,10 +53,9 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                     
                     {/* Status Buttons displayed ONLY when task is SCHEDULED and NOT Finished */}
                     {isTaskScheduled && !isTaskFinished && (
-                        {/* Restored d-flex, justify-content-between, mt-3 for button layout */}
                         <div className='d-flex justify-content-between mt-3' onClick={(e) => e.stopPropagation()}>
                             
-                            {/* COMPLETE Button (Restored dynamic width and alignment classes) */}
+                            {/* COMPLETE Button */}
                             <Button 
                                 variant="success" 
                                 className={`${completeButtonWidthClass} d-flex align-items-center justify-content-center`}
@@ -72,7 +68,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                                 <FaCheckCircle size={20} />
                             </Button>
 
-                            {/* NOT REQUIRED Button - Admin only (Restored width and alignment classes) */}
+                            {/* NOT REQUIRED Button - Admin only */}
                             {showNotRequired && (
                                 <Button 
                                     variant="secondary" 
@@ -91,7 +87,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
 
                     {/* Form Rendering */}
                     {isActive && (
-                        <div className="mt-3" onClick={(e) => e.stopPropagation()}>  {/* Restored mt-3 */}
+                        <div className="mt-3" onClick={(e) => e.stopPropagation()}> 
                             <FormComponent
                                 onSubmit={onFormSubmit}
                                 task={task}
