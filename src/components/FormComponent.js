@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Form, Button, Spinner, Alert, Row, Col } from 'react-bootstrap'; // Added Row, Col for better layout
+import { Form, Button, Spinner, Alert, Card, Row, Col } from 'react-bootstrap';
 import Select from 'react-select';
 import moment from 'moment';
 import { UserContext } from './UserContext'; 
@@ -53,9 +53,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     // 1. Initialize formData from the task prop
     useEffect(() => {
         if (task) {
-            // DEBUG LINE
-            console.log("Task Key received by FormComponent:", task.Key, "for Step ID:", task.Step_ID); 
-            
             const rawStartDate = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
                 ? task.Planned_Start_Timestamp.value
                 : task.Planned_Start_Timestamp;
@@ -155,7 +152,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         setError(null);
         setSuccess(null);
 
-        // Check for Date Picker restriction validation 
+        // Date restriction validation: Planned To Work On must be before the Delivery Deadline
         if (formData.Planned_Start_Timestamp && formData.Planned_Delivery_Timestamp && 
             formData.Planned_Start_Timestamp.isSameOrAfter(formData.Planned_Delivery_Timestamp, 'day')) {
             setError("Planned To Work On date must be before the Delivery Deadline.");
@@ -163,16 +160,15 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             return;
         }
 
-        // CRITICAL VALIDATION: Check if Key is valid (now receiving it from the backend fix)
         const taskKey = String(formData.Key).trim(); 
         if (!taskKey || taskKey === '0') {
-             setError("Cannot update task: Unique Task Key is missing or invalid. Please check backend data.");
-             setLoading(false);
-             return;
+            setError("Cannot update task: Unique Task Key is missing or invalid.");
+            setLoading(false);
+            return;
         }
 
         if (!formData.Planned_Start_Timestamp || !formData.Planned_Start_Timestamp.isValid() || !formData.Responsibility) {
-            setError("Please fill all required fields: Start Date and Person Responsible.");
+            setError("Please fill all required fields: Planned To Work On and Person Responsible.");
             setLoading(false);
             return;
         }
@@ -199,7 +195,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 });
             }
 
-            // This is the payload block, ensured to be syntactically clean
             const payload = {
                 mainTask: mainTaskPayload,
                 perKeyPerDayRows: perKeyPerDayRows,
@@ -220,7 +215,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             }
 
             await response.json(); 
-            
             setSuccess('Task and schedule updated successfully!');
             onSubmit(formData); 
         } catch (err) {
@@ -238,7 +232,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         label: p.Current_Employes 
     }));
 
-    // Logic for pre-populating the selected person
+    // Pre-populating the selected person logic
     let selectedPerson = personsToDisplay.find(p => p.value === formData.Emails);
     
     if (!selectedPerson && formData.Responsibility) {
@@ -251,77 +245,92 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     // Disabling logic for Person Responsible (Admin-only change)
     const isResponsibilityDisabled = !isAdmin;
 
-    // Logic for setting the maximum selectable date (Delivery Deadline)
+    // Max selectable date (Planned To Work On must be before Delivery Deadline)
     const maxDate = formData.Planned_Delivery_Timestamp
-        ? formData.Planned_Delivery_Timestamp.clone().subtract(1, 'day').format('YYYY-MM-DD') // Corrected logic: must be before the deadline, so subtract one day.
+        ? formData.Planned_Delivery_Timestamp.clone().subtract(1, 'day').format('YYYY-MM-DD') 
         : undefined;
 
     return (
-        <Form onSubmit={handleSubmit} className="p-3 border rounded shadow-sm bg-light" style={{ maxWidth: '450px', margin: '0 auto' }}>
-            {error && <Alert variant="danger">{error}</Alert>}
-            {success && <Alert variant="success">{success}</Alert>}
-            {personError && <Alert variant="warning">{personError}</Alert>}
+        // Added 'schedule-task-card' class for dedicated styling
+        <Card className="schedule-task-card p-3 mx-auto" style={{ maxWidth: '600px' }}>
+            <Card.Header className="bg-white text-dark border-0">
+                <h6 className="mb-0">Schedule Task: {task?.Short_Description || task?.Task_Details}</h6>
+            </Card.Header>
+            <Card.Body>
+                <Form onSubmit={handleSubmit}>
+                    {error && <Alert variant="danger">{error}</Alert>}
+                    {success && <Alert variant="success">{success}</Alert>}
+                    {personError && <Alert variant="warning">{personError}</Alert>}
 
-            <Form.Group className="mb-3">
-                <Form.Label>Task Details</Form.Label>
-                <Form.Control
-                    type="text"
-                    name="Task_Details"
-                    value={formData.Task_Details}
-                    onChange={handleChange}
-                    disabled={true} 
-                    required
-                />
-            </Form.Group>
+                    {/* Task Details - Always disabled and visible */}
+                    <Form.Group className="mb-3">
+                        <Form.Label>Task Details</Form.Label>
+                        <Form.Control
+                            type="text"
+                            name="Task_Details"
+                            value={formData.Task_Details}
+                            disabled={true} 
+                            required
+                        />
+                    </Form.Group>
 
-            {/* Layout: Placing dates and person in a single column for better arrangement */}
+                    {/* Dates - Using Row/Col for cleaner side-by-side or stacked layout on mobile */}
+                    <Row className="mb-3">
+                        {/* Planned To Work On (Input) */}
+                        <Col md={6} className="mb-3 mb-md-0">
+                            <Form.Group>
+                                <Form.Label>Planned To Work On<span className="text-danger">*</span></Form.Label> 
+                                <Form.Control
+                                    type="date"
+                                    name="Planned_Start_Timestamp"
+                                    value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
+                                    onChange={handleStartDateChange}
+                                    max={maxDate} 
+                                    required
+                                />
+                            </Form.Group>
+                        </Col>
+                        {/* Delivery Deadline (Static) */}
+                        <Col md={6}>
+                            <Form.Group>
+                                <Form.Label>Delivery Deadline</Form.Label>
+                                <Form.Control
+                                    type="date"
+                                    name="Planned_Delivery_Timestamp"
+                                    value={formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : ''}
+                                    readOnly
+                                    disabled={true}
+                                />
+                            </Form.Group>
+                        </Col>
+                    </Row>
+                    
+                    {/* Person Responsible (Select) */}
+                    <Form.Group className="mb-4">
+                        <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
+                        <Select
+                            name="Responsibility"
+                            options={personsToDisplay}
+                            value={selectedPerson} 
+                            onChange={handlePersonSelect}
+                            isDisabled={isResponsibilityDisabled || loadingPersons} 
+                            placeholder="Select Person"
+                            isClearable
+                            required
+                        />
+                        {isResponsibilityDisabled && ( 
+                            <Form.Text className="text-muted">
+                                This task is already assigned and can only be changed by an Admin.
+                            </Form.Text>
+                        )}
+                    </Form.Group>
 
-            <Form.Group className="mb-3">
-                <Form.Label>Planned To Work On<span className="text-danger">*</span></Form.Label> 
-                <Form.Control
-                    type="date"
-                    name="Planned_Start_Timestamp"
-                    value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
-                    onChange={handleStartDateChange}
-                    max={maxDate} 
-                    required
-                />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-                <Form.Label>Delivery Deadline</Form.Label>
-                <Form.Control
-                    type="date"
-                    name="Planned_Delivery_Timestamp"
-                    value={formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.format('YYYY-MM-DD') : ''}
-                    readOnly
-                    disabled={true}
-                />
-            </Form.Group>
-
-            <Form.Group className="mb-4">
-                <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
-                <Select
-                    name="Responsibility"
-                    options={personsToDisplay}
-                    value={selectedPerson} 
-                    onChange={handlePersonSelect}
-                    isDisabled={isResponsibilityDisabled || loadingPersons} 
-                    placeholder="Select Person"
-                    isClearable
-                    required
-                />
-                {isResponsibilityDisabled && ( 
-                    <Form.Text className="text-muted">
-                        This task is already assigned and can only be changed by an Admin.
-                    </Form.Text>
-                )}
-            </Form.Group>
-
-            <Button variant="primary" type="submit" disabled={loading}> 
-                {loading ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" /> : 'Update Task'}
-            </Button>
-        </Form>
+                    <Button variant="primary" type="submit" disabled={loading} className="w-100"> 
+                        {loading ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" /> : 'Update Task'}
+                    </Button>
+                </Form>
+            </Card.Body>
+        </Card>
     );
 };
 
