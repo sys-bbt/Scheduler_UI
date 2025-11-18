@@ -66,7 +66,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                             </Button>
 
                             {/* NOT REQUIRED Button - Admin only (Now an Icon Button) */}
-                            {isAdmin && (
+                            
                                 <Button 
                                     variant="secondary" 
                                     className="w-50 ms-2 d-flex align-items-center justify-content-center"
@@ -78,7 +78,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                                 >
                                     <FaTimesCircle size={20} />
                                 </Button>
-                            )}
+                           
                         </div>
                     )}
 
