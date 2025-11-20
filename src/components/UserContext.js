@@ -1,14 +1,31 @@
-import React, { createContext, useState } from 'react';
+// src/components/UserContext.js
+import React, { createContext, useState, useEffect, useContext } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
-import { jwtDecode } from 'jwt-decode'; // Make sure 'jwt-decode' is installed
+import { jwtDecode } from 'jwt-decode';
+import axios from 'axios'; // We need axios for the backend call
+
+// --- CONFIGURATION ---
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+const ADMIN_CACHE_DURATION = 5 * 60 * 1000; // Client-side cache for 5 minutes
 
 // Create the UserContext
 export const UserContext = createContext(null);
+
+// Custom hook for easier consumption (like useUser)
+export const useUser = () => {
+    return useContext(UserContext);
+};
 
 // Define the UserProvider component
 export const UserProvider = ({ children }) => {
     const [userEmail, setUserEmail] = useState(localStorage.getItem('userEmail') || null);
     const [userName, setUserName] = useState(localStorage.getItem('userName') || null);
+    
+    // 🚀 NEW STATE FOR ADMIN CHECK 🚀
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [isLoadingAdmin, setIsLoadingAdmin] = useState(true);
+    const [adminEmails, setAdminEmails] = useState([]);
+
 
     const loginUser = (email, name) => {
         setUserEmail(email);
@@ -20,48 +37,104 @@ export const UserProvider = ({ children }) => {
     const logoutUser = () => {
         setUserEmail(null);
         setUserName(null);
+        setIsAdmin(false); // Reset admin status
         localStorage.removeItem('userEmail');
         localStorage.removeItem('userName');
-        localStorage.removeItem('authToken'); // Also remove authToken on logout
+        localStorage.removeItem('authToken');
     };
+
+    // 1. --- FETCH ADMIN EMAILS FROM BACKEND ---
+    useEffect(() => {
+        const fetchAdmins = async () => {
+            if (!userEmail) {
+                // If no user is logged in, skip fetching admins
+                setIsLoadingAdmin(false);
+                return;
+            }
+            
+            try {
+                console.log("Context: Fetching admin list from backend...");
+                const response = await axios.get(`${API_URL}/api/admins`);
+                const fetchedEmails = response.data;
+                
+                setAdminEmails(fetchedEmails);
+                console.log(`Context: Fetched ${fetchedEmails.length} admin emails.`);
+                
+            } catch (error) {
+                console.error("Context: Error fetching admin emails:", error.message);
+                setAdminEmails([]); // Fail safe to an empty list
+            } finally {
+                setIsLoadingAdmin(false);
+            }
+        };
+
+        // Only fetch if a user is logged in and we haven't fetched recently (optional client-side cache logic omitted for simplicity, relying on backend cache)
+        if (userEmail) {
+            fetchAdmins();
+        }
+
+    }, [userEmail]); // Re-run only when userEmail changes (i.e., on login/logout)
+
+    // 2. --- DETERMINE ADMIN STATUS ---
+    useEffect(() => {
+        if (!isLoadingAdmin && userEmail) {
+            // Check if the current user's email is in the fetched list
+            const isUserAdmin = adminEmails.includes(userEmail);
+            setIsAdmin(isUserAdmin);
+            console.log(`Context: User ${userEmail} Admin Status: ${isUserAdmin}`);
+        } else if (!userEmail) {
+            setIsAdmin(false); // Not logged in, definitely not admin
+        }
+        // This effect runs whenever adminEmails or userEmail changes *after* loading finishes
+    }, [userEmail, adminEmails, isLoadingAdmin]);
+
 
     const contextValue = {
         userEmail,
         userName,
         loginUser,
         logoutUser,
+        
+        // 🚀 NEW CONTEXT VALUES 🚀
+        isAdmin,
+        isLoadingAdmin,
+        adminEmails,
     };
 
     return (
         <UserContext.Provider value={contextValue}>
-            {children}
+            {/* You can add a global loading indicator here if needed */}
+            {isLoadingAdmin && userEmail ? (
+                 <div style={{ padding: '20px', textAlign: 'center' }}>
+                     Loading user privileges...
+                 </div>
+            ) : children}
         </UserContext.Provider>
     );
 };
 
-// A simple Login Component to demonstrate Google login within the app
+// A simple Login Component (kept mostly the same)
 export const LoginComponent = () => {
-    const { loginUser } = React.useContext(UserContext);
+    const { loginUser } = useUser(); // Use the custom hook
 
     const handleGoogleSuccess = (credentialResponse) => {
         try {
             const decodedToken = jwtDecode(credentialResponse.credential);
             const email = decodedToken.email;
             const name = decodedToken.name;
-            const authToken = credentialResponse.credential; // Get the raw credential as authToken
+            const authToken = credentialResponse.credential;
 
             if (email) {
                 loginUser(email, name);
                 
-                // Ensure authToken is a string before storing
                 if (typeof authToken === 'string' && authToken.length > 0) {
-                    console.log("LoginComponent: Storing authToken in localStorage.");
                     localStorage.setItem('authToken', authToken);
                 } else {
                     console.warn("LoginComponent: authToken is not a valid string. Not storing.");
                 }
                 
-                window.location.href = '/'; // Force a page reload to reset state/router
+                // Use a proper navigation method if possible, or keep the reload:
+                window.location.href = '/';
             } else {
                 console.error("Email not found in Google credential response.");
             }
