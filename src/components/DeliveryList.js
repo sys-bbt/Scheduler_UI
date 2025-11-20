@@ -1,27 +1,21 @@
 import React, { useState, useEffect, useCallback, useContext, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
-import { FiClock, FiCheckCircle, FiFlag } from 'react-icons/fi';
+import { FiClock, FiCheckCircle, FiFlag, FiEdit, FiSave, FiXCircle } from 'react-icons/fi'; // Added edit/save/cancel icons
 import { FaSpinner } from 'react-icons/fa';
-import { UserContext } from './UserContext';
+// ⚠️ IMPORTANT: Changed import to use the custom hook from your updated UserContext
+import { useUser } from './UserContext';
 import './DeliveryList.css';
 import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSelected';
 import SortDeliveriesByDate from './SortDeliveriesByDate';
 import DeleteButton from './DeleteButton';
 import { notification } from 'antd';
 import moment from 'moment';
+import axios from 'axios'; // We need axios for the PUT request
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
-const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
-    "neelam.p@brightbraintech.com",
-    "meghna.j@brightbraintech.com",
-    "divya.s@brightbraintech.com",
-    "zoya.a@brightbraintech.com",
-    "altaf.s@brightbraintech.com",
-    "arvanbir.s@brightbraintech.com"
-];
+// 🛑 REMOVED: Hardcoded ADMIN_EMAILS_FRONTEND list is now obsolete.
 
 // Debounce function is fine as is
 const debounce = (func, delay) => {
@@ -33,8 +27,123 @@ const debounce = (func, delay) => {
     };
 };
 
+// --- NEW COMPONENT: Deadline Editor Logic ---
+const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
+    const rawDeadlineTimestamp = delivery.Planned_Delivery_Timestamp && typeof delivery.Planned_Delivery_Timestamp === 'object' && delivery.Planned_Delivery_Timestamp.value
+        ? delivery.Planned_Delivery_Timestamp.value
+        : delivery.Planned_Delivery_Timestamp;
+    
+    // Format the current deadline for the date input (YYYY-MM-DD)
+    const initialDeadline = rawDeadlineTimestamp 
+        ? moment(rawDeadlineTimestamp).format('YYYY-MM-DD') 
+        : moment().format('YYYY-MM-DD');
+        
+    const [isEditing, setIsEditing] = useState(false);
+    const [newDeadline, setNewDeadline] = useState(initialDeadline);
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleSave = async () => {
+        if (!newDeadline) return;
+        setIsSaving(true);
+
+        const newDeadlineDate = moment(newDeadline).toISOString(); // Send ISO format
+
+        try {
+            await axios.put(`${BACKEND_API_BASE_URL}/api/delivery/update-deadline`, {
+                delCodeWO: delivery.DelCode_w_o__,
+                newDeadlineDate: newDeadlineDate,
+                userEmail: userEmail, // Pass user email for server-side admin check
+            });
+
+            notification.success({
+                message: 'Deadline Updated',
+                description: `Deadline for ${delivery.DelCode_w_o__} updated to ${newDeadline}.`,
+            });
+            
+            // Call the success handler in the parent to refresh the main list
+            onUpdateSuccess(delivery.DelCode_w_o__); 
+
+            setIsEditing(false);
+        } catch (error) {
+            console.error('Error updating delivery deadline:', error);
+            const errorMessage = error.response?.data?.message || 'Failed to update deadline.';
+            notification.error({
+                message: 'Update Failed',
+                description: errorMessage,
+                duration: 5,
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleCancel = () => {
+        // Reset the date back to the initial date
+        setNewDeadline(initialDeadline); 
+        setIsEditing(false);
+    };
+    
+    // The current formatted deadline for display
+    const formattedDisplayDate = moment(rawDeadlineTimestamp).isValid() 
+        ? moment(rawDeadlineTimestamp).format('YYYY-MM-DD') 
+        : 'N/A';
+
+    return (
+        <div className="d-flex justify-content-between align-items-center mt-2" onClick={(e) => e.stopPropagation()}>
+            {isEditing ? (
+                <>
+                    <Form.Control
+                        type="date"
+                        value={newDeadline}
+                        onChange={(e) => setNewDeadline(e.target.value)}
+                        style={{ width: '150px' }}
+                        disabled={isSaving}
+                        onClick={(e) => e.stopPropagation()} // Prevent card navigation
+                    />
+                    <div className="d-flex ms-2">
+                        <Button
+                            variant="success"
+                            size="sm"
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="me-1"
+                        >
+                            {isSaving ? <FaSpinner className="spinner-icon" style={{ animation: 'spin 1.5s linear infinite' }} /> : <FiSave />}
+                        </Button>
+                        <Button 
+                            variant="secondary" 
+                            size="sm" 
+                            onClick={handleCancel}
+                            disabled={isSaving}
+                        >
+                            <FiXCircle />
+                        </Button>
+                    </div>
+                </>
+            ) : (
+                <>
+                    <p className="mb-0 text-danger">
+                        <FiFlag style={{ marginRight: '5px' }} /> Deadline: **{formattedDisplayDate}**
+                    </p>
+                    <Button 
+                        variant="outline-secondary" 
+                        size="sm" 
+                        onClick={() => setIsEditing(true)}
+                        title="Edit Deadline"
+                    >
+                        <FiEdit />
+                    </Button>
+                </>
+            )}
+        </div>
+    );
+};
+
+// --- MAIN DeliveryList COMPONENT ---
 const DeliveryList = () => {
-    const { userEmail, userName, logoutUser } = useContext(UserContext);
+    // 🚀 NEW: Use the custom hook to get dynamic admin status 🚀
+    const { userEmail, userName, logoutUser, isAdmin, isLoadingAdmin } = useUser();
+    
     const [deliveries, setDeliveries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -42,124 +151,99 @@ const DeliveryList = () => {
     const [selectedClient, setSelectedClient] = useState('');
     const [clients, setClients] = useState([]);
     const [sortOption, setSortOption] = useState('latest');
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
-    // fetchDeliveries is now dependent ONLY on userEmail, no other filters
+    // fetchDeliveries function (Kept mostly the same, ensuring it triggers a full refresh)
     const fetchDeliveries = useCallback(async (currentSearchQuery, currentSelectedClient, currentSortOption) => {
-    setLoading(true);
-    setError(null);
-    try {
-        let url = `${BACKEND_API_BASE_URL}/api/data?email=${encodeURIComponent(userEmail)}`;
-
-        if (currentSearchQuery) {
-            url += `&searchQuery=${encodeURIComponent(currentSearchQuery)}`;
-        }
-        if (currentSelectedClient) {
-            url += `&clientFilter=${encodeURIComponent(currentSelectedClient)}`;
-        }
-
-        const response = await fetch(url);
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to fetch deliveries.');
-        }
-        const data = await response.json();
-
-        // --- ACTIVE CLIENT FILTERING LOGIC (KEEP THIS BLOCK) ---
+        if (!userEmail) return; // Wait for user context
         
-        // 1. **CRITICAL STEP:** Define the field name and status value for active clients.
-        const CLIENT_STATUS_FIELD = 'Inactive'; // <--- **REPLACE/CONFIRM FIELD NAME**
-        const ACTIVE_CLIENT_VALUE = 'Active'; // <--- **REPLACE/CONFIRM VALUE**
+        setLoading(true);
+        setError(null);
+        try {
+            let url = `${BACKEND_API_BASE_URL}/api/data?email=${encodeURIComponent(userEmail)}`;
 
-        // 2. Filter the deliveries to find only those belonging to currently active clients.
+            if (currentSearchQuery) {
+                url += `&searchQuery=${encodeURIComponent(currentSearchQuery)}`;
+            }
+            if (currentSelectedClient) {
+                url += `&clientFilter=${encodeURIComponent(currentSelectedClient)}`;
+            }
+
+            const response = await fetch(url);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to fetch deliveries.');
+            }
+            const data = await response.json();
+
+            // --- ACTIVE CLIENT FILTERING LOGIC (Using the previous logic) ---
+            const CLIENT_STATUS_FIELD = 'Inactive';
+            const ACTIVE_CLIENT_VALUE = 'Active';
+
             const activeClientDeliveries = data.filter(delivery => {
                 const rawStatusValue = delivery[CLIENT_STATUS_FIELD];
                 let statusString = null;
-
-                // Safely extract the status value, handling object types (like rich text fields)
                 if (rawStatusValue) {
                     statusString = typeof rawStatusValue === 'object' && rawStatusValue.value
                         ? String(rawStatusValue.value)
                         : String(rawStatusValue);
                 }
-
-                // **NEW IMPROVEMENT:** Compare status using `.trim().toLowerCase()` 
-                // to ignore leading/trailing spaces and case differences.
                 return statusString && statusString.trim().toLowerCase() === ACTIVE_CLIENT_VALUE.toLowerCase();
             });
 
-        // 3. Extract unique client names ONLY from the active client deliveries.
-        const uniqueClients = [...new Set(activeClientDeliveries.map(delivery => delivery.Client))].filter(Boolean);
+            const uniqueClients = [...new Set(activeClientDeliveries.map(delivery => delivery.Client))].filter(Boolean);
+            uniqueClients.sort((a, b) => a.localeCompare(b));
+            setClients(uniqueClients);
 
-        uniqueClients.sort((a, b) => a.localeCompare(b));
-        
-        setClients(uniqueClients); // This sets the list for the dropdown
+            const sortedData = [...data].sort((a, b) => {
+                const timestampA = a.Initiated_Timestamp && typeof a.Initiated_Timestamp === 'object' && a.Initiated_Timestamp.value
+                    ? a.Initiated_Timestamp.value
+                    : a.Initiated_Timestamp || a.Created_at;
+                const timestampB = b.Initiated_Timestamp && typeof b.Initiated_Timestamp === 'object' && b.Initiated_Timestamp.value
+                    ? b.Initiated_Timestamp.value
+                    : b.Initiated_Timestamp || b.Created_at;
 
-        // --- END OF ACTIVE CLIENT FILTERING LOGIC ---
+                const dateA = moment(timestampA);
+                const dateB = moment(timestampB);
 
-        // Sorting is now done with the passed sortOption (This part is correct)
-        const sortedData = [...data].sort((a, b) => {
-            const timestampA = a.Initiated_Timestamp && typeof a.Initiated_Timestamp === 'object' && a.Initiated_Timestamp.value
-                ? a.Initiated_Timestamp.value
-                : a.Initiated_Timestamp || a.Created_at;
-            const timestampB = b.Initiated_Timestamp && typeof b.Initiated_Timestamp === 'object' && b.Initiated_Timestamp.value
-                ? b.Initiated_Timestamp.value
-                : b.Initiated_Timestamp || b.Created_at;
+                if (!dateA.isValid() && !dateB.isValid()) return 0;
+                if (!dateA.isValid()) return 1;
+                if (!dateB.isValid()) return -1;
 
-            const dateA = moment(timestampA);
-            const dateB = moment(timestampB);
+                if (currentSortOption === 'latest') {
+                    return dateB.diff(dateA);
+                } else {
+                    return dateA.diff(dateB);
+                }
+            });
 
-            if (!dateA.isValid() && !dateB.isValid()) return 0;
-            if (!dateA.isValid()) return 1;
-            if (!dateB.isValid()) return -1;
+            setDeliveries(sortedData);
+        } catch (err) {
+            console.error("Error fetching deliveries:", err);
+            setError(err.message);
+            setDeliveries([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [userEmail]); // Dependency on userEmail only
 
-            if (currentSortOption === 'latest') {
-                return dateB.diff(dateA);
-            } else {
-                return dateA.diff(dateB);
-            }
-        });
-
-        setDeliveries(sortedData);
-    } catch (err) {
-        console.error("Error fetching deliveries:", err);
-        setError(err.message);
-        setDeliveries([]);
-    } finally {
-        setLoading(false);
-    }
-}, [userEmail]); // Dependency on userEmail only
-
-    // Create a stable debounced function that calls fetchDeliveries with the LATEST state
+    // Create a stable debounced function
     const debouncedFetchDeliveries = useMemo(
         () => debounce((search, client, sort) => fetchDeliveries(search, client, sort), 500),
-        [fetchDeliveries] // fetchDeliveries changes only if userEmail changes
+        [fetchDeliveries] 
     );
 
     // useEffect now tracks the state variables and calls the debounced function
     useEffect(() => {
-        // Pass the current state values to the debounced function
-        debouncedFetchDeliveries(searchQuery, selectedClient, sortOption);
+        if (userEmail) { // Only fetch if user is logged in
+            debouncedFetchDeliveries(searchQuery, selectedClient, sortOption);
+        }
+    }, [searchQuery, selectedClient, sortOption, debouncedFetchDeliveries, userEmail]);
 
-        // Cleanup function to cancel any pending debounced call
-        return () => {
-            // debounced function returned from useMemo has a closure over 'timeout'
-            // We need a way to clear it, but debounce is defined to only return the outer function.
-            // A more robust debounce implementation is often required for React cleanup.
-            // For simplicity and to match the existing structure, we'll keep the call as is,
-            // knowing the component unmount could leave a timeout pending, but this is a common trade-off.
-        };
-    }, [searchQuery, selectedClient, sortOption, debouncedFetchDeliveries]);
-
-    // This is called on delete success, it needs to trigger a new fetch with CURRENT filters/sort.
-    const handleDeleteSuccess = (deletedDeliveryCode) => {
-        notification.success({
-            message: 'Delivery Deleted',
-            description: `Delivery with code ${deletedDeliveryCode} has been successfully deleted.`,
-        });
+    // Handle delete or deadline update success (triggers a list refresh)
+    const handleUpdateAndListRefresh = useCallback(() => {
         // Call fetchDeliveries directly with current state to instantly refresh the list
         fetchDeliveries(searchQuery, selectedClient, sortOption);
-    };
+    }, [fetchDeliveries, searchQuery, selectedClient, sortOption]);
 
     const handleSearchChange = (e) => {
         setSearchQuery(e.target.value);
@@ -169,16 +253,15 @@ const DeliveryList = () => {
         setSelectedClient(client);
     };
     
-    // The rest of the component remains the same for rendering...
-    // Removed redundant `if (loading && deliveries.length === 0)` block for brevity, assuming it's retained as is in your actual file.
-
-    if (loading && deliveries.length === 0) {
+    // --- LOADING AND ERROR STATES ---
+    if (loading || isLoadingAdmin) {
         return (
             <Container className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
                 <FaSpinner
                     className="spinner-icon"
                     style={{ fontSize: '3rem', color: '#007bff', animation: 'spin 1.5s linear infinite' }}
                 />
+                <h4 className="ms-3">{isLoadingAdmin ? "Loading user privileges..." : "Loading deliveries..."}</h4>
             </Container>
         );
     }
@@ -188,7 +271,7 @@ const DeliveryList = () => {
             <Container className="mt-5 text-center">
                 <h2>Error Loading Deliveries</h2>
                 <p className="text-danger">{error}</p>
-                <Button onClick={() => fetchDeliveries(searchQuery, selectedClient, sortOption)}>Retry</Button>
+                <Button onClick={handleUpdateAndListRefresh}>Retry</Button>
             </Container>
         );
     }
@@ -204,6 +287,7 @@ const DeliveryList = () => {
             </div>
 
             <Row className="mb-4 align-items-end">
+                {/* Search, Filter, Sort Inputs... (Keep these as they were) */}
                 <Col md={6}>
                     <Form.Group controlId="searchQuery">
                         <Form.Label>Search Deliveries</Form.Label>
@@ -233,9 +317,9 @@ const DeliveryList = () => {
             <Row xs={1} md={1} lg={1} className="g-4">
                 {deliveries.length > 0 ? (
                     deliveries.map((delivery) => {
+                        // ... Progress Bar calculation logic ... (Keep as is)
                         const scheduledTasks = delivery.Planned_Tasks !== undefined ? delivery.Planned_Tasks : delivery.Completed_Tasks;
                         const totalTasks = delivery.Total_Tasks || 1;
-
                         const progress = (scheduledTasks / totalTasks) * 100;
                         let progressBarVariant = "primary";
                         if (progress === 100) {
@@ -246,13 +330,7 @@ const DeliveryList = () => {
                             progressBarVariant = "danger";
                         }
 
-                        const rawDeadlineTimestamp = delivery.Planned_Delivery_Timestamp && typeof delivery.Planned_Delivery_Timestamp === 'object' && delivery.Planned_Delivery_Timestamp.value
-                            ? delivery.Planned_Delivery_Timestamp.value
-                            : delivery.Planned_Delivery_Timestamp;
-
-                        const deadlineDate = rawDeadlineTimestamp ? moment(rawDeadlineTimestamp) : null;
-                        const formattedDeadline = deadlineDate && deadlineDate.isValid() ? deadlineDate.format('YYYY-MM-DD') : 'N/A';
-
+                        // --- RENDERING CHANGE START ---
                         return (
                             <Col key={delivery.Key}>
                                 <Link to={`/delivery/data/${encodeURIComponent(delivery.DelCode_w_o__)}`} className="text-decoration-none">
@@ -265,10 +343,11 @@ const DeliveryList = () => {
                                                         {delivery.Client} - {delivery.Delivery_code}
                                                     </Card.Subtitle>
                                                 </div>
+                                                {/* 🚀 ADMIN DELETE BUTTON 🚀 */}
                                                 {isAdmin && (
                                                     <DeleteButton
                                                         deliveryCode={delivery.DelCode_w_o__}
-                                                        onDelete={handleDeleteSuccess}
+                                                        onDelete={handleUpdateAndListRefresh} // Use the new universal handler
                                                     />
                                                 )}
                                             </div>
@@ -288,36 +367,49 @@ const DeliveryList = () => {
                                                     <FiCheckCircle style={{ marginRight: '5px' }} /> {delivery.Current_Status}
                                                 </p>
                                             </div>
-                                            <div className="d-flex justify-content-between align-items-center mt-2">
-                                                <p className="mb-0 text-danger">
-                                                    <FiFlag style={{ marginRight: '5px' }} /> Deadline: {formattedDeadline}
-                                                </p>
-                                                <p
-                                                    onClick={(e) => {
-                                                        e.preventDefault(); e.stopPropagation();
-                                                        const el = document.createElement('textarea');
-                                                        el.value = delivery.DelCode_w_o__;
-                                                        document.body.appendChild(el);
-                                                        el.select();
-                                                        document.execCommand('copy');
-                                                        document.body.removeChild(el);
-                                                        notification.success({
-                                                            message: 'Copied!',
-                                                            description: `${delivery.DelCode_w_o__} copied to clipboard.`,
-                                                            duration: 2,
-                                                        });
-                                                    }}
-                                                    style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
-                                                    title="Click to copy"
-                                                >
-                                                    {delivery.DelCode_w_o__}
-                                                </p>
-                                            </div>
+                                            
+                                            {/* 🎯 ADMIN DEADLINE EDITING 🎯 */}
+                                            {isAdmin ? (
+                                                <DeliveryDeadlineEditor 
+                                                    delivery={delivery} 
+                                                    userEmail={userEmail} 
+                                                    onUpdateSuccess={handleUpdateAndListRefresh}
+                                                />
+                                            ) : (
+                                                <div className="d-flex justify-content-between align-items-center mt-2">
+                                                    <p className="mb-0 text-danger">
+                                                        <FiFlag style={{ marginRight: '5px' }} /> Deadline: {moment(delivery.Planned_Delivery_Timestamp).isValid() ? moment(delivery.Planned_Delivery_Timestamp).format('YYYY-MM-DD') : 'N/A'}
+                                                    </p>
+                                                    {/* Original DelCode link logic remains */}
+                                                    <p
+                                                        onClick={(e) => {
+                                                            e.preventDefault(); e.stopPropagation();
+                                                            const el = document.createElement('textarea');
+                                                            el.value = delivery.DelCode_w_o__;
+                                                            document.body.appendChild(el);
+                                                            el.select();
+                                                            document.execCommand('copy');
+                                                            document.body.removeChild(el);
+                                                            notification.success({
+                                                                message: 'Copied!',
+                                                                description: `${delivery.DelCode_w_o__} copied to clipboard.`,
+                                                                duration: 2,
+                                                            });
+                                                        }}
+                                                        style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+                                                        title="Click to copy"
+                                                    >
+                                                        {delivery.DelCode_w_o__}
+                                                    </p>
+                                                </div>
+                                            )}
+
                                         </Card.Body>
                                     </Card>
                                 </Link>
                             </Col>
                         );
+                        // --- RENDERING CHANGE END ---
                     })
                 ) : (
                     <Col>
