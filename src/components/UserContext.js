@@ -7,7 +7,7 @@ import axios from 'axios';
 // --- CONFIGURATION ---
 // Ensure your .env file has REACT_APP_API_URL set to your Render URL (e.g., https://server-ui-2.onrender.com)
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-// const ADMIN_CACHE_DURATION = 5 * 60 * 1000; // Client-side cache logic omitted, relying on backend cache
+const ADMIN_CACHE_DURATION = 5 * 60 * 1000; // Client-side cache for 5 minutes
 
 // Create the UserContext
 export const UserContext = createContext(null);
@@ -22,7 +22,7 @@ export const UserProvider = ({ children }) => {
     const [userEmail, setUserEmail] = useState(localStorage.getItem('userEmail') || null);
     const [userName, setUserName] = useState(localStorage.getItem('userName') || null);
     
-    // 🚀 NEW STATE FOR ADMIN CHECK 🚀
+    // NEW STATE FOR ADMIN CHECK
     const [isAdmin, setIsAdmin] = useState(false);
     const [isLoadingAdmin, setIsLoadingAdmin] = useState(true);
     const [adminEmails, setAdminEmails] = useState([]); // Stores the list of admin emails fetched from backend
@@ -70,6 +70,7 @@ export const UserProvider = ({ children }) => {
                 console.error("Context: Error fetching admin emails. Defaulting to empty list (Non-Admin status). Error:", error.message);
                 setAdminEmails([]); // Fail safe to an empty list
             } finally {
+                // Mark loading as complete regardless of success/failure
                 setIsLoadingAdmin(false);
             }
         };
@@ -82,16 +83,18 @@ export const UserProvider = ({ children }) => {
     }, [userEmail]); // Re-run only when userEmail changes (i.e., on login/logout)
 
     // 2. --- DETERMINE ADMIN STATUS ---
+    // This effect runs whenever userEmail, adminEmails, or isLoadingAdmin changes.
     useEffect(() => {
+        // We only proceed if loading is complete and a user is logged in
         if (!isLoadingAdmin && userEmail) {
             // Check if the current user's email is in the fetched list
             const isUserAdmin = adminEmails.includes(userEmail);
             setIsAdmin(isUserAdmin);
             console.log(`Context: User ${userEmail} Admin Status: ${isUserAdmin}`);
         } else if (!userEmail) {
-            setIsAdmin(false); // Not logged in, definitely not admin
+            // If the user logs out or is not logged in
+            setIsAdmin(false);
         }
-        // This effect runs whenever adminEmails or userEmail changes *after* loading finishes
     }, [userEmail, adminEmails, isLoadingAdmin]);
 
 
@@ -101,7 +104,7 @@ export const UserProvider = ({ children }) => {
         loginUser,
         logoutUser,
         
-        // 🚀 NEW CONTEXT VALUES 🚀
+        // NEW CONTEXT VALUES
         isAdmin,
         isLoadingAdmin,
         adminEmails,
