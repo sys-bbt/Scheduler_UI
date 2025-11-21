@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback, useContext, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom'; // 👈 Added useNavigate
 import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
-import { FiClock, FiCheckCircle, FiFlag, FiEdit, FiSave, FiXCircle } from 'react-icons/fi'; // Added edit/save/cancel icons
+import { FiClock, FiCheckCircle, FiFlag, FiEdit, FiSave, FiXCircle } from 'react-icons/fi';
 import { FaSpinner } from 'react-icons/fa';
-// ⚠️ IMPORTANT: Changed import to use the custom hook from your updated UserContext
 import { useUser } from './UserContext';
 import './DeliveryList.css';
 import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSelected';
@@ -11,11 +10,9 @@ import SortDeliveriesByDate from './SortDeliveriesByDate';
 import DeleteButton from './DeleteButton';
 import { notification } from 'antd';
 import moment from 'moment';
-import axios from 'axios'; // We need axios for the PUT request
+import axios from 'axios';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
-
-// 🛑 REMOVED: Hardcoded ADMIN_EMAILS_FRONTEND list is now obsolete.
 
 // Debounce function is fine as is
 const debounce = (func, delay) => {
@@ -34,13 +31,18 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
         : delivery.Planned_Delivery_Timestamp;
     
     // Format the current deadline for the date input (YYYY-MM-DD)
-    const initialDeadline = rawDeadlineTimestamp 
-        ? moment(rawDeadlineTimestamp).format('YYYY-MM-DD') 
+    const initialDeadline = rawDeadlineTimestamp
+        ? moment(rawDeadlineTimestamp).format('YYYY-MM-DD')
         : moment().format('YYYY-MM-DD');
         
     const [isEditing, setIsEditing] = useState(false);
     const [newDeadline, setNewDeadline] = useState(initialDeadline);
     const [isSaving, setIsSaving] = useState(false);
+
+    // 🛑 FIX 1: Add a local stopPropagation function to buttons inside the editor
+    const stopPropagation = (e) => {
+        e.stopPropagation();
+    };
 
     const handleSave = async () => {
         if (!newDeadline) return;
@@ -61,7 +63,7 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
             });
             
             // Call the success handler in the parent to refresh the main list
-            onUpdateSuccess(delivery.DelCode_w_o__); 
+            onUpdateSuccess(delivery.DelCode_w_o__);
 
             setIsEditing(false);
         } catch (error) {
@@ -79,17 +81,19 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
 
     const handleCancel = () => {
         // Reset the date back to the initial date
-        setNewDeadline(initialDeadline); 
+        setNewDeadline(initialDeadline);
         setIsEditing(false);
     };
     
     // The current formatted deadline for display
-    const formattedDisplayDate = moment(rawDeadlineTimestamp).isValid() 
-        ? moment(rawDeadlineTimestamp).format('YYYY-MM-DD') 
+    const formattedDisplayDate = moment(rawDeadlineTimestamp).isValid()
+        ? moment(rawDeadlineTimestamp).format('YYYY-MM-DD')
         : 'N/A';
 
     return (
-        <div className="d-flex justify-content-between align-items-center mt-2" onClick={(e) => e.stopPropagation()}>
+        // 🛑 FIX 2: Add stopPropagation to the main editor div
+        // This ensures clicks on the editor component itself (like padding/margins) don't trigger the parent <Link>
+        <div className="d-flex justify-content-between align-items-center mt-2" onClick={stopPropagation}>
             {isEditing ? (
                 <>
                     <Form.Control
@@ -98,7 +102,8 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
                         onChange={(e) => setNewDeadline(e.target.value)}
                         style={{ width: '150px' }}
                         disabled={isSaving}
-                        onClick={(e) => e.stopPropagation()} // Prevent card navigation
+                        // 🛑 FIX 3: Add stopPropagation to the Date input itself
+                        onClick={stopPropagation} 
                     />
                     <div className="d-flex ms-2">
                         <Button
@@ -110,9 +115,9 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
                         >
                             {isSaving ? <FaSpinner className="spinner-icon" style={{ animation: 'spin 1.5s linear infinite' }} /> : <FiSave />}
                         </Button>
-                        <Button 
-                            variant="secondary" 
-                            size="sm" 
+                        <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={handleCancel}
                             disabled={isSaving}
                         >
@@ -125,10 +130,11 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
                     <p className="mb-0 text-danger">
                         <FiFlag style={{ marginRight: '5px' }} /> Deadline: **{formattedDisplayDate}**
                     </p>
-                    <Button 
-                        variant="outline-secondary" 
-                        size="sm" 
-                        onClick={() => setIsEditing(true)}
+                    <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        // 🛑 FIX 4: Add stopPropagation to the Edit button itself
+                        onClick={(e) => { stopPropagation(e); setIsEditing(true); }}
                         title="Edit Deadline"
                     >
                         <FiEdit />
@@ -141,7 +147,7 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
 
 // --- MAIN DeliveryList COMPONENT ---
 const DeliveryList = () => {
-    // 🚀 NEW: Use the custom hook to get dynamic admin status 🚀
+    const navigate = useNavigate(); // 👈 Added hook for navigation
     const { userEmail, userName, logoutUser, isAdmin, isLoadingAdmin } = useUser();
     
     const [deliveries, setDeliveries] = useState([]);
@@ -229,7 +235,7 @@ const DeliveryList = () => {
     // Create a stable debounced function
     const debouncedFetchDeliveries = useMemo(
         () => debounce((search, client, sort) => fetchDeliveries(search, client, sort), 500),
-        [fetchDeliveries] 
+        [fetchDeliveries]
     );
 
     // useEffect now tracks the state variables and calls the debounced function
@@ -251,6 +257,11 @@ const DeliveryList = () => {
 
     const handleClientSelect = (client) => {
         setSelectedClient(client);
+    };
+
+    // 🛑 NEW: Handler for the Card click to navigate to the task view
+    const handleCardClick = (delCode) => {
+        navigate(`/delivery/data/${encodeURIComponent(delCode)}`);
     };
     
     // --- LOADING AND ERROR STATES ---
@@ -330,83 +341,84 @@ const DeliveryList = () => {
                             progressBarVariant = "danger";
                         }
 
-                        // --- RENDERING CHANGE START ---
+                        // --- RENDERING CHANGE START: Remove <Link> and use onClick on Card ---
                         return (
                             <Col key={delivery.Key}>
-                                <Link to={`/delivery/data/${encodeURIComponent(delivery.DelCode_w_o__)}`} className="text-decoration-none">
-                                    <Card className={`delivery-card h-100`}>
-                                        <Card.Body>
-                                            <div className="d-flex justify-content-between align-items-start">
-                                                <div>
-                                                    <Card.Title className="mb-1">{delivery.Task_Details}</Card.Title>
-                                                    <Card.Subtitle className="mb-2 text-muted">
-                                                        {delivery.Client} - {delivery.Delivery_code}
-                                                    </Card.Subtitle>
-                                                </div>
-                                                {/* 🚀 ADMIN DELETE BUTTON 🚀 */}
-                                                {isAdmin && (
-                                                    <DeleteButton
-                                                        deliveryCode={delivery.DelCode_w_o__}
-                                                        onDelete={handleUpdateAndListRefresh} // Use the new universal handler
-                                                    />
-                                                )}
+                                {/* 🛑 FIX 5: Use a div instead of <Link> for the card and handle navigation via onClick */}
+                                <Card
+                                    className={`delivery-card h-100`}
+                                    onClick={() => handleCardClick(delivery.DelCode_w_o__)}
+                                >
+                                    <Card.Body>
+                                        <div className="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <Card.Title className="mb-1">{delivery.Task_Details}</Card.Title>
+                                                <Card.Subtitle className="mb-2 text-muted">
+                                                    {delivery.Client} - {delivery.Delivery_code}
+                                                </Card.Subtitle>
                                             </div>
-                                            <ProgressBar
-                                                now={progress}
-                                                className="my-3"
-                                                variant={progressBarVariant}
-                                            />
-                                            <p className="mb-0 text-center" style={{ color: 'black', fontWeight: 'bold' }}>
-                                                {`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`}
-                                            </p>
-                                            <div className="d-flex justify-content-between align-items-center mt-2">
-                                                <p className="mb-0 text-primary">
-                                                    <FiClock style={{ marginRight: '5px' }} /> {delivery.Time_Left_For_Next_Task_dd_hh_mm_ss || 'N/A'}
-                                                </p>
-                                                <p className="mb-0 text-success">
-                                                    <FiCheckCircle style={{ marginRight: '5px' }} /> {delivery.Current_Status}
-                                                </p>
-                                            </div>
-                                            
-                                            {/* 🎯 ADMIN DEADLINE EDITING 🎯 */}
-                                            {isAdmin ? (
-                                                <DeliveryDeadlineEditor 
-                                                    delivery={delivery} 
-                                                    userEmail={userEmail} 
-                                                    onUpdateSuccess={handleUpdateAndListRefresh}
+                                            {/* 🚀 ADMIN DELETE BUTTON 🚀 */}
+                                            {isAdmin && (
+                                                <DeleteButton
+                                                    deliveryCode={delivery.DelCode_w_o__}
+                                                    onDelete={handleUpdateAndListRefresh} // Use the new universal handler
                                                 />
-                                            ) : (
-                                                <div className="d-flex justify-content-between align-items-center mt-2">
-                                                    <p className="mb-0 text-danger">
-                                                        <FiFlag style={{ marginRight: '5px' }} /> Deadline: {moment(delivery.Planned_Delivery_Timestamp).isValid() ? moment(delivery.Planned_Delivery_Timestamp).format('YYYY-MM-DD') : 'N/A'}
-                                                    </p>
-                                                    {/* Original DelCode link logic remains */}
-                                                    <p
-                                                        onClick={(e) => {
-                                                            e.preventDefault(); e.stopPropagation();
-                                                            const el = document.createElement('textarea');
-                                                            el.value = delivery.DelCode_w_o__;
-                                                            document.body.appendChild(el);
-                                                            el.select();
-                                                            document.execCommand('copy');
-                                                            document.body.removeChild(el);
-                                                            notification.success({
-                                                                message: 'Copied!',
-                                                                description: `${delivery.DelCode_w_o__} copied to clipboard.`,
-                                                                duration: 2,
-                                                            });
-                                                        }}
-                                                        style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
-                                                        title="Click to copy"
-                                                    >
-                                                        {delivery.DelCode_w_o__}
-                                                    </p>
-                                                </div>
                                             )}
-
-                                        </Card.Body>
-                                    </Card>
-                                </Link>
+                                        </div>
+                                        <ProgressBar
+                                            now={progress}
+                                            className="my-3"
+                                            variant={progressBarVariant}
+                                        />
+                                        <p className="mb-0 text-center" style={{ color: 'black', fontWeight: 'bold' }}>
+                                            {`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`}
+                                        </p>
+                                        <div className="d-flex justify-content-between align-items-center mt-2">
+                                            <p className="mb-0 text-primary">
+                                                <FiClock style={{ marginRight: '5px' }} /> {delivery.Time_Left_For_Next_Task_dd_hh_mm_ss || 'N/A'}
+                                            </p>
+                                            <p className="mb-0 text-success">
+                                                <FiCheckCircle style={{ marginRight: '5px' }} /> {delivery.Current_Status}
+                                            </p>
+                                        </div>
+                                        
+                                        {/* 🎯 ADMIN DEADLINE EDITING 🎯 */}
+                                        {isAdmin ? (
+                                            <DeliveryDeadlineEditor
+                                                delivery={delivery}
+                                                userEmail={userEmail}
+                                                onUpdateSuccess={handleUpdateAndListRefresh}
+                                            />
+                                        ) : (
+                                            <div className="d-flex justify-content-between align-items-center mt-2">
+                                                <p className="mb-0 text-danger">
+                                                    <FiFlag style={{ marginRight: '5px' }} /> Deadline: {moment(delivery.Planned_Delivery_Timestamp).isValid() ? moment(delivery.Planned_Delivery_Timestamp).format('YYYY-MM-DD') : 'N/A'}
+                                                </p>
+                                                {/* Original DelCode link logic remains */}
+                                                <p
+                                                    onClick={(e) => {
+                                                        e.preventDefault(); e.stopPropagation();
+                                                        const el = document.createElement('textarea');
+                                                        el.value = delivery.DelCode_w_o__;
+                                                        document.body.appendChild(el);
+                                                        el.select();
+                                                        document.execCommand('copy');
+                                                        document.body.removeChild(el);
+                                                        notification.success({
+                                                            message: 'Copied!',
+                                                            description: `${delivery.DelCode_w_o__} copied to clipboard.`,
+                                                            duration: 2,
+                                                        });
+                                                    }}
+                                                    style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+                                                    title="Click to copy"
+                                                >
+                                                    {delivery.DelCode_w_o__}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </Card.Body>
+                                </Card>
                             </Col>
                         );
                         // --- RENDERING CHANGE END ---
