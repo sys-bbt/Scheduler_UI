@@ -53,7 +53,7 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
         setIsSaving(true);
 
         // 🛑 FIX: Use moment.utc() to treat the date as midnight UTC, preventing timezone shift
-        const newDeadlineDate = moment.utc(newDeadline).toISOString();
+      const newDeadlineDate = moment.utc(newDeadline).format('YYYY-MM-DD');
 
         try {
             await axios.put(`${BACKEND_API_BASE_URL}/api/delivery/update-deadline`, {
