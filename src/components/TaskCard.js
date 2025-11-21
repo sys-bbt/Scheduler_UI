@@ -15,7 +15,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
     const isTaskFinished = task.Current_Status === COMPLETED_TASK_STATUS || task.Current_Status === NOT_REQUIRED_TASK_STATUS;
     const isTaskScheduled = displayStatus === SCHEDULED_STATUS;
 
-    // Determine if the card click should open the form
+    // The card is clickable to open the form ONLY if it is not finished and not yet scheduled.
     const isClickable = !isTaskFinished && !isTaskScheduled; 
 
     // Extract planned start timestamp robustly
@@ -26,6 +26,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
     return (
         <Col>
             <Card
+                // Adjusted class names for conditional styling
                 className={`task-card ${isTaskFinished ? 'task-completed' : ''} ${isActive ? 'active-task' : ''} ${isTaskScheduled && !isTaskFinished ? 'task-scheduled-uneditable' : ''}`}
                 style={{ cursor: isClickable ? 'pointer' : 'default' }}
                 onClick={() => isClickable && onCardClick(task.Key, displayStatus)} 
@@ -60,21 +61,21 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                                 title="Mark Complete" 
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    onStatusUpdate(task.Key, COMPLETED_TASK_STATUS); // Using Constant
+                                    onStatusUpdate(task.Key, COMPLETED_TASK_STATUS);
                                 }}
                             >
                                 <FaCheckCircle size={20} />
                                 {' '}Complete
                             </Button>
 
-                            {/* NOT REQUIRED Button - Now visible to all users */}
+                            {/* NOT REQUIRED Button - Now available to all users */}
                             <Button 
                                 variant="secondary" 
                                 className="w-50 ms-2 d-flex align-items-center justify-content-center"
                                 title="Mark Not Required"
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    onStatusUpdate(task.Key, NOT_REQUIRED_TASK_STATUS); // Using Constant
+                                    onStatusUpdate(task.Key, NOT_REQUIRED_TASK_STATUS);
                                 }}
                             >
                                 <FaTimesCircle size={20} />
