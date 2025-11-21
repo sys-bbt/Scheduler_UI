@@ -70,7 +70,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                                 <Button 
                                     variant="secondary" 
                                     className="w-50 ms-2 d-flex align-items-center justify-content-center"
-                                    title="Mark Not Required (Admin)"
+                                    title="Mark Not Required"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onStatusUpdate(task.Key, 'Not Required');
