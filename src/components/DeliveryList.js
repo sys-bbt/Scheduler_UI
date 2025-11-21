@@ -135,7 +135,7 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
             ) : (
                 <>
                     <p className="mb-0 text-danger">
-                        <FiFlag style={{ marginRight: '5px' }} /> Deadline: **{formattedDisplayDate}**
+                        <FiFlag style={{ marginRight: '5px' }} /> Deadline: {formattedDisplayDate}
                     </p>
                     <Button
                         variant="outline-secondary"
