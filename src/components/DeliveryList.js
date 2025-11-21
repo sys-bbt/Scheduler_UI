@@ -87,7 +87,7 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
     
     // The current formatted deadline for display
     const formattedDisplayDate = moment(rawDeadlineTimestamp).isValid()
-        ? moment(rawDeadlineTimestamp).format('YYYY-MM-DD')
+        ? moment(rawDeadlineTimestamp).format('DD/MM/YYYY')
         : 'N/A';
 
     return (
@@ -128,7 +128,7 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
             ) : (
                 <>
                     <p className="mb-0 text-danger">
-                        <FiFlag style={{ marginRight: '5px' }} /> Deadline: **{formattedDisplayDate}**
+                        <FiFlag style={{ marginRight: '5px' }} /> Deadline: {formattedDisplayDate}
                     </p>
                     <Button
                         variant="outline-secondary"
@@ -392,7 +392,7 @@ const DeliveryList = () => {
                                         ) : (
                                             <div className="d-flex justify-content-between align-items-center mt-2">
                                                 <p className="mb-0 text-danger">
-                                                    <FiFlag style={{ marginRight: '5px' }} /> Deadline: {moment(delivery.Planned_Delivery_Timestamp).isValid() ? moment(delivery.Planned_Delivery_Timestamp).format('YYYY-MM-DD') : 'N/A'}
+                                                    <FiFlag style={{ marginRight: '5px' }} /> Deadline: {moment(delivery.Planned_Delivery_Timestamp).isValid() ? moment(delivery.Planned_Delivery_Timestamp).format('DD/MM/YYYY') : 'N/A'}
                                                 </p>
                                                 {/* Original DelCode link logic remains */}
                                                 <p
