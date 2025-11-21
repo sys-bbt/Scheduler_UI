@@ -10,7 +10,7 @@ import FormComponent from './FormComponent'; 
 const COMPLETED_TASK_STATUS = 'Completed';
 const NOT_REQUIRED_TASK_STATUS = 'Not Required';
 const SCHEDULED_STATUS = 'Scheduled';
-const AVAILABLE_STATUS = 'Available'; // Assuming tasks that can be scheduled are 'Available'
+// const AVAILABLE_STATUS = 'Available'; // Not strictly needed here
 
 // --- TaskCard Component Definition ---
 const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, onStatusUpdate, currentUserEmail, isAdmin }) => {
@@ -75,40 +75,27 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                     {isTaskScheduled && !isTaskFinished && (
                         <div className='d-flex justify-content-between mt-3' onClick={(e) => e.stopPropagation()}>
                             
-                            {/* --- ADMIN/NON-ADMIN CONDITIONAL RENDERING --- */}
-                            {isAdmin ? (
-                                <>
-                                    {/* COMPLETE Button (w-50) */}
-                                    <Button 
-                                        variant="success" 
-                                        className="w-50 me-2 d-flex align-items-center justify-content-center"
-                                        title="Mark Complete" 
-                                        onClick={(e) => handleStatusUpdate(e, COMPLETED_TASK_STATUS)}
-                                    >
-                                        <FaCheckCircle size={20} />
-                                    </Button>
+                            {/* --- STATUS BUTTONS: Visible to ALL (Admin or Non-Admin) --- */}
+                            {/* COMPLETE Button (w-50) */}
+                            <Button 
+                                variant="success" 
+                                className="w-50 me-2 d-flex align-items-center justify-content-center"
+                                title="Mark Complete" 
+                                onClick={(e) => handleStatusUpdate(e, COMPLETED_TASK_STATUS)}
+                            >
+                                <FaCheckCircle size={20} /> Complete
+                            </Button>
 
-                                    {/* NOT REQUIRED Button (w-50) */}
-                                    <Button 
-                                        variant="secondary" 
-                                        className="w-50 ms-2 d-flex align-items-center justify-content-center"
-                                        title="Mark Not Required (Admin)"
-                                        onClick={(e) => handleStatusUpdate(e, NOT_REQUIRED_TASK_STATUS)}
-                                    >
-                                        <FaTimesCircle size={20} />
-                                    </Button>
-                                </>
-                            ) : (
-                                {/* --- NON-ADMIN VIEW: Complete (w-100) only --- */}
-                                <Button 
-                                    variant="success" 
-                                    className="w-100 d-flex align-items-center justify-content-center" 
-                                    title="Mark Complete" 
-                                    onClick={(e) => handleStatusUpdate(e, COMPLETED_TASK_STATUS)}
-                                >
-                                    <FaCheckCircle size={20} /> Complete
-                                </Button>
-                            )}
+                            {/* NOT REQUIRED Button (w-50) */}
+                            {/* 🛑 LOGIC CHANGE: Removed isAdmin check, button is always shown now */}
+                            <Button 
+                                variant="secondary" 
+                                className="w-50 ms-2 d-flex align-items-center justify-content-center"
+                                title="Mark Not Required"
+                                onClick={(e) => handleStatusUpdate(e, NOT_REQUIRED_TASK_STATUS)}
+                            >
+                                <FaTimesCircle size={20} /> Not Req.
+                            </Button>
                         </div>
                     )}
 
