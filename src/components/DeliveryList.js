@@ -1,327 +1,451 @@
-// DeliveryDetails.js
-import React, { useEffect, useState, useContext, useCallback } from 'react';
-import { useLocation, Link } from 'react-router-dom';
-import { Container, Row, Col, Spinner, Alert, ListGroup } from 'react-bootstrap';
-
-import { FaCalendarAlt } from 'react-icons/fa';
-import TaskCard from './TaskCard';
-
-// 💡 CORRECT IMPORT: Import useUser and UserContext (if needed, though useUser is preferred)
-import { useUser } from './UserContext'; 
-import './DeliveryDetail.css';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
+import { FiClock, FiCheckCircle, FiFlag, FiEdit, FiSave, FiXCircle } from 'react-icons/fi';
+import { FaSpinner } from 'react-icons/fa';
+import { useUser } from './UserContext';
+import './DeliveryList.css';
+import FilterDeliveryBasedOnClientSelected from './FilterDeliveryBasedOnClientSelected';
+import SortDeliveriesByDate from './SortDeliveriesByDate';
+import DeleteButton from './DeleteButton';
+import { notification } from 'antd';
 import moment from 'moment';
-import { notification, Modal } from 'antd';
+import axios from 'axios';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
-console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 
-// STATUS CONSTANTS 
-const COMPLETED_TASK_STATUS = 'Completed'; // Changed from 'Complete' to match TaskCard constant for consistency
-const NOT_REQUIRED_TASK_STATUS = 'Not Required';
-const SCHEDULED_STATUS = 'Scheduled'; // Used locally for display logic
-
-// DeliveryDetail component definition
-const DeliveryDetail = () => {
-    const location = useLocation();
-    const delCodeMatch = location.pathname.match(/\/delivery\/data\/(.*)/);
-    const deliveryCode = delCodeMatch ? decodeURIComponent(delCodeMatch[1]) : null;
-
-    const [deliveryDetails, setDeliveryDetails] = useState(null);
-    const [tasks, setTasks] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    
-    const [activeTaskKey, setActiveTaskKey] = useState(null);
-    const [actionType, setActionType] = useState(null); 
-    const [refreshKey, setRefreshKey] = useState(0); 
-
-    // 🟢 CORRECT IMPLEMENTATION: Get userEmail and isAdmin from the secure context
-    const { userEmail, isAdmin } = useUser(); 
-
-    // useEffect dependency cleanup: Removed isAdmin from dependency array as it's now handled correctly
-    // by UserContext and does not need to trigger the fetch.
-    useEffect(() => {
-        const fetchDeliveryDetails = async () => {
-            if (!deliveryCode) {
-                setError("Delivery code not found in URL.");
-                setLoading(false);
-                return;
-            }
-
-            setLoading(true);
-            setError(null);
-            try {
-                const response = await fetch(`${BACKEND_API_BASE_URL}/api/workflow-details/${encodeURIComponent(deliveryCode)}`);
-                
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `Failed to fetch workflow details for ${deliveryCode}.`);
-                }
-                const data = await response.json();
-                
-                if (data.length === 0) {
-                    setError(`Workflow with code "${deliveryCode}" not found or has no tasks.`);
-                    setLoading(false);
-                    return;
-                }
-
-                const mainDeliveryDetail = data.find(task => task.Step_ID === 0);
-                setDeliveryDetails(mainDeliveryDetail || data[0]); 
-
-                const tasksToDisplay = data.filter(task => task.Step_ID !== 0)
-                .filter(task => 
-                    task.Current_Status !== COMPLETED_TASK_STATUS && 
-                    task.Current_Status !== NOT_REQUIRED_TASK_STATUS
-                );
-
-                const sortedTasks = tasksToDisplay.sort((a, b) => {
-                    return a.Step_ID - b.Step_ID;
-                });
-
-                setTasks(sortedTasks);
-
-            } catch (err) {
-                console.error("Error fetching delivery details:", err);
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        // Removed isAdmin from dependency list as its primary job is not to trigger the fetch
-        // (fetch only needs to run on deliveryCode or userEmail change).
-        fetchDeliveryDetails();
-    }, [deliveryCode, userEmail, refreshKey]);
-
-
-    // 💡 MODIFICATION 2: Replacing window.confirm with Modal.confirm
-    const handleStatusUpdate = useCallback(async (key, status) => { 
-        
-        // 🛑 NEW CHECK: Prevent non-admin users from updating status
-        if (!isAdmin) {
-             notification.error({
-                message: 'Permission Denied',
-                description: 'You do not have administrative privileges to update task status.',
-            });
-            return;
-        }
-
-        setActiveTaskKey(null); // Close any open form
-        setActionType(null);
-
-        // Use Ant Design Modal.confirm for status update confirmation
-        Modal.confirm({
-            title: 'Confirm Task Status Update',
-            content: `Are you sure you want to mark task as "${status}"?`,
-            okText: 'Confirm',
-            cancelText: 'Cancel',
-            onOk: async () => { // The actual update logic runs inside onOk
-                
-                notification.info({
-                    message: 'Updating Task Status',
-                    description: `Sending request to mark Key ${key} as ${status}...`,
-                    duration: 5,
-                    key: 'statusUpdate'
-                });
-
-                try {
-                    const response = await fetch(`${BACKEND_API_BASE_URL}/api/task/status-update`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            key: key,
-                            email: userEmail, // Logged-in user's email
-                            status: status, // 'Complete' or 'Not Required'
-                        }),
-                    });
-
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        throw new Error(errorData.message || `Failed to update status for Key ${key}.`);
-                    }
-
-                    // 1. 🟢 INSTANT OPTIMISTIC REMOVAL: 
-                    if (status === COMPLETED_TASK_STATUS || status === NOT_REQUIRED_TASK_STATUS) {
-                        setTasks(prevTasks => 
-                            prevTasks.filter(task => task.Key !== key)
-                        );
-                    } else {
-                        // This else block is kept for future status types if needed
-                        setTasks(prevTasks =>
-                            prevTasks.map(task =>
-                                task.Key === key ? { ...task, Current_Status: status } : task
-                            )
-                        );
-                    }
-
-                    // 2. Success notification
-                    notification.success({
-                        message: 'Status Update Successful',
-                        description: `Task Key ${key} has been successfully marked as ${status}.`,
-                        key: 'statusUpdate'
-                    });
-
-                    // 3. Trigger re-fetch for fresh data and accurate overall status display (after a short delay)
-                    setTimeout(() => setRefreshKey(prev => prev + 1), 1000);
-
-                } catch (err) {
-                    console.error("Error updating task status:", err);
-                    notification.error({
-                        message: 'Status Update Failed',
-                        description: err.message,
-                        key: 'statusUpdate'
-                    });
-                    // Re-fetch to revert any inaccurate local state in case of failure
-                    setRefreshKey(prev => prev + 1);
-                }
-            },
-            onCancel: () => {
-                // User clicked cancel, do nothing
-            },
-        });
-    }, [userEmail, isAdmin]); // 💡 ADDED isAdmin to dependency array
-
-    // ... (rest of the component, handleFormSubmit, handleCardClick, handleMenuItemClick, loading/error blocks)
-
-    const handleFormSubmit = useCallback((updatedTaskData) => {
-        // Optimistic update of tasks
-        setTasks(prevTasks =>
-            prevTasks.map(task =>
-                task.Key === updatedTaskData.Key
-                    ? { ...task, ...updatedTaskData }
-                    : task
-            )
-        );
-        
-        // NEW LOGIC: Wait 2 seconds, then close the form and refresh.
-        setTimeout(() => {
-            setActiveTaskKey(null); 
-            setActionType(null);
-            // Trigger re-fetch for fresh data and accurate status display
-            setRefreshKey(prev => prev + 1); 
-        }, 2000); // Wait 2 seconds
-    }, []);
-
-    // CLICK HANDLER: Controls the activeTaskKey state
-    const handleCardClick = useCallback((taskKey, displayStatus) => {
-        const isScheduled = displayStatus === SCHEDULED_STATUS;
-        
-        // This check is important to prevent opening the form for scheduled tasks
-        if (isScheduled) { 
-            notification.info({
-                message: 'Task Already Scheduled',
-                description: 'This task has a Planned Start Date and cannot be rescheduled.',
-            });
-            setActiveTaskKey(null);
-            setActionType(null);
-            return;
-        }
-
-        if (activeTaskKey === taskKey) {
-            // Close the currently active card
-            setActiveTaskKey(null);
-            setActionType(null);
-        } else {
-            // Open the new card
-            setActiveTaskKey(taskKey);
-            setActionType('edit');
-        }
-    }, [activeTaskKey]); 
-
-    const handleMenuItemClick = useCallback((taskKey, type) => {
-        // Temporary block for P/P/S actions
-        notification.info({
-            message: 'Status Change Disabled',
-            description: `API for ${type} is not yet implemented.`,
-        });
-        setActiveTaskKey(null);
-        setActionType(null);
-    }, []);
-
-
-    if (loading) {
-        return (
-            <Container className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
-                <Spinner animation="border" role="status">
-                    <span className="visually-hidden">Loading...</span>
-                </Spinner>
-            </Container>
-        );
-    }
-
-    if (error) {
-        return (
-            <Container className="mt-5 text-center">
-                <Alert variant="danger">
-                    <h2>Error Loading Workflow Details</h2>
-                    <p>{error}</p>
-                </Alert>
-                <Link to="/" className="btn btn-primary mt-3">Back to Deliveries</Link>
-            </Container>
-        );
-    }
-
-    if (!deliveryDetails) {
-        return (
-            <Container className="mt-5 text-center">
-                <h2>No Workflow Details Found</h2>
-                <p>The requested workflow could not be found.</p>
-                <Link to="/" className="btn btn-primary mt-3">Back to Deliveries</Link>
-            </Container>
-        );
-    }
-
-    return (
-        <Container className="delivery-detail-container mt-4">
-            <h2 className="mb-4">Workflow: {deliveryDetails.Delivery_code}</h2>
-            <p><strong>Client:</strong> {deliveryDetails.Client}</p>
-            <p><strong>Description:</strong> {deliveryDetails.Short_Description}</p>
-            {/* 🛑 FIX APPLIED HERE: Using <strong> tags around the formatted date */}
-            <p><strong>Planned Start:</strong> {deliveryDetails.Planned_Start_Timestamp ? <strong>{moment.utc(deliveryDetails.Planned_Start_Timestamp).format('YYYY-MM-DD')}</strong> : 'N/A'}</p>
-            <p><strong>Planned Delivery:</strong> {deliveryDetails.Planned_Delivery_Timestamp ? <strong>{moment.utc(deliveryDetails.Planned_Delivery_Timestamp).format('YYYY-MM-DD')}</strong> : 'N/A'}</p>
-            <p><strong>Overall Status:</strong> {deliveryDetails.Current_Status}</p>
-
-            <h3 className="mt-5 mb-3">Tasks in this Workflow:</h3>
-            <Row xs={1} md={2} lg={3} className="g-4">
-                {tasks.length > 0 ? (
-                    tasks.map((task) => {
-                        const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
-                            ? task.Planned_Start_Timestamp.value
-                            : task.Planned_Start_Timestamp;
-                        
-                        const displayStatus = (rawPlannedStartTimestamp && task.Current_Status !== COMPLETED_TASK_STATUS && task.Current_Status !== NOT_REQUIRED_TASK_STATUS)
-                            ? SCHEDULED_STATUS
-                            : task.Current_Status;
-                        
-                        return (
-                            <TaskCard
-                                key={task.Key} 
-                                task={task}
-                                isActive={activeTaskKey === task.Key && actionType === 'edit'} // Controls form visibility
-                                displayStatus={displayStatus}
-                                onCardClick={handleCardClick} // Passes down the toggle function
-                                onMenuItemClick={handleMenuItemClick}
-                                onFormSubmit={handleFormSubmit}
-                                onStatusUpdate={handleStatusUpdate} 
-                                currentUserEmail={userEmail}
-                                isAdmin={isAdmin} // Passes the context-derived status
-                            />
-                        );
-                    })
-                ) : (
-                    <Col>
-                        <ListGroup.Item>No tasks available for this delivery.</ListGroup.Item>
-                    </Col>
-                )}
-            </Row>
-
-            <Link to="/" className="btn btn-primary mt-4">
-                Back to Deliveries
-            </Link>
-        </Container>
-    );
+const debounce = (func, delay) => {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
 };
 
-export default DeliveryDetail;
+// --- NEW COMPONENT: Deadline Editor Logic ---
+const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
+    
+    const rawDeadlineTimestamp = delivery.Planned_Delivery_Timestamp && typeof delivery.Planned_Delivery_Timestamp === 'object' && delivery.Planned_Delivery_Timestamp.value
+        ? delivery.Planned_Delivery_Timestamp.value
+        : delivery.Planned_Delivery_Timestamp;
+    
+    // Format the current deadline for the date input (YYYY-MM-DD)
+    const initialDeadline = rawDeadlineTimestamp
+        ? moment(rawDeadlineTimestamp).format('YYYY-MM-DD')
+        : moment().format('YYYY-MM-DD');
+        
+    const [isEditing, setIsEditing] = useState(false);
+    const [newDeadline, setNewDeadline] = useState(initialDeadline);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // 🛑 FIX: UseEffect to synchronize local state when props (delivery data) changes
+    useEffect(() => {
+        setNewDeadline(initialDeadline);
+    }, [initialDeadline]);
+    
+    const stopPropagation = (e) => {
+        e.stopPropagation();
+    };
+
+    const handleSave = async () => {
+        if (!newDeadline) return;
+        setIsSaving(true);
+
+        // 🛑 FIX: Use moment.utc() to treat the date as midnight UTC, preventing timezone shift
+        const newDeadlineDate = moment.utc(newDeadline).toISOString();
+
+        try {
+            await axios.put(`${BACKEND_API_BASE_URL}/api/delivery/update-deadline`, {
+                delCodeWO: delivery.DelCode_w_o__,
+                newDeadlineDate: newDeadlineDate,
+                userEmail: userEmail,
+            });
+
+            notification.success({
+                message: 'Deadline Updated',
+                description: `Deadline for ${delivery.DelCode_w_o__} updated to ${newDeadline}.`,
+            });
+            
+            // 🛑 FIX: Immediately update the local state with the new date
+            // This prevents the "N/A" flash before the main list re-fetches.
+            setNewDeadline(newDeadline);
+
+            // Call the success handler in the parent to refresh the main list
+            onUpdateSuccess(delivery.DelCode_w_o__);
+
+            setIsEditing(false);
+        } catch (error) {
+            console.error('Error updating delivery deadline:', error);
+            const errorMessage = error.response?.data?.message || 'Failed to update deadline.';
+            notification.error({
+                message: 'Update Failed',
+                description: errorMessage,
+                duration: 5,
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleCancel = () => {
+        // Reset the date back to the initial date
+        setNewDeadline(initialDeadline);
+        setIsEditing(false);
+    };
+    
+    // 🛑 FIX: Calculate display date based on local state, formatted as DD/MM/YYYY
+    const formattedDisplayDate = moment(newDeadline).isValid()
+        ? moment(newDeadline).format('DD/MM/YYYY')
+        : 'N/A';
+
+    return (
+        <div className="d-flex justify-content-between align-items-center mt-2" onClick={stopPropagation}>
+            {isEditing ? (
+                <>
+                    <Form.Control
+                        type="date"
+                        value={newDeadline}
+                        onChange={(e) => setNewDeadline(e.target.value)}
+                        style={{ width: '150px' }}
+                        disabled={isSaving}
+                        // 🛑 FIX: Stop propagation on date input
+                        onClick={stopPropagation} 
+                    />
+                    <div className="d-flex ms-2">
+                        <Button
+                            variant="success"
+                            size="sm"
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="me-1"
+                        >
+                            {isSaving ? <FaSpinner className="spinner-icon" style={{ animation: 'spin 1.5s linear infinite' }} /> : <FiSave />}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleCancel}
+                            disabled={isSaving}
+                        >
+                            <FiXCircle />
+                        </Button>
+                    </div>
+                </>
+            ) : (
+                <>
+                    <p className="mb-0 text-danger">
+                        <FiFlag style={{ marginRight: '5px' }} /> Deadline: **{formattedDisplayDate}**
+                    </p>
+                    <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        // 🛑 FIX: Stop propagation on edit button
+                        onClick={(e) => { stopPropagation(e); setIsEditing(true); }}
+                        title="Edit Deadline"
+                    >
+                        <FiEdit />
+                    </Button>
+                </>
+            )}
+        </div>
+    );
+};
+
+// --- MAIN DeliveryList COMPONENT ---
+const DeliveryList = () => {
+    const navigate = useNavigate();
+    const { userEmail, userName, logoutUser, isAdmin, isLoadingAdmin } = useUser();
+    
+    const [deliveries, setDeliveries] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedClient, setSelectedClient] = useState('');
+    const [clients, setClients] = useState([]);
+    const [sortOption, setSortOption] = useState('latest');
+
+    // fetchDeliveries function (Kept mostly the same, ensuring it triggers a full refresh)
+    const fetchDeliveries = useCallback(async (currentSearchQuery, currentSelectedClient, currentSortOption) => {
+        if (!userEmail) return;
+        
+        setLoading(true);
+        setError(null);
+        try {
+            let url = `${BACKEND_API_BASE_URL}/api/data?email=${encodeURIComponent(userEmail)}`;
+
+            if (currentSearchQuery) {
+                url += `&searchQuery=${encodeURIComponent(currentSearchQuery)}`;
+            }
+            if (currentSelectedClient) {
+                url += `&clientFilter=${encodeURIComponent(currentSelectedClient)}`;
+            }
+
+            const response = await fetch(url);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to fetch deliveries.');
+            }
+            const data = await response.json();
+
+            // --- ACTIVE CLIENT FILTERING LOGIC (Using the previous logic) ---
+            const CLIENT_STATUS_FIELD = 'Inactive';
+            const ACTIVE_CLIENT_VALUE = 'Active';
+
+            const activeClientDeliveries = data.filter(delivery => {
+                const rawStatusValue = delivery[CLIENT_STATUS_FIELD];
+                let statusString = null;
+                if (rawStatusValue) {
+                    statusString = typeof rawStatusValue === 'object' && rawStatusValue.value
+                        ? String(rawStatusValue.value)
+                        : String(rawStatusValue);
+                }
+                return statusString && statusString.trim().toLowerCase() === ACTIVE_CLIENT_VALUE.toLowerCase();
+            });
+
+            const uniqueClients = [...new Set(activeClientDeliveries.map(delivery => delivery.Client))].filter(Boolean);
+            uniqueClients.sort((a, b) => a.localeCompare(b));
+            setClients(uniqueClients);
+
+            const sortedData = [...data].sort((a, b) => {
+                const timestampA = a.Initiated_Timestamp && typeof a.Initiated_Timestamp === 'object' && a.Initiated_Timestamp.value
+                    ? a.Initiated_Timestamp.value
+                    : a.Initiated_Timestamp || a.Created_at;
+                const timestampB = b.Initiated_Timestamp && typeof b.Initiated_Timestamp === 'object' && b.Initiated_Timestamp.value
+                    ? b.Initiated_Timestamp.value
+                    : b.Initiated_Timestamp || b.Created_at;
+
+                const dateA = moment(timestampA);
+                const dateB = moment(timestampB);
+
+                if (!dateA.isValid() && !dateB.isValid()) return 0;
+                if (!dateA.isValid()) return 1;
+                if (!dateB.isValid()) return -1;
+
+                if (currentSortOption === 'latest') {
+                    return dateB.diff(dateA);
+                } else {
+                    return dateA.diff(dateB);
+                }
+            });
+
+            setDeliveries(sortedData);
+        } catch (err) {
+            console.error("Error fetching deliveries:", err);
+            setError(err.message);
+            setDeliveries([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [userEmail]);
+
+    // Create a stable debounced function
+    const debouncedFetchDeliveries = useMemo(
+        () => debounce((search, client, sort) => fetchDeliveries(search, client, sort), 500),
+        [fetchDeliveries]
+    );
+
+    // useEffect now tracks the state variables and calls the debounced function
+    useEffect(() => {
+        if (userEmail) {
+            debouncedFetchDeliveries(searchQuery, selectedClient, sortOption);
+        }
+    }, [searchQuery, selectedClient, sortOption, debouncedFetchDeliveries, userEmail]);
+
+    // Handle delete or deadline update success (triggers a list refresh)
+    const handleUpdateAndListRefresh = useCallback(() => {
+        // Call fetchDeliveries directly with current state to instantly refresh the list
+        fetchDeliveries(searchQuery, selectedClient, sortOption);
+    }, [fetchDeliveries, searchQuery, selectedClient, sortOption]);
+
+    const handleSearchChange = (e) => {
+        setSearchQuery(e.target.value);
+    };
+
+    const handleClientSelect = (client) => {
+        setSelectedClient(client);
+    };
+
+    // Handler for the Card click to navigate to the task view
+    const handleCardClick = (delCode) => {
+        navigate(`/delivery/data/${encodeURIComponent(delCode)}`);
+    };
+    
+    // --- LOADING AND ERROR STATES ---
+    if (loading || isLoadingAdmin) {
+        return (
+            <Container className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
+                <FaSpinner
+                    className="spinner-icon"
+                    style={{ fontSize: '3rem', color: '#007bff', animation: 'spin 1.5s linear infinite' }}
+                />
+                <h4 className="ms-3">{isLoadingAdmin ? "Loading user privileges..." : "Loading deliveries..."}</h4>
+            </Container>
+        );
+    }
+
+    if (error) {
+        return (
+            <Container className="mt-5 text-center">
+                <h2>Error Loading Deliveries</h2>
+                <p className="text-danger">{error}</p>
+                <Button onClick={handleUpdateAndListRefresh}>Retry</Button>
+            </Container>
+        );
+    }
+
+    return (
+        <Container className="delivery-list-container mt-4">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+                <h2>Deliveries</h2>
+                <div className="d-flex align-items-center">
+                    {userEmail && <span className="me-3">Logged in as: <strong>{userName} ({userEmail})</strong></span>}
+                    <Button variant="outline-secondary" onClick={logoutUser}>Logout</Button>
+                </div>
+            </div>
+
+            <Row className="mb-4 align-items-end">
+                <Col md={6}>
+                    <Form.Group controlId="searchQuery">
+                        <Form.Label>Search Deliveries</Form.Label>
+                        <Form.Control
+                            type="text"
+                            placeholder="Search by task details or delivery code..."
+                            value={searchQuery}
+                            onChange={handleSearchChange}
+                        />
+                    </Form.Group>
+                </Col>
+                <Col md={3}>
+                    <FilterDeliveryBasedOnClientSelected
+                        clients={clients}
+                        onClientSelect={handleClientSelect}
+                        selectedClient={selectedClient}
+                    />
+                </Col>
+                <Col md={3}>
+                    <SortDeliveriesByDate
+                        sortOption={sortOption}
+                        setSortOption={setSortOption}
+                    />
+                </Col>
+            </Row>
+
+            <Row xs={1} md={1} lg={1} className="g-4">
+                {deliveries.length > 0 ? (
+                    deliveries.map((delivery) => {
+                        const scheduledTasks = delivery.Planned_Tasks !== undefined ? delivery.Planned_Tasks : delivery.Completed_Tasks;
+                        const totalTasks = delivery.Total_Tasks || 1;
+                        const progress = (scheduledTasks / totalTasks) * 100;
+                        let progressBarVariant = "primary";
+                        if (progress === 100) {
+                            progressBarVariant = "success";
+                        } else if (progress >= 50) {
+                            progressBarVariant = "warning";
+                        } else {
+                            progressBarVariant = "danger";
+                        }
+
+                        return (
+                            <Col key={delivery.Key}>
+                                <Card
+                                    className={`delivery-card h-100`}
+                                    onClick={() => handleCardClick(delivery.DelCode_w_o__)}
+                                >
+                                    <Card.Body>
+                                        <div className="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <Card.Title className="mb-1">{delivery.Task_Details}</Card.Title>
+                                                <Card.Subtitle className="mb-2 text-muted">
+                                                    {delivery.Client} - {delivery.Delivery_code}
+                                                </Card.Subtitle>
+                                            </div>
+                                            {/* 🚀 ADMIN DELETE BUTTON 🚀 */}
+                                            {isAdmin && (
+                                                <DeleteButton
+                                                    deliveryCode={delivery.DelCode_w_o__}
+                                                    onDelete={handleUpdateAndListRefresh}
+                                                />
+                                            )}
+                                        </div>
+                                        <ProgressBar
+                                            now={progress}
+                                            className="my-3"
+                                            variant={progressBarVariant}
+                                        />
+                                        <p className="mb-0 text-center" style={{ color: 'black', fontWeight: 'bold' }}>
+                                            {`${Math.round(progress)}% (${scheduledTasks} of ${totalTasks} planned)`}
+                                        </p>
+                                        <div className="d-flex justify-content-between align-items-center mt-2">
+                                            <p className="mb-0 text-primary">
+                                                <FiClock style={{ marginRight: '5px' }} /> {delivery.Time_Left_For_Next_Task_dd_hh_mm_ss || 'N/A'}
+                                            </p>
+                                            <p className="mb-0 text-success">
+                                                <FiCheckCircle style={{ marginRight: '5px' }} /> {delivery.Current_Status}
+                                            </p>
+                                        </div>
+                                        
+                                        {/* 🎯 ADMIN DEADLINE EDITING 🎯 */}
+                                        {isAdmin ? (
+                                            <DeliveryDeadlineEditor
+                                                delivery={delivery}
+                                                userEmail={userEmail}
+                                                onUpdateSuccess={handleUpdateAndListRefresh}
+                                            />
+                                        ) : (
+                                            <div className="d-flex justify-content-between align-items-center mt-2">
+                                                <p className="mb-0 text-danger">
+                                                    <FiFlag style={{ marginRight: '5px' }} /> Deadline: {moment(delivery.Planned_Delivery_Timestamp).isValid() 
+                                                        ? moment(delivery.Planned_Delivery_Timestamp).format('DD/MM/YYYY') // 🛑 FIX: DD/MM/YYYY format
+                                                        : 'N/A'}
+                                                </p>
+                                                {/* Original DelCode link logic remains */}
+                                                <p
+                                                    onClick={(e) => {
+                                                        e.preventDefault(); e.stopPropagation();
+                                                        const el = document.createElement('textarea');
+                                                        el.value = delivery.DelCode_w_o__;
+                                                        document.body.appendChild(el);
+                                                        el.select();
+                                                        document.execCommand('copy');
+                                                        document.body.removeChild(el);
+                                                        notification.success({
+                                                            message: 'Copied!',
+                                                            description: `${delivery.DelCode_w_o__} copied to clipboard.`,
+                                                            duration: 2,
+                                                        });
+                                                    }}
+                                                    style={{ cursor: "pointer", color: "blue", textDecoration: "underline" }}
+                                                    title="Click to copy"
+                                                >
+                                                    {delivery.DelCode_w_o__}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </Card.Body>
+                                </Card>
+                            </Col>
+                        );
+                    })
+                ) : (
+                    <Col>
+                        <p className="text-center">No deliveries found matching your criteria.</p>
+                    </Col>
+                )}
+            </Row>
+
+            <div className="delivery-list-end"></div>
+
+            {loading && deliveries.length > 0 && (
+                <div className="d-flex justify-content-center align-items-center" style={{ height: '100px' }}>
+                    <FaSpinner
+                        className="spinner-icon"
+                        style={{ fontSize: '2rem', color: '#007bff', animation: 'spin 10s linear infinite' }}
+                    />
+                </div>
+            )}
+        </Container>
+    );
+};
+
+export default DeliveryList;
