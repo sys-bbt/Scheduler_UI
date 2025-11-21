@@ -2,16 +2,17 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
-import axios from 'axios'; // We need axios for the backend call
+import axios from 'axios';
 
 // --- CONFIGURATION ---
+// Ensure your .env file has REACT_APP_API_URL set to your Render URL (e.g., https://server-ui-2.onrender.com)
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-const ADMIN_CACHE_DURATION = 5 * 60 * 1000; // Client-side cache for 5 minutes
+// const ADMIN_CACHE_DURATION = 5 * 60 * 1000; // Client-side cache logic omitted, relying on backend cache
 
 // Create the UserContext
 export const UserContext = createContext(null);
 
-// Custom hook for easier consumption (like useUser)
+// Custom hook for easier consumption
 export const useUser = () => {
     return useContext(UserContext);
 };
@@ -24,8 +25,7 @@ export const UserProvider = ({ children }) => {
     // 🚀 NEW STATE FOR ADMIN CHECK 🚀
     const [isAdmin, setIsAdmin] = useState(false);
     const [isLoadingAdmin, setIsLoadingAdmin] = useState(true);
-    const [adminEmails, setAdminEmails] = useState([]);
-
+    const [adminEmails, setAdminEmails] = useState([]); // Stores the list of admin emails fetched from backend
 
     const loginUser = (email, name) => {
         setUserEmail(email);
@@ -60,15 +60,21 @@ export const UserProvider = ({ children }) => {
                 setAdminEmails(fetchedEmails);
                 console.log(`Context: Fetched ${fetchedEmails.length} admin emails.`);
                 
+                // Log the fetched list if it contains data
+                if (fetchedEmails.length > 0) {
+                    console.log("Context: Admin list:", fetchedEmails);
+                }
+                
             } catch (error) {
-                console.error("Context: Error fetching admin emails:", error.message);
+                // IMPROVED ERROR MESSAGE: Clarify the fallback action
+                console.error("Context: Error fetching admin emails. Defaulting to empty list (Non-Admin status). Error:", error.message);
                 setAdminEmails([]); // Fail safe to an empty list
             } finally {
                 setIsLoadingAdmin(false);
             }
         };
 
-        // Only fetch if a user is logged in and we haven't fetched recently (optional client-side cache logic omitted for simplicity, relying on backend cache)
+        // Only fetch if a user is logged in
         if (userEmail) {
             fetchAdmins();
         }
@@ -103,17 +109,17 @@ export const UserProvider = ({ children }) => {
 
     return (
         <UserContext.Provider value={contextValue}>
-            {/* You can add a global loading indicator here if needed */}
+            {/* Display a loading indicator while fetching admin status after login */}
             {isLoadingAdmin && userEmail ? (
-                 <div style={{ padding: '20px', textAlign: 'center' }}>
-                     Loading user privileges...
-                 </div>
+                <div style={{ padding: '20px', textAlign: 'center' }}>
+                    Loading user privileges...
+                </div>
             ) : children}
         </UserContext.Provider>
     );
 };
 
-// A simple Login Component (kept mostly the same)
+// A simple Login Component 
 export const LoginComponent = () => {
     const { loginUser } = useUser(); // Use the custom hook
 
