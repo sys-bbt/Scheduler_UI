@@ -48,7 +48,7 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
         if (!newDeadline) return;
         setIsSaving(true);
 
-        const newDeadlineDate = moment(newDeadline).toISOString(); // Send ISO format
+        const newDeadlineDate = moment.utc(newDeadline).toISOString();
 
         try {
             await axios.put(`${BACKEND_API_BASE_URL}/api/delivery/update-deadline`, {
