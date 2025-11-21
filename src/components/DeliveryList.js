@@ -395,9 +395,9 @@ const DeliveryList = () => {
                                         ) : (
                                             <div className="d-flex justify-content-between align-items-center mt-2">
                                                 <p className="mb-0 text-danger">
-                                                    <FiFlag style={{ marginRight: '5px' }} /> Deadline: {moment(delivery.Planned_Delivery_Timestamp).isValid() 
+                                                    <FiFlag style={{ marginRight: '5px' }} /> <p> Deadline: <span style={{ fontWeight: 'bold' }}>{moment(delivery.Planned_Delivery_Timestamp).isValid() 
                                                         ? moment(delivery.Planned_Delivery_Timestamp).format('DD/MM/YYYY') // 🛑 FIX: DD/MM/YYYY format
-                                                        : 'N/A'}
+                                                        : 'N/A'}</span>
                                                 </p>
                                                 {/* Original DelCode link logic remains */}
                                                 <p
