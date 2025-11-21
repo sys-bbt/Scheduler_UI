@@ -75,7 +75,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                     {isTaskScheduled && !isTaskFinished && (
                         <div className='d-flex justify-content-between mt-3' onClick={(e) => e.stopPropagation()}>
                             
-                            {/* --- ADMIN VIEW: Complete (w-50) and Not Required (w-50) --- */}
+                            {/* --- ADMIN/NON-ADMIN CONDITIONAL RENDERING --- */}
                             {isAdmin ? (
                                 <>
                                     {/* COMPLETE Button (w-50) */}
