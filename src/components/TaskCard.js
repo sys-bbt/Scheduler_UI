@@ -1,3 +1,4 @@
+// src/components/TaskCard.js
 import React from 'react';
 import { Card, Col, Button } from 'react-bootstrap';
 // 🟢 ICON IMPORTS
@@ -6,8 +7,8 @@ import moment from 'moment';
 import FormComponent from './FormComponent'; 
 
 // Define necessary status constants
-const COMPLETED_TASK_STATUS = 'Completed'; // Now used consistently
-const NOT_REQUIRED_TASK_STATUS = 'Not Required'; // Now used consistently
+const COMPLETED_TASK_STATUS = 'Completed';
+const NOT_REQUIRED_TASK_STATUS = 'Not Required';
 const SCHEDULED_STATUS = 'Scheduled';
 
 // --- TaskCard Component Definition ---
@@ -15,6 +16,9 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
     
     const isTaskFinished = task.Current_Status === COMPLETED_TASK_STATUS || task.Current_Status === NOT_REQUIRED_TASK_STATUS;
     const isTaskScheduled = displayStatus === SCHEDULED_STATUS;
+
+    // Determine if the card click should open the form
+    const isClickable = !isTaskFinished && !isTaskScheduled; 
 
     // Extract planned start timestamp robustly
     const rawPlannedStartTimestamp = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
@@ -24,9 +28,10 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
     return (
         <Col>
             <Card
+                // Set class names based on task state
                 className={`task-card ${isTaskFinished ? 'task-completed' : ''} ${isActive ? 'active-task' : ''} ${isTaskScheduled && !isTaskFinished ? 'task-scheduled-uneditable' : ''}`}
-                style={{ cursor: isTaskFinished || isTaskScheduled ? 'default' : 'pointer' }}
-                onClick={() => onCardClick(task.Key, displayStatus)} 
+                style={{ cursor: isClickable ? 'pointer' : 'default' }}
+                onClick={() => isClickable && onCardClick(task.Key, displayStatus)} 
             >
                 <Card.Body>
                     <Card.Title>{task.Task_Details}</Card.Title>
@@ -48,20 +53,20 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                     
                     {/* Status Buttons displayed ONLY when task is SCHEDULED and NOT Finished */}
                     {isTaskScheduled && !isTaskFinished && (
-                        // Use d-flex and space-between to align buttons horizontally
                         <div className='d-flex justify-content-between mt-3' onClick={(e) => e.stopPropagation()}>
                             
                             {/* COMPLETE Button (Always visible when scheduled) */}
                             <Button 
                                 variant="success" 
-                                className="w-50 me-2 d-flex align-items-center justify-content-center"
+                                className={`w-50 me-2 d-flex align-items-center justify-content-center ${!isAdmin ? 'w-100 me-0' : ''}`}
                                 title="Mark Complete" 
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    onStatusUpdate(task.Key, COMPLETED_TASK_STATUS); // 🟢 USED CONSTANT
+                                    onStatusUpdate(task.Key, COMPLETED_TASK_STATUS);
                                 }}
                             >
                                 <FaCheckCircle size={20} />
+                                {isAdmin ? '' : ' Complete'} {/* Add text only if not admin, to fill space */}
                             </Button>
 
                             {/* NOT REQUIRED Button - RENDERED ONLY IF ADMIN */}
@@ -72,10 +77,11 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                                     title="Mark Not Required (Admin)"
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onStatusUpdate(task.Key, NOT_REQUIRED_TASK_STATUS); // 🟢 USED CONSTANT
+                                        onStatusUpdate(task.Key, NOT_REQUIRED_TASK_STATUS);
                                     }}
                                 >
                                     <FaTimesCircle size={20} />
+                                    {' '}Not Req.
                                 </Button>
                             )}
                         </div>
@@ -89,7 +95,7 @@ const TaskCard = ({ task, isActive, displayStatus, onCardClick, onFormSubmit, on
                                 onSubmit={onFormSubmit}
                                 task={task}
                                 currentUserEmail={currentUserEmail}
-                                isAdmin={isAdmin} {/* Crucial: Pass isAdmin to the FormComponent */}
+                                isAdmin={isAdmin}
                             />
                         </div>
                     )}
