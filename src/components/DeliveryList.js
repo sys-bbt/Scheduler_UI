@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom'; // 👈 Added useNavigate
+import { Link, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, ProgressBar, Form, Button } from 'react-bootstrap';
 import { FiClock, FiCheckCircle, FiFlag, FiEdit, FiSave, FiXCircle } from 'react-icons/fi';
 import { FaSpinner } from 'react-icons/fa';
@@ -14,7 +14,6 @@ import axios from 'axios';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
-// Debounce function is fine as is
 const debounce = (func, delay) => {
     let timeout;
     return function(...args) {
@@ -26,6 +25,7 @@ const debounce = (func, delay) => {
 
 // --- NEW COMPONENT: Deadline Editor Logic ---
 const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
+    
     const rawDeadlineTimestamp = delivery.Planned_Delivery_Timestamp && typeof delivery.Planned_Delivery_Timestamp === 'object' && delivery.Planned_Delivery_Timestamp.value
         ? delivery.Planned_Delivery_Timestamp.value
         : delivery.Planned_Delivery_Timestamp;
@@ -39,7 +39,11 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
     const [newDeadline, setNewDeadline] = useState(initialDeadline);
     const [isSaving, setIsSaving] = useState(false);
 
-    // 🛑 FIX 1: Add a local stopPropagation function to buttons inside the editor
+    // 🛑 FIX: UseEffect to synchronize local state when props (delivery data) changes
+    useEffect(() => {
+        setNewDeadline(initialDeadline);
+    }, [initialDeadline]);
+    
     const stopPropagation = (e) => {
         e.stopPropagation();
     };
@@ -48,13 +52,14 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
         if (!newDeadline) return;
         setIsSaving(true);
 
+        // 🛑 FIX: Use moment.utc() to treat the date as midnight UTC, preventing timezone shift
         const newDeadlineDate = moment.utc(newDeadline).toISOString();
 
         try {
             await axios.put(`${BACKEND_API_BASE_URL}/api/delivery/update-deadline`, {
                 delCodeWO: delivery.DelCode_w_o__,
                 newDeadlineDate: newDeadlineDate,
-                userEmail: userEmail, // Pass user email for server-side admin check
+                userEmail: userEmail,
             });
 
             notification.success({
@@ -62,6 +67,10 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
                 description: `Deadline for ${delivery.DelCode_w_o__} updated to ${newDeadline}.`,
             });
             
+            // 🛑 FIX: Immediately update the local state with the new date
+            // This prevents the "N/A" flash before the main list re-fetches.
+            setNewDeadline(newDeadline);
+
             // Call the success handler in the parent to refresh the main list
             onUpdateSuccess(delivery.DelCode_w_o__);
 
@@ -85,14 +94,12 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
         setIsEditing(false);
     };
     
-    // The current formatted deadline for display
-    const formattedDisplayDate = moment(rawDeadlineTimestamp).isValid()
-        ? moment(rawDeadlineTimestamp).format('DD/MM/YYYY')
+    // 🛑 FIX: Calculate display date based on local state, formatted as DD/MM/YYYY
+    const formattedDisplayDate = moment(newDeadline).isValid()
+        ? moment(newDeadline).format('DD/MM/YYYY')
         : 'N/A';
 
     return (
-        // 🛑 FIX 2: Add stopPropagation to the main editor div
-        // This ensures clicks on the editor component itself (like padding/margins) don't trigger the parent <Link>
         <div className="d-flex justify-content-between align-items-center mt-2" onClick={stopPropagation}>
             {isEditing ? (
                 <>
@@ -102,7 +109,7 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
                         onChange={(e) => setNewDeadline(e.target.value)}
                         style={{ width: '150px' }}
                         disabled={isSaving}
-                        // 🛑 FIX 3: Add stopPropagation to the Date input itself
+                        // 🛑 FIX: Stop propagation on date input
                         onClick={stopPropagation} 
                     />
                     <div className="d-flex ms-2">
@@ -128,12 +135,12 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
             ) : (
                 <>
                     <p className="mb-0 text-danger">
-                        <FiFlag style={{ marginRight: '5px' }} /> Deadline: {formattedDisplayDate}
+                        <FiFlag style={{ marginRight: '5px' }} /> Deadline: **{formattedDisplayDate}**
                     </p>
                     <Button
                         variant="outline-secondary"
                         size="sm"
-                        // 🛑 FIX 4: Add stopPropagation to the Edit button itself
+                        // 🛑 FIX: Stop propagation on edit button
                         onClick={(e) => { stopPropagation(e); setIsEditing(true); }}
                         title="Edit Deadline"
                     >
@@ -147,7 +154,7 @@ const DeliveryDeadlineEditor = ({ delivery, userEmail, onUpdateSuccess }) => {
 
 // --- MAIN DeliveryList COMPONENT ---
 const DeliveryList = () => {
-    const navigate = useNavigate(); // 👈 Added hook for navigation
+    const navigate = useNavigate();
     const { userEmail, userName, logoutUser, isAdmin, isLoadingAdmin } = useUser();
     
     const [deliveries, setDeliveries] = useState([]);
@@ -160,7 +167,7 @@ const DeliveryList = () => {
 
     // fetchDeliveries function (Kept mostly the same, ensuring it triggers a full refresh)
     const fetchDeliveries = useCallback(async (currentSearchQuery, currentSelectedClient, currentSortOption) => {
-        if (!userEmail) return; // Wait for user context
+        if (!userEmail) return;
         
         setLoading(true);
         setError(null);
@@ -230,7 +237,7 @@ const DeliveryList = () => {
         } finally {
             setLoading(false);
         }
-    }, [userEmail]); // Dependency on userEmail only
+    }, [userEmail]);
 
     // Create a stable debounced function
     const debouncedFetchDeliveries = useMemo(
@@ -240,7 +247,7 @@ const DeliveryList = () => {
 
     // useEffect now tracks the state variables and calls the debounced function
     useEffect(() => {
-        if (userEmail) { // Only fetch if user is logged in
+        if (userEmail) {
             debouncedFetchDeliveries(searchQuery, selectedClient, sortOption);
         }
     }, [searchQuery, selectedClient, sortOption, debouncedFetchDeliveries, userEmail]);
@@ -259,7 +266,7 @@ const DeliveryList = () => {
         setSelectedClient(client);
     };
 
-    // 🛑 NEW: Handler for the Card click to navigate to the task view
+    // Handler for the Card click to navigate to the task view
     const handleCardClick = (delCode) => {
         navigate(`/delivery/data/${encodeURIComponent(delCode)}`);
     };
@@ -298,7 +305,6 @@ const DeliveryList = () => {
             </div>
 
             <Row className="mb-4 align-items-end">
-                {/* Search, Filter, Sort Inputs... (Keep these as they were) */}
                 <Col md={6}>
                     <Form.Group controlId="searchQuery">
                         <Form.Label>Search Deliveries</Form.Label>
@@ -328,7 +334,6 @@ const DeliveryList = () => {
             <Row xs={1} md={1} lg={1} className="g-4">
                 {deliveries.length > 0 ? (
                     deliveries.map((delivery) => {
-                        // ... Progress Bar calculation logic ... (Keep as is)
                         const scheduledTasks = delivery.Planned_Tasks !== undefined ? delivery.Planned_Tasks : delivery.Completed_Tasks;
                         const totalTasks = delivery.Total_Tasks || 1;
                         const progress = (scheduledTasks / totalTasks) * 100;
@@ -341,10 +346,8 @@ const DeliveryList = () => {
                             progressBarVariant = "danger";
                         }
 
-                        // --- RENDERING CHANGE START: Remove <Link> and use onClick on Card ---
                         return (
                             <Col key={delivery.Key}>
-                                {/* 🛑 FIX 5: Use a div instead of <Link> for the card and handle navigation via onClick */}
                                 <Card
                                     className={`delivery-card h-100`}
                                     onClick={() => handleCardClick(delivery.DelCode_w_o__)}
@@ -361,7 +364,7 @@ const DeliveryList = () => {
                                             {isAdmin && (
                                                 <DeleteButton
                                                     deliveryCode={delivery.DelCode_w_o__}
-                                                    onDelete={handleUpdateAndListRefresh} // Use the new universal handler
+                                                    onDelete={handleUpdateAndListRefresh}
                                                 />
                                             )}
                                         </div>
@@ -392,7 +395,9 @@ const DeliveryList = () => {
                                         ) : (
                                             <div className="d-flex justify-content-between align-items-center mt-2">
                                                 <p className="mb-0 text-danger">
-                                                    <FiFlag style={{ marginRight: '5px' }} /> Deadline: {moment(delivery.Planned_Delivery_Timestamp).isValid() ? moment(delivery.Planned_Delivery_Timestamp).format('DD/MM/YYYY') : 'N/A'}
+                                                    <FiFlag style={{ marginRight: '5px' }} /> Deadline: {moment(delivery.Planned_Delivery_Timestamp).isValid() 
+                                                        ? moment(delivery.Planned_Delivery_Timestamp).format('DD/MM/YYYY') // 🛑 FIX: DD/MM/YYYY format
+                                                        : 'N/A'}
                                                 </p>
                                                 {/* Original DelCode link logic remains */}
                                                 <p
@@ -421,7 +426,6 @@ const DeliveryList = () => {
                                 </Card>
                             </Col>
                         );
-                        // --- RENDERING CHANGE END ---
                     })
                 ) : (
                     <Col>
