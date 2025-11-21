@@ -1,24 +1,20 @@
+// src/components/FormComponent.js
 import React, { useState, useEffect, useContext } from 'react';
 import { Form, Button, Spinner, Alert } from 'react-bootstrap';
 import Select from 'react-select';
 import moment from 'moment';
-import { UserContext } from './UserContext'; 
+// 1. Import useUser hook (or UserContext if preferred)
+import { UserContext, useUser } from './UserContext'; // Assuming useUser is exported from UserContext.js
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 
-const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
-    "neelam.p@brightbraintech.com",
-    "meghna.j@brightbraintech.com",
-    "divya.s@brightbraintech.com",
-    "zoya.a@brightbraintech.com",
-    "altaf.s@brightbraintech.com",
-    "arvanbir.s@brightbraintech.com"
-];
+// 🛑 REMOVED: Deleted the hardcoded ADMIN_EMAILS_FRONTEND list
 
 const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
-    const { userEmail } = useContext(UserContext); 
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
+    // 2. Destructure the isAdmin status from the context
+    const { userEmail, isAdmin } = useUser(); // Using the useUser hook for clean access
+
+    // 🛑 REMOVED: Deleted the line const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
 
     const [formData, setFormData] = useState({
         Key: '',
@@ -29,8 +25,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         Frequency___Timeline: '',
         Client: '',
         Short_Description: '',
-        Planned_Start_Timestamp: null, 
-        Planned_Delivery_Timestamp: null, 
+        Planned_Start_Timestamp: null, 
+        Planned_Delivery_Timestamp: null, 
         Responsibility: '',
         Current_Status: '',
         Email: '',
@@ -54,19 +50,21 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     // 1. Initialize formData from the task prop
     useEffect(() => {
         if (task) {
-            const rawStartDate = task.Planned_Start_Timestamp && typeof task.Planned_Start_Timestamp === 'object' && task.Planned_Start_Timestamp.value
-                ? task.Planned_Start_Timestamp.value
-                : task.Planned_Start_Timestamp;
+            // Simplified date extraction for robustness
+            const extractDate = (dateField) => {
+                if (!dateField) return null;
+                // Handle BigQuery object format { value: 'timestamp' }
+                const rawDate = typeof dateField === 'object' && dateField.value 
+                    ? dateField.value 
+                    : dateField;
+                return moment(rawDate);
+            };
 
-            const rawDeliveryDate = task.Planned_Delivery_Timestamp && typeof task.Planned_Delivery_Timestamp === 'object' && task.Planned_Delivery_Timestamp.value
-                ? task.Planned_Delivery_Timestamp.value
-                : task.Planned_Delivery_Timestamp;
-
-            const initialStartDate = rawStartDate ? moment(rawStartDate) : null;
-            const initialDeliveryDate = rawDeliveryDate ? moment(rawDeliveryDate) : null;
+            const initialStartDate = extractDate(task.Planned_Start_Timestamp);
+            const initialDeliveryDate = extractDate(task.Planned_Delivery_Timestamp);
 
             setFormData({
-                Key: String(task.Key || ''), 
+                Key: String(task.Key || ''), 
                 Delivery_code: task.Delivery_code || '',
                 DelCode_w_o__: task.DelCode_w_o__ || '',
                 Step_ID: task.Step_ID || 0,
@@ -74,11 +72,12 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Frequency___Timeline: task.Frequency___Timeline || '',
                 Client: task.Client || '',
                 Short_Description: task.Short_Description || '',
-                Planned_Start_Timestamp: initialStartDate, 
-                Planned_Delivery_Timestamp: initialDeliveryDate, 
+                // Ensure moments are valid before setting
+                Planned_Start_Timestamp: initialStartDate && initialStartDate.isValid() ? initialStartDate : null, 
+                Planned_Delivery_Timestamp: initialDeliveryDate && initialDeliveryDate.isValid() ? initialDeliveryDate : null, 
                 Responsibility: task.Responsibility || '',
                 Email: task.Email || '',
-                Emails: task.Emails || '', 
+                Emails: task.Emails || '', 
                 Current_Status: task.Current_Status || '',
                 Total_Tasks: task.Total_Tasks || 0,
                 Completed_Tasks: task.Completed_Tasks || 0,
@@ -89,9 +88,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 Time_Left_For_Next_Task_dd_hh_mm_ss: task.Time_Left_For_Next_Task_dd_hh_mm_ss || '',
                 Card_Corner_Status: task.Card_Corner_Status || '',
             });
-             
+             
         }
-    }, [task]); 
+    }, [task]); 
 
 
     // 2. Fetch people mapping data
@@ -102,14 +101,15 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
             try {
                 const response = await fetch(`${BACKEND_API_BASE_URL}/api/people-mapping`);
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to fetch people mapping data.');
+                    // Changed to response.text() for better generic error handling
+                    const errorText = await response.text(); 
+                    throw new Error(`Failed to fetch people mapping data. Server response: ${response.status} ${errorText}`);
                 }
                 const data = await response.json();
                 setPersons(data);
             } catch (err) {
                 console.error("Failed to load person data:", err);
-                setPersonError(`Failed to load person data: ${err.message}. Please ensure the backend endpoint /api/people-mapping is correctly configured.`);
+                setPersonError(`Failed to load person data: ${err.message}.`);
             } finally {
                 setLoadingPersons(false);
             }
@@ -132,7 +132,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         setFormData(prevData => {
             const updatedData = {
                 ...prevData,
-                Planned_Start_Timestamp: dateMoment.isValid() ? dateMoment : null 
+                Planned_Start_Timestamp: dateMoment.isValid() ? dateMoment : null 
             };
             return updatedData;
         });
@@ -141,8 +141,8 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     const handlePersonSelect = (selectedOption) => {
         setFormData(prevData => ({
             ...prevData,
-            Responsibility: selectedOption ? selectedOption.label : '', 
-            Emails: selectedOption ? selectedOption.value : '' 
+            Responsibility: selectedOption ? selectedOption.label : '', 
+            Emails: selectedOption ? selectedOption.value : '' 
         }));
     };
 
@@ -154,14 +154,14 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         setSuccess(null);
 
         // Date restriction validation: Planned To Work On must be before the Delivery Deadline
-        if (formData.Planned_Start_Timestamp && formData.Planned_Delivery_Timestamp && 
+        if (formData.Planned_Start_Timestamp && formData.Planned_Delivery_Timestamp && 
             formData.Planned_Start_Timestamp.isSameOrAfter(formData.Planned_Delivery_Timestamp, 'day')) {
             setError("Planned To Work On date must be before the Delivery Deadline.");
             setLoading(false);
             return;
         }
 
-        const taskKey = String(formData.Key).trim(); 
+        const taskKey = String(formData.Key).trim(); 
         if (!taskKey || taskKey === '0') {
             setError("Cannot update task: Unique Task Key is missing or invalid.");
             setLoading(false);
@@ -177,17 +177,17 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
         try {
             const mainTaskPayload = {
                 ...formData,
-                Key: taskKey, 
+                Key: taskKey, 
                 Planned_Start_Timestamp: formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.toISOString() : null,
                 Planned_Delivery_Timestamp: formData.Planned_Delivery_Timestamp ? formData.Planned_Delivery_Timestamp.toISOString() : null,
-                Updated_at: moment.utc().toISOString(), 
+                Updated_at: moment.utc().toISOString(), 
             };
 
             const perKeyPerDayRows = [];
-             
+             
             if (formData.Planned_Start_Timestamp && formData.Planned_Start_Timestamp.isValid()) {
                 perKeyPerDayRows.push({
-                    Key: taskKey, 
+                    Key: taskKey, 
                     Day: formData.Planned_Start_Timestamp.format('YYYY-MM-DD'),
                     Duration: 0,
                     Duration_Unit: 'min',
@@ -215,9 +215,9 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                 throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
             }
 
-            await response.json(); 
+            await response.json(); 
             setSuccess('Task and schedule updated successfully!');
-            onSubmit(formData); 
+            onSubmit(formData); 
         } catch (err) {
             console.error('Error updating task:', err);
             setError(`Failed to update task: ${err.message}`);
@@ -228,18 +228,18 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
 
     // Filter persons for dropdown
-    const personsToDisplay = persons.map(p => ({ 
-        value: p.Emp_Emails, 
-        label: p.Current_Employes 
+    const personsToDisplay = persons.map(p => ({ 
+        value: p.Emp_Emails, 
+        label: p.Current_Employes 
     }));
 
     // Pre-populating the selected person logic
     let selectedPerson = personsToDisplay.find(p => p.value === formData.Emails);
-     
+      
     if (!selectedPerson && formData.Responsibility) {
-        selectedPerson = { 
-            value: formData.Responsibility, 
-            label: formData.Responsibility 
+        selectedPerson = { 
+            value: formData.Responsibility, 
+            label: formData.Responsibility 
         };
     }
 
@@ -248,7 +248,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
 
     // Max selectable date (Planned To Work On must be before Delivery Deadline)
     const maxDate = formData.Planned_Delivery_Timestamp
-        ? formData.Planned_Delivery_Timestamp.clone().subtract(1, 'day').format('YYYY-MM-DD') 
+        ? formData.Planned_Delivery_Timestamp.clone().subtract(1, 'day').format('YYYY-MM-DD') 
         : undefined;
 
     return (
@@ -272,7 +272,7 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             type="text"
                             name="Task_Details"
                             value={formData.Task_Details}
-                            disabled={true} 
+                            disabled={true} 
                             required
                         />
                     </Form.Group>
@@ -282,13 +282,13 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                         {/* Planned To Work On (Input) */}
                         <div style={{ marginBottom: '1rem' }}> 
                             <Form.Group>
-                                <Form.Label>Planned To Work On<span className="text-danger">*</span></Form.Label> 
+                                <Form.Label>Planned To Work On<span className="text-danger">*</span></Form.Label> 
                                 <Form.Control
                                     type="date"
                                     name="Planned_Start_Timestamp"
                                     value={formData.Planned_Start_Timestamp ? formData.Planned_Start_Timestamp.format('YYYY-MM-DD') : ''}
                                     onChange={handleStartDateChange}
-                                    max={maxDate} 
+                                    max={maxDate} 
                                     required
                                 />
                             </Form.Group>
@@ -307,28 +307,28 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
                             </Form.Group>
                         </div>
                     </div>
-                     
+                     
                     {/* Person Responsible (Select) */}
                     <Form.Group className="mb-4">
                         <Form.Label>Person Responsible<span className="text-danger">*</span></Form.Label>
                         <Select
                             name="Responsibility"
                             options={personsToDisplay}
-                            value={selectedPerson} 
+                            value={selectedPerson} 
                             onChange={handlePersonSelect}
-                            isDisabled={isResponsibilityDisabled || loadingPersons} 
+                            isDisabled={isResponsibilityDisabled || loadingPersons} 
                             placeholder="Select Person"
                             isClearable
                             required
                         />
-                        {isResponsibilityDisabled && ( 
+                        {isResponsibilityDisabled && ( 
                             <Form.Text className="text-muted">
                                 This task is already assigned and can only be changed by an Admin.
                             </Form.Text>
                         )}
                     </Form.Group>
 
-                    <Button variant="primary" type="submit" disabled={loading}> 
+                    <Button variant="primary" type="submit" disabled={loading}> 
                         {loading ? <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-2" /> : 'Update Task'}
                     </Button>
                 </Form>
@@ -337,4 +337,6 @@ const FormComponent = ({ onSubmit, task, currentUserEmail }) => {
     );
 };
 
+// Export both for completeness
+export { FormComponent, useUser }; 
 export default FormComponent;
