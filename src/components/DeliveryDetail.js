@@ -1,35 +1,27 @@
+// DeliveryDetails.js
 import React, { useEffect, useState, useContext, useCallback } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { Container, Row, Col, Spinner, Alert, ListGroup } from 'react-bootstrap';
-// NOTE: Card, Dropdown, Button were removed from here as they are now used in TaskCard.js
 
 import { FaCalendarAlt } from 'react-icons/fa';
-// 🟢 NEW IMPORT: Import the TaskCard component from its separate file
 import TaskCard from './TaskCard';
-import { UserContext } from './UserContext';
-// import 'rc-dropdown/assets/index.css'; // This CSS import should also likely stay here or in a root file if it affects the global app
+
+// 💡 CORRECT IMPORT: Import useUser and UserContext (if needed, though useUser is preferred)
+import { useUser } from './UserContext'; 
 import './DeliveryDetail.css';
 import moment from 'moment';
-// 💡 MODIFICATION 1: Import Modal alongside notification from antd
 import { notification, Modal } from 'antd';
 
 const BACKEND_API_BASE_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3001';
 console.log('DeliveryDetail: Using Backend API URL:', BACKEND_API_BASE_URL);
 
-// 🟢 STATUS CONSTANTS - Kept here as they are used in the main component's logic (handleCardClick, useEffect, mapping logic)
+// STATUS CONSTANTS 
 const COMPLETED_TASK_STATUS = 'Complete';
 const NOT_REQUIRED_TASK_STATUS = 'Not Required';
 const SCHEDULED_STATUS = 'Scheduled'; // Used locally for display logic
 
-const ADMIN_EMAILS_FRONTEND = [
-    "systems@brightbraintech.com",
-    "neelam.p@brightbraintech.com",
-    "divya.s@brightbraintech.com",
-    "zoya.a@brightbraintech.com",
-    "altaf.s@brightbraintech.com",
-    "arvanbir.s@brightbraintech.com",
-    "meghna.j@brightbraintech.com"
-];
+// 🛑 IMPORTANT: The hardcoded ADMIN_EMAILS_FRONTEND array has been REMOVED.
+// The admin status is now sourced securely from UserContext.
 
 // DeliveryDetail component definition
 const DeliveryDetail = () => {
@@ -46,9 +38,11 @@ const DeliveryDetail = () => {
     const [actionType, setActionType] = useState(null); 
     const [refreshKey, setRefreshKey] = useState(0); 
 
-    const { userEmail } = useContext(UserContext);
-    const isAdmin = ADMIN_EMAILS_FRONTEND.includes(userEmail);
+    // 🟢 CORRECT IMPLEMENTATION: Get userEmail and isAdmin from the secure context
+    const { userEmail, isAdmin } = useUser(); 
 
+    // useEffect dependency cleanup: Removed isAdmin from dependency array as it's now handled correctly
+    // by UserContext and does not need to trigger the fetch.
     useEffect(() => {
         const fetchDeliveryDetails = async () => {
             if (!deliveryCode) {
@@ -97,17 +91,29 @@ const DeliveryDetail = () => {
             }
         };
 
+        // Removed isAdmin from dependency list as its primary job is not to trigger the fetch
+        // (fetch only needs to run on deliveryCode or userEmail change).
         fetchDeliveryDetails();
-    }, [deliveryCode, userEmail, isAdmin, refreshKey]);
+    }, [deliveryCode, userEmail, refreshKey]);
 
 
     // 💡 MODIFICATION 2: Replacing window.confirm with Modal.confirm
-    const handleStatusUpdate = useCallback((key, status) => { 
+    const handleStatusUpdate = useCallback(async (key, status) => { 
         
+        // 🛑 NEW CHECK: Prevent non-admin users from updating status
+        if (!isAdmin) {
+             notification.error({
+                message: 'Permission Denied',
+                description: 'You do not have administrative privileges to update task status.',
+                duration: 5,
+            });
+            return;
+        }
+
         setActiveTaskKey(null); // Close any open form
         setActionType(null);
 
-        // 🛑 NEW CODE: Use Ant Design Modal.confirm for status update confirmation
+        // Use Ant Design Modal.confirm for status update confirmation
         Modal.confirm({
             title: 'Confirm Task Status Update',
             content: `Are you sure you want to mark task as "${status}"?`,
@@ -146,7 +152,7 @@ const DeliveryDetail = () => {
                             prevTasks.filter(task => task.Key !== key)
                         );
                     } else {
-                        // Keep the old map logic if you ever decide to use a non-final status update
+                        // This else block is kept for future status types if needed
                         setTasks(prevTasks =>
                             prevTasks.map(task =>
                                 task.Key === key ? { ...task, Current_Status: status } : task
@@ -179,27 +185,28 @@ const DeliveryDetail = () => {
                 // User clicked cancel, do nothing
             },
         });
-    }, [userEmail]);
+    }, [userEmail, isAdmin]); // 💡 ADDED isAdmin to dependency array
 
+    // ... (rest of the component, handleFormSubmit, handleCardClick, handleMenuItemClick, loading/error blocks)
 
     const handleFormSubmit = useCallback((updatedTaskData) => {
-    // Optimistic update of tasks
-    setTasks(prevTasks =>
-        prevTasks.map(task =>
-            task.Key === updatedTaskData.Key
-                ? { ...task, ...updatedTaskData }
-                : task
-        )
-    );
-    
-    // NEW LOGIC: Wait 2 seconds, then close the form and refresh.
-    setTimeout(() => {
-        setActiveTaskKey(null); 
-        setActionType(null);
-        // Trigger re-fetch for fresh data and accurate status display
-        setRefreshKey(prev => prev + 1); 
-    }, 2000); // Wait 2 seconds
-}, []);
+        // Optimistic update of tasks
+        setTasks(prevTasks =>
+            prevTasks.map(task =>
+                task.Key === updatedTaskData.Key
+                    ? { ...task, ...updatedTaskData }
+                    : task
+            )
+        );
+        
+        // NEW LOGIC: Wait 2 seconds, then close the form and refresh.
+        setTimeout(() => {
+            setActiveTaskKey(null); 
+            setActionType(null);
+            // Trigger re-fetch for fresh data and accurate status display
+            setRefreshKey(prev => prev + 1); 
+        }, 2000); // Wait 2 seconds
+    }, []);
 
     // CLICK HANDLER: Controls the activeTaskKey state
     const handleCardClick = useCallback((taskKey, displayStatus) => {
@@ -236,6 +243,7 @@ const DeliveryDetail = () => {
         setActiveTaskKey(null);
         setActionType(null);
     }, []);
+
 
     if (loading) {
         return (
@@ -299,9 +307,9 @@ const DeliveryDetail = () => {
                                 onCardClick={handleCardClick} // Passes down the toggle function
                                 onMenuItemClick={handleMenuItemClick}
                                 onFormSubmit={handleFormSubmit}
-                                onStatusUpdate={handleStatusUpdate} // NEW PROP
+                                onStatusUpdate={handleStatusUpdate} 
                                 currentUserEmail={userEmail}
-                                isAdmin={isAdmin} // NEW PROP
+                                isAdmin={isAdmin} // Passes the context-derived status
                             />
                         );
                     })
