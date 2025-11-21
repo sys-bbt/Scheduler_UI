@@ -7,7 +7,12 @@ import axios from 'axios';
 // --- CONFIGURATION ---
 // Ensure your .env file has REACT_APP_API_URL set to your Render URL (e.g., https://server-ui-2.onrender.com)
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-const ADMIN_CACHE_DURATION = 5 * 60 * 1000; // Client-side cache for 5 minutes
+// Client-side cache for 5 minutes (in milliseconds)
+const ADMIN_CACHE_DURATION = 5 * 60 * 1000; 
+
+// Storage keys for cache
+const ADMIN_EMAILS_CACHE_KEY = 'adminEmailsCache';
+const ADMIN_CACHE_TIMESTAMP_KEY = 'adminCacheTimestamp';
 
 // Create the UserContext
 export const UserContext = createContext(null);
@@ -41,30 +46,54 @@ export const UserProvider = ({ children }) => {
         localStorage.removeItem('userEmail');
         localStorage.removeItem('userName');
         localStorage.removeItem('authToken');
+        // NOTE: Keeping admin cache might be helpful for quick re-login
+        // If you want to clear it, add: localStorage.removeItem(ADMIN_EMAILS_CACHE_KEY);
+        // localStorage.removeItem(ADMIN_CACHE_TIMESTAMP_KEY);
     };
 
-    // 1. --- FETCH ADMIN EMAILS FROM BACKEND ---
+    // 1. --- FETCH ADMIN EMAILS FROM BACKEND (WITH CACHE) ---
     useEffect(() => {
         const fetchAdmins = async () => {
             if (!userEmail) {
                 // If no user is logged in, skip fetching admins
+                setAdminEmails([]);
                 setIsLoadingAdmin(false);
                 return;
             }
             
+            // --- CACHE CHECK ---
+            const cachedEmails = localStorage.getItem(ADMIN_EMAILS_CACHE_KEY);
+            const cachedTimestamp = localStorage.getItem(ADMIN_CACHE_TIMESTAMP_KEY);
+            const now = new Date().getTime();
+
+            if (cachedEmails && cachedTimestamp && (now - Number(cachedTimestamp) < ADMIN_CACHE_DURATION)) {
+                // Cache is valid and fresh
+                const parsedEmails = JSON.parse(cachedEmails);
+                setAdminEmails(parsedEmails);
+                setIsLoadingAdmin(false);
+                console.log(`Context: Using cached admin list (${parsedEmails.length} emails).`);
+                return;
+            }
+
+            // --- API FETCH (Cache Miss or Expired) ---
+            setIsLoadingAdmin(true);
             try {
-                console.log("Context: Fetching admin list from backend...");
+                console.log("Context: Fetching fresh admin list from backend...");
                 const response = await axios.get(`${API_URL}/api/admins`);
                 const fetchedEmails = response.data;
                 
-                setAdminEmails(fetchedEmails);
-                console.log(`Context: Fetched ${fetchedEmails.length} admin emails.`);
+                // Ensure data is an array
+                const validEmails = Array.isArray(fetchedEmails) ? fetchedEmails : [];
+
+                setAdminEmails(validEmails);
                 
-                // Log the fetched list if it contains data
-                if (fetchedEmails.length > 0) {
-                    console.log("Context: Admin list:", fetchedEmails);
-                }
+                // Log the success message
+                console.log(`Context: Successfully fetched ${validEmails.length} admin emails from API.`);
                 
+                // Update Cache
+                localStorage.setItem(ADMIN_EMAILS_CACHE_KEY, JSON.stringify(validEmails));
+                localStorage.setItem(ADMIN_CACHE_TIMESTAMP_KEY, now.toString());
+
             } catch (error) {
                 // IMPROVED ERROR MESSAGE: Clarify the fallback action
                 console.error("Context: Error fetching admin emails. Defaulting to empty list (Non-Admin status). Error:", error.message);
@@ -88,8 +117,11 @@ export const UserProvider = ({ children }) => {
         // We only proceed if loading is complete and a user is logged in
         if (!isLoadingAdmin && userEmail) {
             // Check if the current user's email is in the fetched list
+            // Note: Use .some() for large arrays, but .includes() is fine for small lists like admins
             const isUserAdmin = adminEmails.includes(userEmail);
             setIsAdmin(isUserAdmin);
+            
+            // This is the CRITICAL log that confirms the final status
             console.log(`Context: User ${userEmail} Admin Status: ${isUserAdmin}`);
         } else if (!userEmail) {
             // If the user logs out or is not logged in
@@ -115,14 +147,14 @@ export const UserProvider = ({ children }) => {
             {/* Display a loading indicator while fetching admin status after login */}
             {isLoadingAdmin && userEmail ? (
                 <div style={{ padding: '20px', textAlign: 'center' }}>
-                    Loading user privileges...
+                    <p>Loading user privileges... Please wait.</p>
                 </div>
             ) : children}
         </UserContext.Provider>
     );
 };
 
-// A simple Login Component 
+// A simple Login Component (no changes needed)
 export const LoginComponent = () => {
     const { loginUser } = useUser(); // Use the custom hook
 
